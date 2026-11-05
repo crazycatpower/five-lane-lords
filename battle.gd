@@ -1,4 +1,5 @@
 extends RefCounted
+const Windup = preload("res://attack_windup.gd")
 const Frontier = preload("res://frontier_cards.gd")
 const DarkSorcery = preload("res://dark_sorcery.gd")
 const LordExpansion = preload("res://lord_expansion.gd")
@@ -910,6 +911,7 @@ func update_unit(u: Dictionary, dt: float) -> bool:
 	if u.get("slow_left",0.0) > 0:
 		u.slow_left = maxf(0.0,u.slow_left-dt)
 	if u.get("stun_left",0.0) > 0:
+		Windup.cancel(u)
 		u.stun_left = maxf(0.0,u.stun_left-dt)
 		return false
 	var data: Dictionary = B.CARDS[u.kind]
@@ -925,13 +927,15 @@ func update_unit(u: Dictionary, dt: float) -> bool:
 		var patrol_target := nearest(u.pos,u.team,data.range,foes,-1,false)
 		if not patrol_target.is_empty():
 			u.face = 1.0 if patrol_target.pos.x >= u.pos.x else -1.0
-			if u.cd <= 0: attack(u,patrol_target)
-		else: Frontier.patrol(self,u,dt)
+			if Windup.ready(self,u,Windup.target_key(patrol_target),dt): attack(u,patrol_target)
+		else:
+			Windup.cancel(u)
+			Frontier.patrol(self,u,dt)
 		return false
 	if u.kind == "catapult":
 		var target := catapult_target(u)
 		if not target.is_empty():
-			if u.cd <= 0:
+			if Windup.ready(self,u,Windup.target_key(target),dt):
 				projectiles.append({"source":u,"pos":u.pos,"start":u.pos,"impact":target.pos,"flight":data.flight_time,"remaining":data.flight_time,"amount":data.area_damage,"radius":data.radius,"team":u.team,"kind":u.kind})
 				u.cd = attack_interval(u)
 				event("catapult_fire",u.pos,u.team,{"target":target.pos})
@@ -939,10 +943,14 @@ func update_unit(u: Dictionary, dt: float) -> bool:
 		return march(u,data,dt)
 	var target := choose_target(u,data)
 	if not target.is_empty():
-		if u.cd <= 0: attack(u,target)
+		if Windup.ready(self,u,Windup.target_key(target),dt): attack(u,target)
 		return false
-	if Arcane.repair(self,u,dt): return false
-	if cultivate(u,dt): return false
+	if Arcane.repair(self,u,dt):
+		Windup.cancel(u)
+		return false
+	if cultivate(u,dt):
+		Windup.cancel(u)
+		return false
 	return march(u,data,dt)
 
 func summon_skeletons(u: Dictionary, data: Dictionary, dt: float) -> void:
@@ -1019,16 +1027,20 @@ func march(u: Dictionary, data: Dictionary, dt: float) -> bool:
 	var stop: float = L.gate_icon_x(enemy) if open and climbed else L.gate_stop(enemy)
 	var forward := 1.0 if u.team == 0 else -1.0
 	if (stop-u.pos.x)*forward > 0.001:
+		Windup.cancel(u)
 		u.pos.x = move_toward(u.pos.x,stop,movement_speed(u)*dt)
 	elif open and not climbed:
+		Windup.cancel(u)
 		u.climb = u.get("climb",0.0)+dt
 		if enemy == 0: alarm[u.lane] = 1.5
 	elif open:
+		Windup.cancel(u)
 		if not invasion_victory[u.team]: return false
 		event("invaded",u.pos,u.team,{"lane":u.lane,"unit_kind":u.kind})
 		finish(u.team)
 		return true
 	elif u.cd <= 0:
+		if not Windup.ready(self,u,"gate:%d:%d" % [enemy,u.lane],dt): return false
 		Arcane.reveal(self,u)
 		if data.get("pierce",false):
 			Arcane.shoot_piercing_arrow(self,u)

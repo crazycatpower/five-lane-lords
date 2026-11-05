@@ -48,6 +48,10 @@ func observe(model: RefCounted) -> void:
 		if float(alive.get(id,model.elapsed))-clips[id].start >= clips[id].duration: clips.erase(id)
 
 func pose(actor: Dictionary, now: float) -> Dictionary:
+	if actor.has("attack_windup"):
+		var windup: Dictionary = actor.attack_windup
+		var progress: float = clampf(1.0-windup.left/windup.duration,0,1)
+		return {"offset":Vector2(-4*progress,0),"angle":-0.06*progress,"scale":Vector2.ONE,"strength":0.0,"style":"windup","progress":progress,"frame":0}
 	var clip: Dictionary = clips.get(key(actor),{})
 	if clip.is_empty(): return {}
 	return sample(clip.style,clampf((now-clip.start)/clip.duration,0,1))
