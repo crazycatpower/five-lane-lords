@@ -1,320 +1,404 @@
 {
 	"arcane_archer": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "b238c9faa6c28f66a867fdc93550592a8c45aa7cc2453816bf47e4f948667f5a",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/arcane_archer.png"
 	},
 	"arcane_golem": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "7ec489b23684aca89ab9ffab2517c7b37129ba99fe0fe5c69338acc96e0d44db",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/arcane_golem.png"
 	},
+	"arcane_shield": {
+		"revision": "team-material-v2",
+		"sha256": "9bad63adc7b14fc3c86034eecdddbb1ec9f987735dba92c266e979a8105c528c",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/arcane_shield.png"
+	},
 	"arcane_tower": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "b1a394112a9ec78df9a767bbd3cc5a1cd1b6872e92f07fbb654f05e560269894",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/arcane_tower.png"
 	},
 	"artificer": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "fe0f88bef9f4492daa76e6ab6de21976bea9f98f15fc63039a8082e3b60715b3",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/artificer.png"
 	},
 	"axe_thrower": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "f8fb4ab0323aa4f8ecb20ecc700887d91af0c267efb9f79cdc8987f0aefce541",
 		"size": 384,
 		"source": "res://assets/manuscript-v1/axe_thrower.png"
 	},
 	"bandit": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "145a1f4f36f8786940f47f43106ad9973f1b30f9fd4477e97a012c46ff4a091d",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/bandit.png"
 	},
 	"barricade": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "c2e0512027ab56f60ed67c1f7d432d36abca82c2990d26eca94576ad08b77945",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/barricade.png"
 	},
 	"blast_trap": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "684b1fadcd78b7215d09a942d81549dfd84964fc9150a4fb398a6b603689d72d",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/blast_trap.png"
 	},
 	"blink_blade": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "c0a427665c5a2771a806642b40845b4e75796d4b0483804c737cee71534e103c",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/blink_blade.png"
 	},
+	"blood_tower": {
+		"revision": "team-material-v2",
+		"sha256": "ba2aa1e46b88ea17afd7e7faa27d2b5edd655fb99ff48b8c7372ca62cd918aff",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/blood_tower.png"
+	},
 	"bonewall": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "51ada8d64139a4e516b09fada2b4fb097edbfa6a448d76f1275c162ec7a7af37",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/bonewall.png"
 	},
 	"castle_red": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "7eb5ca488585f478e47e0f1e91362f72342505323e23b57db3d6c1ea7c63f7e7",
-		"size": 0.0,
+		"size": 0,
 		"source": "res://assets/manuscript-v1/castle-red.png"
 	},
 	"castle_wall": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "d7a4fa8b4c28c3fbcb6dab1b63422c84c7d13979b3d599cd073e43c05fe9a578",
-		"size": 0.0,
+		"size": 0,
 		"source": "res://assets/manuscript-v1/castle-wall.png"
 	},
 	"catapult": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "2c19102c43e4256ad7171444f4e572612c94b99e5d5c190913cc770734347ab8",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/catapult.png"
 	},
+	"chain_lightning": {
+		"revision": "team-material-v2",
+		"sha256": "31ba617075bbd39825038bdd213b8f5301cbd8e72a7290f3e518946ba4b3fa09",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/chain_lightning.png"
+	},
+	"charge_horn": {
+		"revision": "team-material-v2",
+		"sha256": "b8342fb8444a2276a8a244ff42d66fecb51bc50f7021f67eac42b07605398a62",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/charge_horn.png"
+	},
 	"chimera": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "e2fa8dedcd6aaaa3c00ac589a21f3f326a212dea2e9bd829dbe706e1dce50679",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/chimera.png"
 	},
 	"chronomancer": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "9ca988c1e1f4e0ede3d192c521985532a34fd2e933b3038cd1a4c414997b0747",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/chronomancer.png"
 	},
 	"corpse_giant": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "13a24fbba72b1db51ed75451bd79779332cdab1fa3cd2a25d02ec266d3fd0996",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/corpse_giant.png"
 	},
 	"crest": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "abc1f26850533b820446a82a04a8fcd5a95d51d55a41a356f8f05a5b325a7f92",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/crown.png"
 	},
 	"crystal": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "a99f8b59a990d5e0869009eac0c8293ba9ec11804b81b1b43932415c971b753a",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/crystal.png"
 	},
 	"curse": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "449656a773acb7336e5166d4446696c834a4abcde7ea6ff252c6f4da3b2c498f",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/curse.png"
 	},
 	"dark_wizard": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "11d9dd60d3ee0686dfd19a2bd0f1b01b283749788e5354e97af4b873b53e26d6",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/dark_wizard.png"
 	},
+	"dread_howl": {
+		"revision": "team-material-v2",
+		"sha256": "ce5177039b5fa69cc69337a3bba167e208a5db72e7dd6647025e8992f6707444",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/dread_howl.png"
+	},
 	"drummer": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "f2ccb18793983c4adc8b0d1e29658f96ec52e46fab48eab375de110abb28d6a1",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/drummer.png"
 	},
 	"gate": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "fb91135f3f8119c243cb5b6445b5f2ccb29814ee0c5588261835ad89230516a0",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/gate.png"
 	},
 	"ghoul": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "86391128659a9e649124872fa0c2b4fde44ca17e8e4e59417e8fc13d1ae7339f",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/ghoul.png"
 	},
 	"grave": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "5a1a4457183d0df7441719b4441bf420ae9d8baed917b15d6cd358a161ed7fd0",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/grave.png"
 	},
+	"guard": {
+		"revision": "team-material-v2",
+		"sha256": "e57e2ed795728af5b153d9536881cb73ef36b79dd564988a27056e90ac64a662",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/knight.png"
+	},
 	"healer": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "25f38d2748ca89cd2c648d93d2a1f16f81b7bf5be6ab92ca806be344f58bdbd9",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/healer.png"
 	},
 	"hunter": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "1e90cf682f13ff80f4ca8dd9360ecfd67bb62d97885fdf964ca81cc2837d5c73",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/hunter.png"
 	},
 	"knight": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "e57e2ed795728af5b153d9536881cb73ef36b79dd564988a27056e90ac64a662",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/knight.png"
 	},
+	"levy": {
+		"revision": "team-material-v2",
+		"sha256": "1c25aecca1ebb26d107d28f62a1481077cea4dc941ed0350fb05fabc0ca082be",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/levy.png"
+	},
 	"lord_adventure": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "f7f619c8d47b7a04351802b1b1746f0a37e2e2d366ec805e52ad24c736c41681",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/lord-adventure.png"
 	},
 	"lord_harvest": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "fcbfae5357965af9afce29202f9292912ce9d41403e3d112109f1c32fc9a958a",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/lord-harvest.png"
 	},
 	"lord_iron": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "6aac8bcb953794ad7d16af304b8c8ffaa430c63da699c3a88ee0a90adb513044",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/lord-iron.png"
 	},
 	"lord_lion": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "74f5b6468418940aa8d414e014ff01830235b4ab55137b61ad2af60d5f6c6079",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/lord-lion.png"
 	},
 	"lord_mage": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "cea6a61c05d7e19b3298a08ac437ab2ed26085212f7e3e474882a920d3b8dd29",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/lord-mage.png"
 	},
 	"lord_rune": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "4cc6c83add3d63865243cceec7920fd83e3fec99063b1ef23511e8d8dbea11d9",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/lord-rune.png"
 	},
 	"lord_underworld": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "4fb3147177caaafc6c858554d8c361ec4b52b7ef9a998275ef8ff38c808751fa",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/lord-underworld.png"
 	},
 	"lord_vampire": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "45e3cc3f9808f478c7d9370bc597eae3a8a05079fdda1a6706d8d8b52ca8d8e5",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/lord-vampire.png"
 	},
+	"mana_spring": {
+		"revision": "team-material-v2",
+		"sha256": "b34900e648f097d9839fb87f74de2502abefa013c6f89c4178b6cef18c537af5",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/mana_spring.png"
+	},
 	"manor_retainer": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "f2a0e85fea0f181e886eb08c8d0965027dcaf17388b51b21af29843f69f8ae46",
 		"size": 384,
 		"source": "res://assets/manuscript-v1/manor_retainer.png"
 	},
+	"mass_grave": {
+		"revision": "team-material-v2",
+		"sha256": "cf416e5fff96313847a685f40e197670a75579feed0a98d6f44a98e080055e59",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/mass_grave.png"
+	},
 	"militia": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "a3493881af632dc739f5f904dd78c0cd47e7b60e56cf37a4ce6ce3cb9fd23a07",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/militia-red.png"
 	},
 	"mill": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "fdbc537f5bfc0f5eead32233b5027bdd91bb464ec10864f07b7ebc80ecad1cad",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/mill.png"
 	},
 	"mob": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "733cbded8b62c1342aed90393128a1d7eb6f397dce4606adc3124eae1d0cbc7d",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/mob.png"
 	},
 	"necromancer": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "54d3c3145e308976e15b9a1dbe4dbde7b5edfae150146223428b58f3bcd5f608",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/necromancer.png"
 	},
+	"net_hunter": {
+		"revision": "team-material-v2",
+		"sha256": "1b274fa7c92342d481426ab9cb9fd2146e73333bd4b16d6a6f3fe4ba32cc59e2",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/net_hunter.png"
+	},
 	"ox": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "ddf95614796724f27e553c9de0187ea0bc94b614095ce0552b82e607b31c6f19",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/ox.png"
 	},
 	"phase_rider": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "afe28e5fb3630d3d504ef32748e60271a544496a8af79349f1760918d86acedc",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/phase_rider.png"
 	},
 	"plague": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "e39dff40c00d3d81a83c2c91e9b54c917180cba560c341c77ee35b29ec3d6695",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/plague.png"
 	},
 	"ram": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "e532d53758029867ebcb4f93f5d297195d38e7ea26adbe4eca3c825516a043be",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/ram.png"
 	},
 	"raven": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "5650732b97feb1c5993f8a59dd559e3e435748583dd3687d2534caef7d0f1a62",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/raven.png"
 	},
 	"reaper": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "a4778772d341050d31162cce87d062d690c86d131ac9a2f6c4cd20422c9d8898",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/reaper.png"
 	},
 	"rolling_boulder": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "a28ada209920767fa763aeb2199d9e2ced921c9e50bb73f2e8cb32c67d8fb043",
 		"size": 384,
 		"source": "res://assets/manuscript-v1/rolling_boulder.png"
 	},
+	"sacrifice": {
+		"revision": "team-material-v2",
+		"sha256": "1e4ee20346c4eff1731e55a6e3ec2b88f4bc23e694f0e9e806c23140033473ec",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/sacrifice.png"
+	},
 	"scarecrow": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "f411343e3f3950241393e34f527f608ae9d66a0a635828bd04b0edf72ddd13cc",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/scarecrow.png"
 	},
 	"shieldguard": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "e8e0aee12ee396f67db38b57aac470eb2f52301ffed4206df791ea1b7ac86324",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/shieldguard.png"
 	},
 	"skeleton": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "e9fbc70e07d6a545aae1bc93f88725221099c095331618a7305516999782bc37",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/skeleton.png"
 	},
+	"spearbow": {
+		"revision": "team-material-v2",
+		"sha256": "a3493881af632dc739f5f904dd78c0cd47e7b60e56cf37a4ce6ce3cb9fd23a07",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/militia-red.png"
+	},
 	"summon_trap": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "96be7463126843d3bb243a783376c5cfb59227c645581252081e8be171cdf1cc",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/summon_trap.png"
 	},
 	"teleport_trap": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "a1758c53c0703cd493fe1e0796d4696d0588f3668d4b9160827b39d917aa8349",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/teleport_trap.png"
 	},
+	"time_field": {
+		"revision": "team-material-v2",
+		"sha256": "861e2189509b81ee511c862ed4f64bc03bba5c03f92b0576091a2d310f7d9d34",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/time_field.png"
+	},
 	"tower": {
-		"revision": "team-material-v1",
+		"revision": "team-material-v2",
 		"sha256": "4976d6450247d438955ed3c790c71932265b447357c09366246eaf7fc5ab1774",
-		"size": 384.0,
+		"size": 384,
 		"source": "res://assets/manuscript-v1/tower.png"
+	},
+	"watchtower": {
+		"revision": "team-material-v2",
+		"sha256": "5010daeff65f4f30ac385ef2dbae8c9211af009773e323b918b3edce98f72416",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/watchtower.png"
 	}
 }

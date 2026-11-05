@@ -1,0 +1,58 @@
+{
+    "mode":  "built-in image_gen",
+    "base":  "Use case: stylized-concept. ONE finished transparent PNG game asset for medieval illuminated manuscript strategy game. Tempera handpainting, grainy parchment texture only WITHIN painted forms, heavy dark sepia outlines, flat medieval perspective, muted ochre, vermilion, ivory highlights. Match hunter/rain/tower reference images. Centered complete silhouette, transparent margin, NO background/frame/text/numbers/watermark. Readable at 64px. ",
+    "jobs":  [
+                 [
+                     "arcane_shield",
+                     "Spell icon: translucent azure round magical barrier around a little ivory steel shield with vermilion center and ornamental stars."
+                 ],
+                 [
+                     "time_field",
+                     "Spell icon: antique gold hourglass encircled by a blue-violet clock ring, plain radial ticks without numerals, suspended sand."
+                 ],
+                 [
+                     "charge_horn",
+                     "Spell icon: large curved ivory war horn, ochre brass rim, vermilion ribbon, bell opening RIGHT, curling golden sound waves."
+                 ],
+                 [
+                     "levy",
+                     "Spell icon: three raised peasant spears and a round shield emerging from a golden horn-shaped summoning halo, vermilion cloth banner."
+                 ],
+                 [
+                     "net_hunter",
+                     "Battlefield SINGLE full-body medieval net hunter facing RIGHT, grounded feet, vermilion hooded tunic, brown boots, two anatomically correct hands holding weighted rope casting net ready to throw RIGHT, coiled spare net at belt. No bow."
+                 ],
+                 [
+                     "watchtower",
+                     "Battlefield building: tall timber lookout tower, braced grounded legs, roof and ladder, ivory/vermilion cloth, lookout holding brass spyglass looking RIGHT. No weapons, complete base."
+                 ],
+                 [
+                     "sacrifice",
+                     "Spell icon: ivory ritual dagger over dark crimson magic circle, ruby droplets rising toward little ochre coin purse. Symbolic, non-graphic."
+                 ],
+                 [
+                     "dread_howl",
+                     "Spell icon: ivory screaming skull facing RIGHT, black and muted violet concentric sound-wave wisps radiating from open jaw, medieval marginalia."
+                 ],
+                 [
+                     "mass_grave",
+                     "Battlefield building: compact open communal grave mound, dark earth oval pit, ivory skulls and bones, two rough leaning grave markers, skeletal hand reaching up toward RIGHT, small vermilion funerary cloth. Entire low wide mound grounded."
+                 ],
+                 [
+                     "blood_tower",
+                     "Battlefield building: squat gothic grey stone support tower, large ruby-red glass reservoir at top, brass tubing and ivory bone ornaments, vermilion pennant pointing RIGHT. Full grounded base, no gore."
+                 ]
+             ],
+    "first_generation_base":  "Use case: stylized-concept. Create ONE finished transparent PNG game asset for medieval illuminated manuscript strategy game. Hand-painted tempera, grainy parchment texture INSIDE painted shapes, heavy dark sepia ink outlines, flat medieval perspective, muted ochre and vermilion, ivory highlights. Match the existing hunter/rain/tower references visible in conversation. Isolated centered complete silhouette, generous transparent margin, NO background, NO frame, NO text, NO numbers, NO lettering, NO watermark. Readable at 64 pixels. ",
+    "first_generation_jobs":  [
+                                  [
+                                      "mana_spring",
+                                      "Spell card icon: a faceted pale cyan crystal rising from a curling turquoise fountain of mana, little gold droplets, compact emblem."
+                                  ],
+                                  [
+                                      "chain_lightning",
+                                      "Spell card icon: a branching blue-white jagged lightning bolt chaining between three small dark metal targets, medieval painted emblem."
+                                  ]
+                              ],
+    "net_hunter_revision":  "Edit this existing medieval manuscript net hunter sprite. Preserve exact character identity, pose, colors, texture, net and anatomy. Expand the TRANSPARENT canvas with a generous clean transparent margin of 8 percent on ALL four sides; fit the entire full body and net within it, complete both boots without clipping. Single character facing RIGHT. Do not add any background, glow, frame, text, objects or shadows outside the existing sprite. True transparent alpha background."
+}
