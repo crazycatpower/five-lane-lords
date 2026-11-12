@@ -30,7 +30,7 @@ func run() -> void:
 	var p := L.cell_center(Vector2i(3,2))
 	var u: Dictionary = m.spawn_unit(0,2,"militia",p)
 	var enemy: Dictionary = m.spawn_unit(1,2,"knight",p+Vector2(20,0))
-	check(m.cast_skill(0) and m.ink[0] == 20,"blood costs 30")
+	check(m.cast_skill(0) and m.ink[0] == 30,"blood costs 20")
 	check(m.movement_speed(u) == B.tier_value("speed","C") and m.attack_interval(u) == B.tier_value("interval","B"),"blood raises both stats one tier")
 	check(m.movement_speed(enemy) == B.CARDS.knight.speed,"enemy unaffected")
 	var hp: float = u.hp
@@ -54,7 +54,7 @@ func run() -> void:
 	var drummer: Dictionary = m.spawn_unit(0,2,"drummer",p)
 	check(m.movement_speed(drummer) > B.CARDS.drummer.speed,"vampire affects drummer too")
 	m.team_drum_until[0] = m.elapsed+3
-	check(m.movement_speed(u) == B.tier_value("speed","C"),"same tier boost does not stack with drums")
+	check(m.movement_speed(u) == B.tier_value("speed","B"),"blood pact and drums stack: two tiers")
 	var gate_hp: float = m.gates[1][2]
 	hp = u.hp
 	m.hit_gate(1,2,10,"militia",u)

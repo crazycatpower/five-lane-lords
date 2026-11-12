@@ -5,9 +5,10 @@ const DS = preload("res://deck_store.gd")
 
 static func run(t: SceneTree) -> void:
 	for faction: String in B.FACTIONS:
-		t.check(B.CARDS.keys().filter(func(k: String) -> bool: return B.card_faction(k) == faction and not B.CARDS[k].get("summon_only",false)).size() == {"":14,"normal":11,"dark":11,"magic":11}[faction],"faction card count: "+faction)
+		t.check(B.CARDS.keys().filter(func(k: String) -> bool: return B.card_faction(k) == faction and not B.CARDS[k].get("summon_only",false)).size() == {"":14,"normal":15,"dark":15,"magic":15,"beast":8}[faction],"faction card count: "+faction)
 	for lord: String in B.LORDS:
-		t.check(DS.pool(lord).size() == 24,"lord rotating pool: "+lord)
+		var expected: int = B.CARDS.keys().filter(func(k: String) -> bool: return not B.CARDS[k].get("summon_only",false) and not B.CARDS[k].get("unreleased",false) and B.card_faction(k) in ["",B.lord_faction(lord)] and not B.is_home_card(k,lord)).size()
+		t.check(DS.pool(lord).size() == expected,"lord rotating pool: "+lord)
 	var p := L.cell_center(Vector2i(3,2))
 	var m = t.bare(42)
 	m.lord_active = [false,false]
@@ -22,8 +23,9 @@ static func run(t: SceneTree) -> void:
 	m.damage(giant,100,0,"rain")
 	m.resolve_deaths()
 	var sk: Array = m.units.filter(func(u: Dictionary) -> bool: return u.kind == "skeleton")
-	t.check(sk.size() == B.CARDS.corpse_giant.on_death_spawn[1]+1,"cursed giant creates its four allies plus one enemy skeleton exactly once")
-	t.check(sk.filter(func(u: Dictionary) -> bool: return u.team == 1).size() == 4 and sk.filter(func(u: Dictionary) -> bool: return u.team == 0).size() == 1,"curse and giant retain their respective owners")
+	var bursts: int = roundi(1.0/B.CARDS.corpse_giant.burst_step)*B.CARDS.corpse_giant.burst_count
+	t.check(sk.size() == bursts+1,"cursed giant bursts every 25% (16 allies) plus one enemy skeleton exactly once")
+	t.check(sk.filter(func(u: Dictionary) -> bool: return u.team == 1).size() == bursts and sk.filter(func(u: Dictionary) -> bool: return u.team == 0).size() == 1,"curse and giant retain their respective owners")
 	t.check(sk.all(func(u: Dictionary) -> bool: return u.pos == p and u.lane == 2 and not u.has("cursed_until")),"death spawns remain at original position without inheriting curse")
 	t.check(grave.production == B.CARDS.grave.death_advance and ghoul.hp == 1+B.CARDS.ghoul.devour_heal,"giant death feeds economy and ghoul once")
 	var serials: Array = sk.map(func(u: Dictionary) -> int: return u.serial)
@@ -33,7 +35,7 @@ static func run(t: SceneTree) -> void:
 	var victim: Dictionary = m.spawn_unit(1,2,"raven",p)
 	var far: Dictionary = m.spawn_unit(1,2,"militia",p+Vector2(B.CARDS.curse.radius+1,0))
 	m.cast_spell({"kind":"curse","team":0,"pos":p})
-	t.check(not ally.get("cursed",false) and not far.get("cursed",false) and victim.get("cursed",false),"curse marks enemy troops including flying, only inside radius")
+	t.check(ally.get("cursed",false) and ally.curse_team == 0 and not far.get("cursed",false) and victim.get("cursed",false),"curse marks every troop in range (ours too, rising for the caster), flying included, only inside radius")
 	m.elapsed = 999.0
 	m.damage(victim,victim.hp,0,"rain")
 	m.resolve_deaths()
@@ -53,7 +55,9 @@ static func run(t: SceneTree) -> void:
 	far = m.spawn_unit(1,2,"knight",p+Vector2(290,0))
 	m.build_lookups()
 	t.check(m.catapult_target(catapult) == far,"catapult selects farthest valid troop")
-	m.update_unit(catapult,0)
+	for i: int in range(30): # the throw winds up first (attack_windup.gd)
+		if not m.projectiles.is_empty(): break
+		m.update_unit(catapult,0.01)
 	t.check(m.projectiles.size() == 1 and far.hp == far.max_hp,"catapult damage waits for impact")
 	var impact: Vector2 = far.pos
 	far.pos += Vector2(200,0)

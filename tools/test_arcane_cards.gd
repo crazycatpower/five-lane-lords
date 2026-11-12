@@ -72,6 +72,7 @@ func run() -> void:
 		assert(trap.hp > 0 and trap.charges == 2, "2 charges remaining after 1st trigger")
 		assert(enemy.stun_left == 10.0 and enemy.slow_left == 10.0, "10s stun and 10s slow")
 		assert(m.movement_speed(enemy) == B.CARDS.militia.speed * 0.5, "speed halved while slowed")
+		assert(m.attack_interval(enemy) == B.CARDS.militia.interval * 2.0, "attack speed halved while slowed")
 		assert(enemy.lane == 2 and nearby.lane == 2, "teleport keeps the lane")
 		assert(enemy.pos == L.cell_center(Vector2i(0 if 1-team == 0 else 8,2)) and nearby.pos == enemy.pos, "sent back to their own start of this lane")
 		assert(far.pos == trap.pos+Vector2(200,0) and friendly.pos == trap.pos and bird.pos == trap.pos)

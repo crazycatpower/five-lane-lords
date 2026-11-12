@@ -24,10 +24,11 @@ func _initialize():
 	assert(not m.choose_target(guard,B.CARDS.hunter).is_empty())
 	var hidden = m.spawn_unit(1,2,"bandit",Vector2(900,394))
 	m.cast_spell({"kind":"rain","team":0,"pos":hidden.pos})
-	assert(not hidden.stealthed and hidden.hp < hidden.max_hp)
-	var fresh = m.spawn_unit(1,2,"bandit",Vector2(1100,394))
-	m.damage(fresh,0,0,"rain")
-	assert(fresh.stealthed)
+	assert(hidden.stealthed and hidden.hp < hidden.max_hp) # AOE damages but only attack or detection breaks stealth
+	# Test attack breaks stealth permanently
+	var target_foe = m.spawn_unit(0,2,"militia",hidden.pos+Vector2(20,0))
+	m.attack(hidden, target_foe)
+	assert(not hidden.stealthed)
 	for lord in B.LORDS: assert(B.card_allowed("bandit",lord))
 	assert(B.validate().is_empty())
 	assert(B.card_description("bandit").contains("潛行"))

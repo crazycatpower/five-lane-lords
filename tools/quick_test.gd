@@ -52,6 +52,9 @@ func run() -> void:
 	preload("res://tools/test_dark_age.gd").run(self)
 	preload("res://tools/test_art_palette.gd").run(self)
 	preload("res://tools/test_no_rear_attack.gd").run(self)
+	preload("res://tools/test_monster_cards.gd").run(self)
+	preload("res://tools/test_roguelike.gd").run(self)
+	preload("res://tools/test_day_cycle.gd").run(self)
 
 	if failures > 0:
 		printerr("FAIL: %d checks, %d failures" % [checks, failures])

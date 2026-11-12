@@ -37,7 +37,7 @@ func run() -> void:
 		assert(inside.hp == inside.max_hp-600 and wall.hp == wall.max_hp-600)
 		for actor in [outside,behind,neighbor,ally]: assert(actor.hp == actor.max_hp)
 		assert(m.units.size() == count,"Skill no longer summons troops")
-		assert(m.skill_cd[team] == B.SKILL_COOLDOWN and not m.cast_skill(team))
+		assert(m.skill_cd[team] == B.skill_cooldown("adventure") and not m.cast_skill(team))
 		assert(m.events.any(func(e): return e.kind == "hero_slash" and e.length == length and e.team == team))
 	print("PASS: 6 gold, S-tier 600 damage, three-cell boundary, both directions, building damage, friendly/behind/adjacent exclusion, no summons, cooldown and AI")
 	quit()

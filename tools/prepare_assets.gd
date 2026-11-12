@@ -16,7 +16,7 @@ func run() -> void:
 	for kind: String in game.prepared_art.textures:
 		if kind == "castle_blue" or kind in ["farm","farmer","harvest","rain","fire"]: continue
 		var source: Texture2D = game.prepared_art.textures[kind]
-		var entry := {"source":source.resource_path,"sha256":FileAccess.get_sha256(source.resource_path),"revision":game.PALETTE_REVISION,"size":0 if kind in ["castle_red","castle_wall"] else 384}
+		var entry := {"source":source.resource_path,"sha256":FileAccess.get_sha256(source.resource_path),"revision":game.PALETTE_REVISION,"size":0 if kind in ["castle_red","castle_wall","gate","gate_broken"] else 384}
 		var path := "res://assets/generated-palette/"+kind+".png"
 		var old: Dictionary = manifest.get(kind,{})
 		if old.get("source","") == entry.source and old.get("sha256","") == entry.sha256 and old.get("revision","") == entry.revision and int(old.get("size",-1)) == entry.size and FileAccess.file_exists(path): continue

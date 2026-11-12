@@ -1,3 +1,4 @@
+param([string]$Version = '0.2.0')
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 Push-Location -LiteralPath $projectRoot
@@ -7,11 +8,11 @@ try {
     $env:TMP = $env:TEMP
     New-Item -ItemType Directory -Force $env:TEMP | Out-Null
     $releaseRoot = Join-Path (Split-Path -Parent $projectRoot) 'release'
-    $gameDir = Join-Path $releaseRoot 'FiveLaneLords'
+    $gameDir = Join-Path $releaseRoot "FiveLaneLords-$Version"
     New-Item -ItemType Directory -Force $gameDir | Out-Null
     & godot_console --headless --path . --export-release 'Windows Desktop' (Join-Path $gameDir 'FiveLaneLords.exe')
     if ($LASTEXITCODE -ne 0) { throw "Godot export failed: $LASTEXITCODE" }
-    Compress-Archive -LiteralPath $gameDir -DestinationPath (Join-Path $releaseRoot 'FiveLaneLords-Windows.zip') -Force
+    Compress-Archive -LiteralPath $gameDir -DestinationPath (Join-Path $releaseRoot "FiveLaneLords-Windows-$Version.zip") -Force
     Get-FileHash -Algorithm SHA256 (Join-Path $gameDir 'FiveLaneLords.exe')
 } finally {
     Pop-Location

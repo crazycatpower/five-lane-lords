@@ -59,10 +59,10 @@ static func run(t: SceneTree) -> void:
 		m = fixture(t)
 		var necro := m.spawn_unit(0,lane,"necromancer",L.cell_center(Vector2i(2,lane)))
 		necro.march = 0.0
-		var per_wave: int = (3 if lane == 2 else 2)*B.CARDS.necromancer.summon_per_lane
+		var per_wave: int = B.CARDS.necromancer.summon_per_lane # own lane only
 		t.tick(m,0.1)
 		var children: Array = m.units.filter(func(u: Dictionary) -> bool: return u.kind == "skeleton")
-		t.check(children.size() == per_wave and children.all(func(u: Dictionary) -> bool: return absi(u.lane-lane) <= 1 and m.cell_at(u.pos).x == 2),"necromancer summons at once, in the correct lanes and column "+str(lane))
+		t.check(children.size() == per_wave and children.all(func(u: Dictionary) -> bool: return u.lane == lane and m.cell_at(u.pos).x == 2),"necromancer summons at once, in its own lane and column "+str(lane))
 		t.tick(m,B.CARDS.necromancer.summon_interval)
 		t.check(m.units.filter(func(u: Dictionary) -> bool: return u.kind == "skeleton").size() == 2*per_wave,"necromancer summons again every interval "+str(lane))
 		var count: int = m.units.filter(func(u: Dictionary) -> bool: return u.kind == "skeleton").size()
@@ -100,7 +100,9 @@ static func run(t: SceneTree) -> void:
 	t.check(wall.hp == wall.max_hp and bird.pos.x > p.x,"raven bypasses nearby wall for a farm ahead")
 	bird.pos = farm.pos
 	bird.cd = 0
-	m.step(0.01)
+	for i: int in range(30): # the peck winds up first (attack_windup.gd); one peck at most in 0.3 s
+		if farm.hp < farm.max_hp: break
+		m.step(0.01)
 	t.check(farm.hp == farm.max_hp-B.CARDS.raven.damage,"raven attacks the preferred farm")
 	m = fixture(t)
 	victim = m.spawn_unit(1,2,"farmer",p)
@@ -130,12 +132,12 @@ static func run(t: SceneTree) -> void:
 	victim = m.spawn_unit(1,2,"knight",p)
 	ally = m.spawn_unit(0,2,"knight",p)
 	m.damage(wall,wall.max_hp*0.2,1,"fire")
-	t.check(m.units.filter(func(u): return u.kind == "skeleton").size() == 1,"bonewall summons 1 skeleton on 20% hp lost")
+	t.check(m.units.filter(func(u): return u.kind == "skeleton").size() == 2,"bonewall summons 2 skeletons on 20% hp lost")
 	var skel: Dictionary = m.units.filter(func(u): return u.kind == "skeleton")[0]
 	t.check(skel.pos.x < wall.pos.x,"skeleton positioned safely behind bonewall")
 	m.damage(wall,wall.hp,1,"fire")
 	m.resolve_deaths()
-	t.check(m.units.filter(func(u): return u.kind == "skeleton").size() == 5,"bonewall completes 5 skeleton summons on full destruction")
+	t.check(m.units.filter(func(u): return u.kind == "skeleton").size() == 10,"bonewall completes 5 summons of 2 on full destruction")
 	t.check(victim.hp == victim.max_hp,"bonewall does not explode on death")
 	m = fixture(t)
 	t.check(m.skill_cd[0] == B.SKILL_OPENING_COOLDOWN,"underworld lord starts with opening skill cooldown")
@@ -146,7 +148,7 @@ static func run(t: SceneTree) -> void:
 	t.check(not m.AI.skill_plan(m.skill_state(0)).cast,"underworld AI waits for two graves")
 	m.add_building(0,Vector2i(1,4),"grave")
 	t.check(m.AI.skill_plan(m.skill_state(0)).cast and m.cast_skill(0),"underworld AI uses its thirty-gold cost")
-	t.check(m.ink[0] == 0 and m.units.size() == 2*B.LORDS.underworld.summon_count and m.skill_cd[0] == B.SKILL_COOLDOWN,"underworld skill spends correct gold and summons four per grave")
+	t.check(m.ink[0] == 0 and m.units.size() == 2*B.LORDS.underworld.summon_count and m.skill_cd[0] == B.skill_cooldown("underworld"),"underworld skill spends correct gold and summons four per grave")
 	t.check(m.units.all(func(u: Dictionary) -> bool: return u.kind == "skeleton" and u.lane in [0,4]),"underworld summons on each grave's lane")
 	for kind: String in B.CARDS:
 		var data: Dictionary = B.CARDS[kind]
@@ -170,7 +172,7 @@ static func run(t: SceneTree) -> void:
 	snap = m.snapshot(0)
 	var s_stacked: float = m.AI.dark_card_score(cand_active, snap, ours, foes, troop_x)
 	t.check(s_stacked > s_active, "stacking grave on same active lane grants synergy bonus")
-	t.check(B.skill_cost("harvest") == 45.0,"harvest lord skill cost is 45")
+	t.check(B.skill_cost("harvest") == 35.0,"harvest lord skill cost is 35")
 	t.check(B.CARDS.artificer.hp == 130.0,"artificer hp tiered down to E 130")
 	# Spell can be played outside grid cell centers, e.g. near gate
 	var spell_m := Battle.new(100,["plague","fire","militia","farmer","scarecrow","harvest","rain","curse"],[],"harvest","iron")

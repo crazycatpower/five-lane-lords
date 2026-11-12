@@ -9,7 +9,7 @@ func _initialize() -> void:
 func run() -> void:
 	assert(B.validate().is_empty(),str(B.validate()))
 	assert(B.lord_faction("mage") == "magic" and B.home_card("mage") == "crystal")
-	assert(D.pool("mage").size() == 24 and not "crystal" in D.pool("mage"))
+	assert(D.pool("mage").size() == 28 and not "crystal" in D.pool("mage"))
 	assert(not "crystal" in D.pool("lion"))
 	assert(D.valid(D.fit_to_lord(B.PRESETS[0],"mage"),"mage"))
 	# Test Mage AI skill decision requires accumulated army
