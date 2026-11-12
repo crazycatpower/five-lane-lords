@@ -8,7 +8,6 @@ The screenshot supplied by the user was a pose reference only.
 - ../adventure-lord-attack-source.png: original six-pose atlas.
 - frame-0.png through frame-5.png: aligned 640 x 576 RGBA animation frames.
 - ../adventure-lord-attack.tres: Godot SpriteFrames, idle and non-looping attack.
-- ../../../docs/adventure-art-preview/attack.gif: looping review preview.
 
 Facing: right. Suggested foot anchor: (320, 550). For AnimatedSprite2D with
 centered=false, offset=(-320, -550) places this anchor at the node origin.
