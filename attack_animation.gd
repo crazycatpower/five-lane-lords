@@ -15,9 +15,9 @@ static func style(kind: String) -> String:
 		"catapult": return "siege"
 		"dark_wizard", "necromancer", "healer", "lord_mage", "lord_underworld", "lord_harvest": return "cast"
 		"lord_adventure": return "cleave"
-		"lord_vampire", "arcane_golem", "corpse_giant", "knight", "reaper", "lord_lion", "lord_iron": return "heavy"
+		"lord_vampire", "arcane_golem", "corpse_giant", "knight", "reaper", "lord_lion", "lord_iron", "eyewing_dragon", "belly_eye", "thorn_dragon": return "heavy"
 		"ram", "ox": return "ram"
-		"raven": return "peck"
+		"raven", "fishbeak", "hooknose_flyer": return "peck"
 		"drummer": return "drum"
 	return "thrust"
 

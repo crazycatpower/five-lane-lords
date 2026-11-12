@@ -188,7 +188,7 @@ func paint(g) -> void:
 		g.panel(L.OVERLAY_RECT)
 		g.label_at(L.OVERLAY_RECT.position+Vector2(50,58),"戰局暫停",30)
 		for item: Array in g.overlay_buttons():
-			g.panel(item[0])
+			g.panel(item[0],Color("fbf1d8") if item[0].has_point(g.get_global_mouse_position()) else Color("f3e6c6"))
 			g.draw_string(g.font,item[0].position+Vector2(0,27),item[1],HORIZONTAL_ALIGNMENT_CENTER,item[0].size.x,20,g.INK)
 
 func paint_status(g) -> void:

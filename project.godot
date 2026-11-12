@@ -12,6 +12,7 @@ config_version=5
 
 config/name="羊皮紙戰記 — Five Lane Lords"
 run/main_scene="res://main.tscn"
+config/icon="res://icon.png"
 config/features=PackedStringArray("4.7")
 
 [display]

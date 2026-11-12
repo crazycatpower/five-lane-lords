@@ -3,20 +3,24 @@ const B = preload("res://balance.gd")
 const L = preload("res://layout.gd")
 const AI = preload("res://lord_ai.gd")
 static func create(team: int, lord_kind: String = "lion") -> Dictionary:
-	var data: Dictionary = B.LORDS.get(lord_kind,B.LORDS.lion)
-	return {"kind":"lord","lord":lord_kind,"team":team,"max_hp":data.hp,"damage":data.damage,"speed":data.speed,"pos":Vector2(zone(team).y if team == 0 else zone(team).x,L.cell_center(Vector2i(0,2)).y),"hp":data.hp,"respawn":0.0,"cd":0.0,"last_hit":-10.0,"think":0.0,"target":L.spawn_position(team,2),"changed":-10.0,"retreating":false,"flash":0.0}
-# x range (min, max) a lord may stand in: a strip between the gate and the back farm column.
+	var data: Dictionary = B.lord_data(lord_kind)
+	return {"kind":"lord","lord":lord_kind,"team":team,"max_hp":data.hp,"damage":data.damage,"speed":data.speed,"pos":home(team),"hp":data.hp,"respawn":0.0,"cd":0.0,"last_hit":-10.0,"think":0.0,"target":L.spawn_position(team,2),"changed":-10.0,"retreating":false,"flash":0.0}
+# Patrol on the castle side of the visible gate, mirrored for both teams.
 static func zone(team: int) -> Vector2:
-	if team == 0: return Vector2(L.GRID_ORIGIN.x+10,L.GRID_ORIGIN.x+B.LORD_ZONE_DEPTH)
-	var right: float = L.GRID_ORIGIN.x+L.GRID_SIZE.x
-	return Vector2(right-B.LORD_ZONE_DEPTH,right-10)
+	var gate := L.gate_icon_x(team)
+	if team == 0: return Vector2(gate-B.LORD_ZONE_DEPTH,gate-B.LORD_ZONE_DEPTH*0.5)
+	return Vector2(gate+B.LORD_ZONE_DEPTH*0.5,gate+B.LORD_ZONE_DEPTH)
+
+static func home(team: int) -> Vector2:
+	return Vector2(zone(team).y if team == 0 else zone(team).x,L.cell_center(Vector2i(0,2)).y)
 
 static func step(m: RefCounted, lord: Dictionary, dt: float) -> void:
 	if lord.hp <= 0:
 		lord.respawn -= dt
 		if lord.respawn <= 0:
 			lord.hp = lord.max_hp
-			lord.pos = L.spawn_position(lord.team,2)
+			lord.pos = home(lord.team)
+			lord.target = lord.pos
 			lord.retreating = false
 		return
 	lord.flash = maxf(0,lord.flash-dt)
@@ -24,7 +28,7 @@ static func step(m: RefCounted, lord: Dictionary, dt: float) -> void:
 	# Respond immediately without lane scores, low-health retreat or switch delay.
 	lord.retreating = false
 	lord.target = AI.destination(lord,m.units,m.gates).pos
-	# Lords stay behind their farms, next to the gate (producer decision 2026-10-29).
+	# Pursuit never crosses the gate, including after a breach.
 	var min_x: float = zone(lord.team).x
 	var max_x: float = zone(lord.team).y
 	lord.target.x = clampf(lord.target.x,min_x,max_x)

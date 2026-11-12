@@ -11,6 +11,7 @@ var attack_animation := AttackAnimation.new()
 var library = preload("res://card_library.gd").new(self)
 var review := preload("res://battle_review.gd").new()
 var adventure := preload("res://adventure.gd").new()
+var rogue := preload("res://roguelike.gd").new()
 const PAPER = preload("res://assets/parchment-background.png")
 const INK := Color("463529")
 const RED := Color("9c3d30")
@@ -30,7 +31,7 @@ static var recolor_cache: Dictionary = {}
 static var prepared_art: Dictionary = {}
 static var palette_manifest: Dictionary = {}
 # Bump only when team_material or palette conversion changes, not for UI/gameplay edits.
-const PALETTE_REVISION := "team-material-v1"
+const PALETTE_REVISION := "team-material-v2"
 const ROMAN := ["I","II","III","IV","V"]
 var selected := -1
 var notice := "1–4 選牌 · 點戰場放置 · 右鍵取消 · 空白鍵暫停"
@@ -46,9 +47,17 @@ var player_deck: Array = []
 var player_lord := "adventure"
 var deck_path := "user://deck.json"
 var adventure_deck_mode := false
+# Two-player network match (net_match.gd). me = the local player's team; the guest (blue) sees the
+# field mirrored so both players fight from the left. field_mirror is on only while the field draws.
+const NetMatch = preload("res://net_match.gd")
+var net = null
+var me := 0
+var mirror_view := false
+var field_mirror := false
+var net_ip := "192.168."
 var watch_edit := -1 # >= 0: the deck screen is editing this spectate side (nothing is saved to disk)
 var watch_stash := {} # the player's own deck and lord while a spectate side is being edited
-var deck_tab := "unit"
+var deck_tab := "all"
 var deck_page := 0
 var difficulty := 1
 var spectating := false
@@ -60,6 +69,11 @@ var watch_source: Array = [0,0]
 const WATCH_SOURCES := ["隨機","我的牌組"] # recommended presets removed from the menus (producer 2026-11-05)
 var start_button: Button
 var effects: Array[Dictionary] = []
+const FactionVisuals = preload("res://faction_visuals.gd")
+const DayCycle = preload("res://day_cycle.gd")
+const Ceremony = preload("res://battle_ceremony.gd")
+var levy_visuals := {} # last visible positions; scoped to this model
+var levy_visual_model: RefCounted
 var adventure_attack_frames: Array[Texture2D] = [
 	preload("res://assets/manuscript-v1/adventure-lord-attack/frame-0.png"),
 	preload("res://assets/manuscript-v1/adventure-lord-attack/frame-1.png"),
@@ -85,12 +99,27 @@ var shake_enabled := true
 var shake_left := 0.0
 var sound: Node
 var sound_enabled := true
+# Music and presentation state (2026-11-12). None of it is read by the rules.
+const Music = preload("res://music_player.gd")
+var music: Node
+var music_volume := 0.7 # 0..1, settings
+var sfx_volume := 0.8
+var fullscreen := false
+var clock := 0.0 # seconds of real time since launch: drives menu and overlay animation
+var veil: ColorRect # parchment wash that fades out after every screen change
+var veil_left := 0.0
+var last_screen := ""
+var result_age := 0.0 # seconds since the match ended (the result panel and its ceremony ease in)
+var result_seen: RefCounted # the model whose ending has been announced
+var intro_left := 0.0 # seconds left of the "who fights whom" banner at the start of a battle
+const INTRO_TIME := 2.4
+const VERSION := "0.2.0"
 var hover_slot := -1
 var dragging := false
 var press_pos := Vector2.ZERO
 var press_was_selected := false
 var speed := 1
-const RESULT_RECT := Rect2(380,170,840,380)
+const RESULT_RECT := Rect2(310,110,980,506) # the closing page (battle_ceremony.gd PANEL)
 const SPEEDS := [1,2,4,8]
 const SPEED_RECTS := [Rect2(1360,736,46,32),Rect2(1412,736,46,32),Rect2(1464,736,46,32),Rect2(1516,736,46,32)]
 const NEXT_RECT := Rect2(1102,748,96,128)
@@ -107,17 +136,28 @@ static func prepare_art(progress: Callable = Callable()) -> void:
 	for kind: String in B.CARDS:
 		var file := "res://assets/manuscript-v1/"+kind+".png"
 		if ResourceLoader.exists(file): textures[kind] = load(file)
-	for pair: Array in [["gate","gate"],["crest","crown"],["castle_wall","castle-wall"]]:
+	for pair: Array in [["glutton_nest_closed","glutton_nest_closed"],["gate","lane-wall"],["gate_broken","lane-wall-broken"],["crest","crown"],["castle_wall","castle-wall"]]:
 		textures[pair[0]] = load("res://assets/manuscript-v1/"+pair[1]+".png")
 	for lord_kind: String in B.LORDS:
 		textures["lord_"+lord_kind] = load("res://assets/manuscript-v1/lord-"+lord_kind+".png")
 	var done := 0
 	for kind: String in textures:
-		if kind != "castle_blue": blue_art[kind] = recolor_blue(textures[kind],0 if kind in ["castle_red","castle_wall"] else 384,kind)
+		if kind != "castle_blue": blue_art[kind] = recolor_blue(textures[kind],0 if kind in ["castle_red","castle_wall","gate","gate_broken"] else 384,kind)
 		done += 1
 		if progress.is_valid(): progress.call(done,textures.size())
 	textures.castle_blue = textures.castle_red
 	blue_art.castle_blue = blue_art.castle_red
+	# A card without its own picture yet borrows the one named in its "art" field (placeholder).
+	for kind: String in B.CARDS:
+		var borrow: String = B.CARDS[kind].get("art",[kind])[0]
+		if not textures.has(kind) and textures.has(borrow):
+			textures[kind] = textures[borrow]
+			if blue_art.has(borrow): blue_art[kind] = blue_art[borrow]
+	# 小怪領主 (roguelike) use the picture of the card they are named after.
+	for lord_kind: String in B.MINION_LORDS:
+		var card: String = B.MINION_LORDS[lord_kind].card
+		if textures.has(card): textures["lord_"+lord_kind] = textures[card]
+		if blue_art.has(card): blue_art["lord_"+lord_kind] = blue_art[card]
 	prepared_art = {"textures":textures,"blue":blue_art}
 
 func _ready() -> void:
@@ -150,9 +190,23 @@ func _ready() -> void:
 	for arg: String in OS.get_cmdline_user_args():
 		if arg.begins_with("--seed="): seed_value = int(arg.substr(7))
 	load_settings()
+	Music.ensure_buses()
 	sound = preload("res://sound_bank.gd").new()
 	add_child(sound)
 	sound.enabled = sound_enabled
+	music = Music.new()
+	add_child(music)
+	# The veil sits on its own layer so it also covers the buttons of the screen fading in.
+	var layer := CanvasLayer.new()
+	layer.layer = 20
+	add_child(layer)
+	veil = ColorRect.new()
+	veil.color = Color(0.93,0.87,0.72,0.0)
+	veil.size = L.VIEWPORT_SIZE
+	veil.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(veil)
+	apply_audio_settings()
+	fit_window()
 	var saved: Dictionary = DeckStore.load_full(deck_path)
 	player_deck = saved.cards
 	player_lord = saved.lord
@@ -161,6 +215,7 @@ func _ready() -> void:
 
 func start_battle() -> void:
 	adventure.index = -1
+	rogue.in_battle = false
 	if spectating:
 		for team: int in range(2):
 			if not DeckStore.valid(watch_decks[team],watch_lords[team]): watch_decks[team] = DeckStore.fit_to_lord(watch_decks[team],watch_lords[team])
@@ -177,6 +232,7 @@ func start_battle() -> void:
 	enter_battle("觀戰中：AI 操控雙方。1–4 或 + / − 調整速度，空白鍵暫停。" if spectating else "拖曳卡牌到戰場，或按 1–4／F 選牌再點格子 · 右鍵取消 · 空白鍵暫停")
 
 func restart() -> void:
+	if net != null or rogue.in_battle: return # a roguelike battle cannot be replayed
 	if adventure.index >= 0: adventure.start(self,adventure.index)
 	else: start_battle()
 
@@ -190,8 +246,37 @@ func enter_battle(message: String) -> void:
 	notice = message
 	screen = "battle"
 	effects.clear()
+	result_age = 0.0
+	result_seen = null
+	intro_left = 0.0 if adventure.is_opening() else INTRO_TIME # the first lesson has its own opening scene
+	if music != null: music.stop_sting()
 	clear_ui()
 	queue_redraw()
+
+# Field mirror for the guest: x -> 1600 - x (the field is centred on the page).
+func view_mirror() -> Transform2D:
+	return Transform2D(Vector2(-1,0),Vector2(0,1),Vector2(L.VIEWPORT_SIZE.x,0))
+
+func tf(pos: Vector2 = Vector2.ZERO, rot: float = 0.0, scl: Vector2 = Vector2.ONE) -> void:
+	var t := Transform2D(rot,scl,0.0,pos)
+	draw_set_transform_matrix(view_mirror()*t if field_mirror else t)
+
+# Screen point -> battle point (and back: the mirror is its own inverse).
+func to_model(p: Vector2) -> Vector2:
+	return Vector2(L.VIEWPORT_SIZE.x-p.x,p.y) if mirror_view else p
+
+func field_mouse() -> Vector2:
+	return to_model(get_global_mouse_position())
+
+# Text on the mirrored field stays readable: drawn unmirrored at the mirrored spot.
+func field_text(pos: Vector2, text: String, align: HorizontalAlignment, width: float, size: int, color: Color) -> void:
+	if not field_mirror:
+		draw_string(font,pos,text,align,width,size,color)
+		return
+	var w: float = width if width > 0 else font.get_string_size(text,HORIZONTAL_ALIGNMENT_LEFT,-1,size).x
+	draw_set_transform_matrix(Transform2D.IDENTITY)
+	draw_string(font,Vector2(L.VIEWPORT_SIZE.x-pos.x-w,pos.y),text,align,width,size,color)
+	tf()
 
 func say(text: String, _urgent: bool = false) -> void:
 	notice = text # kept for the review log; nothing is drawn as text
@@ -218,12 +303,24 @@ func button(rect: Rect2, caption: String, action: Callable) -> Button:
 	b.add_theme_stylebox_override("normal",style)
 	b.add_theme_color_override("font_color",INK)
 	b.pressed.connect(func():
-		if not ui_time_locked(): action.call())
+		if ui_time_locked(): return
+		if sound != null: sound.cue("ui_click")
+		action.call())
+	b.mouse_entered.connect(func():
+		if sound != null and not b.disabled and not ui_time_locked(): sound.cue("ui_hover"))
 	add_child(b)
 	ui.append(b)
 	return b
 
 func _physics_process(dt: float) -> void:
+	if net != null:
+		if net.poll() and screen == "net": start_net_battle()
+		if screen == "net": queue_redraw()
+		if screen == "battle" and net.state == "playing":
+			net.advance(model,dt,func():
+				attack_animation.observe(model)
+				consume_events())
+		return
 	if screen != "battle": return
 	# Spectate mode can fast-forward: several fixed steps per frame, so results match 1x exactly.
 	for i: int in range(speed if spectating else 1):
@@ -233,25 +330,100 @@ func _physics_process(dt: float) -> void:
 		if adventure.is_opening(): adventure.opening.observe(self)
 		attack_animation.observe(model)
 		consume_events()
-		if not model.time_stopped(): adventure.update(self)
+		if not model.time_stopped():
+			adventure.update(self)
+			rogue.update(self)
 
 func consume_events() -> void:
 	review.observe(model)
-	for e: Dictionary in model.events:
-		if e.kind == "breach": say(("我方第 %d 路城門被攻破！敵兵走進來就輸了" if e.team == 1 else "攻破藍旗第 %d 路城門！派兵走進去就贏") % (e.lane+1),e.team == 1)
-		if e.kind == "skill": say("%s%s發動「%s」" % ["紅方" if e.team == 0 else "藍方",B.LORDS[e.lord].name,B.LORDS[e.lord].skill])
+	if levy_visual_model != model:
+		levy_visuals.clear()
+		levy_visual_model = model
+	var current_levies := {}
+	for u: Dictionary in model.units:
+		if u.hp > 0 and u.get("levy",false): current_levies[u.id] = u
+	if fx_enabled:
+		for id in levy_visuals:
+			if current_levies.has(id): continue
+			var old: Dictionary = levy_visuals[id]
+			# Only leaving territory vanishes; ordinary deaths keep their own effect.
+			if old.hp > 0 and model.territory_owner(model.cell_at(old.pos)) != old.team:
+				effects.append({"kind":"levy_dust","pos":old.pos,"life":0.5,"duration":0.5})
+	levy_visuals = current_levies
+	var hop := 0
+	var sacrifice_team := -1
+	for event_index: int in range(model.events.size()):
+		var e: Dictionary = model.events[event_index]
+		if e.kind == "spell":
+			hop = 0
+			sacrifice_team = e.team if e.get("card","") == "sacrifice" else -1
+		if e.kind == "breach": say(("我方第 %d 路城牆被攻破！敵兵走進來就輸了" if e.team == 1 else "攻破藍旗第 %d 路城牆！派兵走進去就贏") % (e.lane+1),e.team == 1)
+		if e.kind == "skill": say("%s%s發動「%s」" % ["紅方" if e.team == 0 else "藍方",B.lord_name(e.lord),B.lord_data(e.lord).get("skill","技能")])
 		if e.kind == "ramp": say("金幣產出與卡牌冷卻加快 ×%.1f" % e.multiplier)
-		if e.kind == "overflow" and e.team == 0 and not spectating: say("金幣袋滿了，繼續產出的金幣會浪費")
-		if sound != null: sound.cue(e.kind)
+		if e.kind == "nightfall" and e.get("first",false): say("入夜：金幣 ×%s，雙方城牆開始朽壞" % B.number(B.NIGHT_GOLD))
+		if e.kind == "overflow" and e.team == me and not spectating: say("金幣袋滿了，繼續產出的金幣會浪費")
+		if sound != null:
+			if sound.has_method("cue_event"): sound.cue_event(e)
+			else: sound.cue(e.kind)
 		if e.kind == "breach" and shake_enabled: shake_left = 0.25
 		if fx_enabled:
 			var copy := e.duplicate()
-			copy.life = {"breach":2.0,"ramp":1.4,"burn":5.0,"death":0.35,"play":0.45,"ink":0.6,"skill":1.0,"link":0.6,"slash":0.35,"drum":0.6,"stone_impact":0.5,"catapult_fire":0.4,"curse_rise":0.5}.get(e.kind,0.7)
+			copy.life = {"nightfall":2.6 if e.get("first",false) else 1.2,"breach":2.0,"ramp":1.4,"burn":5.0,"death":0.35,"play":0.45,"ink":0.6,"skill":1.0,"link":0.6,"slash":0.35,"drum":0.6,"stone_impact":0.5,"catapult_fire":0.4,"curse_rise":0.5}.get(e.kind,0.7)
+			if e.kind == "link" and e.style == "lightning":
+				copy.hop = hop
+				hop += 1
+				copy.life = 0.3
+			if e.kind == "link" and e.style == "devour" and e.team == sacrifice_team and event_index+1 < model.events.size() and model.events[event_index+1].kind == "hit" and model.events[event_index+1].pos == e.pos:
+				# Sacrifice links end at the cast point; blood-tower links retain their target.
+				for cast_event: Dictionary in model.events:
+					if cast_event.kind == "spell" and cast_event.get("card","") == "sacrifice" and cast_event.team == e.team and cast_event.pos == e.to:
+						copy.to = to_model(preload("res://economy_hud.gd").PURSE.get_center() if e.team == me else Vector2(1322,35))
+						copy.life = 0.85
+						break
+			if e.kind == "summoned" and model.units.any(func(u: Dictionary) -> bool: return u.get("levy",false) and u.team == e.team and u.pos.is_equal_approx(e.pos)):
+				copy.kind = "levy_summon"
 			copy.duration = copy.life
 			effects.append(copy)
 	model.events.clear()
 
+# Screens that belong to the battle being played (the music and the veil treat them as one place).
+func in_battle() -> bool:
+	return screen in ["battle","battle_info","recap"] or (screen == "codex" and library.return_screen == "battle_info") or (screen == "settings" and settings_return == "battle")
+
+# Presentation on real time, paused or not: the veil between screens, the ceremonies, the music.
+const VEIL_TIME := 0.32
+func present(dt: float) -> void:
+	clock += dt
+	var here := "battle" if in_battle() else screen
+	if here != last_screen:
+		if not last_screen.is_empty(): veil_left = VEIL_TIME
+		last_screen = here
+	veil_left = maxf(0.0,veil_left-dt)
+	if veil != null: veil.color.a = pow(veil_left/VEIL_TIME,1.5)*0.92
+	if model == null: return
+	var fighting := in_battle()
+	if fighting and not model.paused and not model.ended: intro_left = maxf(0.0,intro_left-dt)
+	if fighting and model.ended:
+		if result_seen != model:
+			result_seen = model
+			result_age = 0.0
+			if music != null: music.play_sting("victory" if Ceremony.mood(self) > 0 else "defeat")
+		result_age += dt
+	if music == null: return
+	music.enabled = music_volume > 0.001
+	if not fighting:
+		music.stop_sting()
+		music.duck = 1.0
+		music.want("menu")
+	elif model.ended: music.want("")
+	else:
+		music.duck = 0.4 if model.paused else 1.0
+		var phase: int = model.day_phase()
+		if phase == 3: music.want("night")
+		else: music.want("battle",phase)
+
 func _process(dt: float) -> void:
+	present(dt)
 	if ui_time_locked():
 		queue_redraw()
 		return
@@ -279,34 +451,46 @@ func card_at(pos: Vector2) -> int:
 	return -1
 
 func toggle_pause() -> void:
-	if ui_time_locked(): return
+	if ui_time_locked() or net != null: return
 	if not model.ended: model.paused = not model.paused
 
 func set_speed(value: int) -> void:
 	speed = value
 	say("觀戰速度 ×%d" % speed)
 
-# Buttons on the pause / result banner: [rect, caption, action].
+# Buttons on the pause banner / closing page: [rect, caption, action], centred as a row.
 func overlay_buttons() -> Array:
-	var y := RESULT_RECT.end.y-60 if model.ended else L.OVERLAY_RECT.position.y+95
+	var entries: Array = []
+	if not model.ended: entries.append(["繼續",toggle_pause])
+	else: entries.append(["戰局復盤",show_review])
+	if net == null and not rogue.in_battle: entries.append(["重新開始",restart])
+	if not model.ended: entries.append(["設定",func(): settings_return = "battle"; show_settings()])
+	if rogue.in_battle: entries.append(["肉鴿進度" if model.ended else "認輸離開",func(): rogue.leave_battle(self)])
+	else: entries.append(["冒險地圖",show_adventure] if adventure.index >= 0 else ["回到標題",show_title])
+	var y := RESULT_RECT.end.y-62 if model.ended else L.OVERLAY_RECT.position.y+95
+	var width := 190.0 if entries.size() <= 3 else 158.0
+	var gap := 20.0 if entries.size() <= 3 else 12.0
+	var x := L.VIEWPORT_SIZE.x*0.5-(entries.size()*width+(entries.size()-1)*gap)*0.5
 	var items: Array = []
-	if not model.ended: items.append([Rect2(490,y,190,40),"繼續",toggle_pause])
-	else: items.append([Rect2(490,y,190,40),"戰局復盤",show_review])
-	items.append([Rect2(700,y,190,40),"重新開始",restart])
-	items.append([Rect2(910,y,190,40),"冒險地圖",show_adventure] if adventure.index >= 0 else [Rect2(910,y,190,40),"回到標題",show_title])
+	for i: int in range(entries.size()): items.append([Rect2(x+i*(width+gap),y,width,40),entries[i][0],entries[i][1]])
 	return items
 
 func try_play(slot: int, pos: Vector2) -> bool:
 	if adventure.is_opening() and adventure.opening.active: return false
-	var reason: String = model.play_error(0,slot,pos)
-	if reason.is_empty() and model.play(0,slot,pos):
+	pos = to_model(pos)
+	var reason: String = model.play_error(me,slot,pos)
+	if reason.is_empty() and net != null:
+		net.queue(["p",slot,pos.x,pos.y]) # runs on both machines a few ticks from now
+		selected = -1
+		return true
+	if reason.is_empty() and model.play(me,slot,pos):
 		selected = -1
 		return true
 	say(reason)
-	match model.play_check(0,slot,pos):
+	match model.play_check(me,slot,pos):
 		Battle.Refusal.GOLD:
 			purse_alarm = 0.9
-			purse_need = B.CARDS[model.kind_at(0,slot)].cost
+			purse_need = B.CARDS[model.kind_at(me,slot)].cost
 		Battle.Refusal.COOLDOWN: card_shake[slot] = 0.45
 		Battle.Refusal.NOT_OURS, Battle.Refusal.OFF_GRID, Battle.Refusal.OCCUPIED: place_flash = 1.0
 	effects.append({"kind":"fail","pos":pos,"life":0.5,"duration":0.5})
@@ -336,6 +520,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			if screen == "codex": library.back()
 			else: library.close_battle_info()
 		return
+	if screen in ["settings","help","watch","net","adventure","rogue"] and event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE:
+		if screen == "settings": preload("res://settings_screen.gd").back(self)
+		else: show_title()
+		return
 	if screen != "battle": return
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT and library.INFO_RECT.has_point(event.position):
 		library.show_battle_info()
@@ -353,11 +541,13 @@ func _unhandled_input(event: InputEvent) -> void:
 			if selected >= 0: selected = -1
 			else: toggle_pause()
 		if event.keycode == KEY_SPACE: toggle_pause()
-		if event.keycode == KEY_R:
+		if event.keycode == KEY_R and net == null:
 			if model.paused or model.ended: restart()
 			else: say("戰鬥中 R 不重開；空白鍵暫停後可重玩")
 	if event is InputEventMouseMotion:
-		hover_slot = -1 if spectating else card_at(event.position)
+		var over: int = -1 if spectating else card_at(event.position)
+		if over != hover_slot and over >= 0 and not model.paused and not model.ended and sound != null: sound.cue("ui_hover")
+		hover_slot = over
 	if event is InputEventMouseButton:
 		var pos: Vector2 = event.position
 		if event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
@@ -365,6 +555,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			dragging = false
 		if event.button_index != MOUSE_BUTTON_LEFT: return
 		if event.pressed:
+			if model.ended and result_age < Ceremony.PANEL_DELAY+Ceremony.PANEL_IN: return
 			if model.paused or model.ended:
 				for item: Array in overlay_buttons():
 					if item[0].has_point(pos):
@@ -385,6 +576,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			var slot := card_at(pos)
 			if slot >= 0:
 				# Press on a card selects it and starts a drag; releasing over the field plays it.
+				if sound != null: sound.cue("ui_click")
 				press_was_selected = selected == slot
 				selected = slot
 				dragging = true
@@ -457,7 +649,15 @@ func lord_art(kind: String, team: int = 0) -> Texture2D:
 
 # Recolour only designated team materials. Natural fields/skin/wood are not team ink.
 # Ox cloth additionally has a spatial mask so its brown coat never enters the palette swap.
+# 魔物 art paints its team zone in a warmer vermilion; open mouths and tongues stay red on both teams.
+const BEAST_MOUTHS := {"eyewing_dragon":Rect2(0.58,0.62,0.22,0.35),"belly_eye":Rect2(0.68,0.30,0.25,0.32),"fishbeak":Rect2(0.70,0.30,0.16,0.14),"hooknose_flyer":Rect2(0.76,0.44,0.08,0.12),"long_dragon":Rect2(0.78,0.40,0.22,0.45),"thorn_dragon":Rect2(0.80,0.40,0.20,0.50)}
+
 static func team_material(kind: String, uv: Vector2, c: Color) -> bool:
+	if kind == "sacrifice": return false
+	if B.CARDS.get(kind,{}).get("series","") == "beast":
+		if BEAST_MOUTHS.has(kind) and BEAST_MOUTHS[kind].has_point(uv): return false
+		return c.a >= 0.05 and c.s >= 0.5 and c.v >= 0.25 and (c.h <= 0.06 or c.h >= 0.95) # ritual blood keeps its meaning on both teams
+	if kind == "blood_tower" and (Rect2(0.17,0.20,0.59,0.34).has_point(uv) or Rect2(0.78,0.40,0.16,0.24).has_point(uv)): return false # reservoirs, not cloth
 	if kind == "castle_wall" and Rect2(0.48,0.55,0.26,0.45).has_point(uv): return false # recessed timber gate
 	if kind == "catapult": return uv.x > 0.73 and uv.y < 0.28 and c.a >= 0.05 and c.s >= 0.35 and c.v >= 0.20 and (c.h <= 0.08 or c.h >= 0.95)
 	if kind == "bonewall": return (uv.x < 0.30 or uv.x > 0.80) and c.a >= 0.05 and c.s >= 0.60 and c.v >= 0.30 and (c.h <= 0.075 or c.h >= 0.95)
@@ -516,32 +716,41 @@ func draw_fitted(texture: Texture2D, box: Rect2, shade: Color = Color.WHITE, bot
 
 # Same as draw_fitted, mirrored left-right when face < 0. Unit art faces right (toward blue).
 func draw_fitted_facing(texture: Texture2D, box: Rect2, face: float, shade: Color = Color.WHITE) -> void:
+	if field_mirror: face = -face
 	var r := fitted_rect(texture.get_size(),box,false)
 	if face >= 0:
 		draw_texture_rect(texture,r,false,shade)
 		return
 	var c := r.get_center()
-	draw_set_transform(c,0,Vector2(-1,1))
+	tf(c,0,Vector2(-1,1))
 	draw_texture_rect(texture,Rect2(r.position-c,r.size),false,shade)
-	draw_set_transform(Vector2.ZERO)
+	tf()
 
 func actor_rect(kind: String) -> Rect2:
 	if B.CARDS.get(kind,{}).get("series","") == "magic" and B.CARDS[kind].type == "unit": return fitted_rect(art(kind).get_size(),Rect2(-65,-95,130,112),true)
+	if kind == "glutton_nest": return fitted_rect(art(kind).get_size(),Rect2(-45,-28,90,62),true)
 	if B.CARDS.get(kind,{}).has("trap"): return fitted_rect(art(kind).get_size(),Rect2(-45,-8,90,46),true)
+	if B.CARDS.get(kind,{}).get("series","") == "beast":
+		var box: Rect2 = {"long_dragon":Rect2(-85,-50,170,67),"thorn_dragon":Rect2(-75,-75,150,92),"belly_eye":Rect2(-66,-72,132,89)}.get(kind,Rect2(-58,-75,116,92))
+		return fitted_rect(art(kind).get_size(),box,true)
 	if kind == "arcane_tower": return fitted_rect(art(kind).get_size(),Rect2(-40,-65,80,100),true)
 	if kind == "corpse_giant": return fitted_rect(art(kind).get_size(),Rect2(-52,-85,104,104),true)
 	if kind == "lord_adventure": return fitted_rect(get_adventure_frame(0,0).get_size(),Rect2(-57,-75,114,102),true)
 	if kind.begins_with("lord_"): return fitted_rect(art(kind).get_size(),Rect2(-47,-67,94,94),true)
-	if kind in ["farm","mill","tower","scarecrow","grave","bonewall","barricade","crystal","catapult"]: return fitted_rect(art(kind).get_size(),Rect2(-45,-39,90,78),true)
+	if kind in ["farm","mill","tower","scarecrow","grave","bonewall","barricade","crystal","catapult","watchtower","mass_grave","blood_tower"]: return fitted_rect(art(kind).get_size(),Rect2(-45,-39,90,78),true)
 	var width := 112.0 if kind in ["ox","ram"] else 80.0
 	return fitted_rect(art(kind).get_size(),Rect2(-width/2,-63,width,80),true)
 
 func draw_actor(kind: String, team: int, pos: Vector2, face: float, shade: Color = Color.WHITE) -> void:
-	draw_set_transform(pos,0,Vector2(face,1))
+	if field_mirror: face = -face # the mirror flips the art; flip it back so troops face their way
+	tf(pos,0,Vector2(face,1))
 	draw_texture_rect(art(kind,team),actor_rect(kind),false,shade)
-	draw_set_transform(Vector2.ZERO)
+	tf()
 
 func draw_combat_actor(kind: String, actor: Dictionary, pos: Vector2, face: float, shade: Color = Color.WHITE) -> void:
+	if kind == "glutton_nest":
+		preload("res://glutton_nest.gd").draw(self,actor,pos)
+		return
 	if kind == "farm": shade *= Color(0.90,0.88,0.82)
 	if kind == "crystal":
 		var brightness := lerpf(0.30,1.0,clampf(actor.hp/actor.max_hp,0,1))
@@ -568,12 +777,12 @@ func draw_combat_actor(kind: String, actor: Dictionary, pos: Vector2, face: floa
 	var pivot := pos+Vector2(center.x*face,center.y)+offset
 	var extent: float = absf(sin(angle))*rect.size.x*scale.x/2+absf(cos(angle))*rect.size.y*scale.y/2
 	pivot.y = maxf(pivot.y,L.GRID_ORIGIN.y+6+extent)
-	draw_set_transform(pivot,angle,Vector2(face,1)*scale)
+	tf(pivot,angle,Vector2(face,1)*scale)
 	var tex := art(kind,actor.team)
 	if kind == "lord_adventure" and pose.has("frame"):
 		tex = get_adventure_frame(pose.frame,actor.team)
 	draw_texture_rect(tex,Rect2(-rect.size/2,rect.size),false,shade)
-	draw_set_transform(pos,0,Vector2(face,1))
+	tf(pos,0,Vector2(face,1))
 	var ink := Color(INK,pose.strength*0.8)
 	match pose.style:
 		"cleave":
@@ -601,7 +810,7 @@ func draw_combat_actor(kind: String, actor: Dictionary, pos: Vector2, face: floa
 			draw_line(Vector2(20,-12),Vector2(31,-8),ink,1.5,true)
 		"drum":
 			draw_arc(Vector2(15,-18),10+pose.progress*18,-1.4,1.4,12,Color(0.8,0.6,0.2,pose.strength),2,true)
-	draw_set_transform(Vector2.ZERO)
+	tf()
 
 func card_art_kinds(kind: String) -> Array:
 	return B.CARDS[kind].get("art",[kind])
@@ -619,12 +828,13 @@ func draw_card(kind: String, rect: Rect2, slot: int = -1) -> void:
 	var data: Dictionary = B.CARDS[kind]
 	if card_shake.has(slot): rect.position.x += sin(card_shake[slot]*55)*5*clampf(card_shake[slot]/0.45,0,1)
 	var s := rect.size
-	var short: bool = screen == "battle" and model.ink[0] < data.cost
+	var short: bool = screen == "battle" and model.ink[me] < data.cost
 	draw_texture_rect(ART.card(selected == slot and slot >= 0),rect,false,preload("res://command_style.gd").card_tint(kind))
 	preload("res://command_style.gd").type_frame(self,rect,data.type)
+	preload("res://command_style.gd").faction_frame(self,rect,kind,selected == slot and slot >= 0)
 	# No countdowns or shortfall numbers on cards (producer 2026-11-03). Not enough gold: a still
 	# grey mask. Cooling: a grey curtain that slowly parts from the middle (drawn further down).
-	var cooling: bool = slot >= 0 and screen == "battle" and model.slot_cd(0,slot) > 0
+	var cooling: bool = slot >= 0 and screen == "battle" and model.slot_cd(me,slot) > 0
 	var blocked: bool = short and slot >= 0
 	var art_box := Rect2(rect.position+s*Vector2(0.08,0.13),s*Vector2(0.84,0.5))
 	var shade := Color(0.45,0.45,0.45) if short else Color.WHITE
@@ -633,6 +843,11 @@ func draw_card(kind: String, rect: Rect2, slot: int = -1) -> void:
 	# Name and type sit above the frame's bottom corner flowers (they start ~83% down).
 	draw_string(font,rect.position+Vector2(0,s.y*0.74),data.name,HORIZONTAL_ALIGNMENT_CENTER,s.x,17,Color("2e2219") if blocked else INK)
 	draw_string(font,rect.position+Vector2(0,s.y*0.83),data.role,HORIZONTAL_ALIGNMENT_CENTER,s.x,13,Color("33261a") if blocked else Color("5a4630"))
+	if screen == "battle" and model != null and me < model.card_upgrades.size():
+		var lv: int = preload("res://card_upgrades.gd").level(model.card_upgrades[me].get(kind,{}))
+		if lv > 0: # roguelike shop upgrade
+			draw_circle(rect.position+Vector2(19,s.y*0.66),13,RED)
+			draw_string(font,rect.position+Vector2(6,s.y*0.66+6),"+%d" % lv,HORIZONTAL_ALIGNMENT_CENTER,26,15,Color("fff0ca"))
 	if screen != "battle":
 		# Outside battle the top-left corner shows the card's cooldown (in battle it shows the hand slot).
 		draw_rect(Rect2(rect.position+Vector2(7,7),Vector2(34,20)),Color("725138"))
@@ -642,7 +857,7 @@ func draw_card(kind: String, rect: Rect2, slot: int = -1) -> void:
 		var tag := Rect2(rect.position+Vector2(s.x*0.5-18,8),Vector2(36,17))
 		draw_rect(tag,preload("res://command_style.gd").tag_color(kind))
 		draw_string(font,tag.position+Vector2(0,13),B.FACTIONS[faction],HORIZONTAL_ALIGNMENT_CENTER,tag.size.x,12,Color("f3e6c4"))
-	if cooling: curtain(rect.grow(-3),clampf(model.slot_cd(0,slot)/maxf(0.1,data.cooldown),0,1))
+	if cooling: curtain(rect.grow(-3),clampf(model.slot_cd(me,slot)/maxf(0.1,data.cooldown),0,1))
 	# Ink cost badge, top right.
 	var badge := rect.position+Vector2(s.x-19,19)
 	draw_circle(badge,15,Color("2f3f5c"))
@@ -678,6 +893,8 @@ func _draw() -> void:
 	panel(L.PAGE_FRAME,Color(0.85,0.74,0.53,0.15))
 	if screen == "battle": draw_battle()
 	elif screen == "adventure": adventure.paint(self)
+	elif screen == "rogue": rogue.paint(self)
+	elif screen == "adventure_finale": adventure.finale.paint(self)
 	elif screen == "adventure_ending": adventure.ending.paint(self)
 	elif screen == "road_toll_story": adventure.active_story().paint(self)
 	elif screen == "recap":
@@ -687,8 +904,9 @@ func _draw() -> void:
 	elif screen == "battle_info": library.draw_battle_info()
 	elif screen == "deck": draw_deck()
 	elif screen == "watch": draw_watch()
+	elif screen == "net": draw_net()
 	elif screen == "help": draw_help()
-	elif screen == "settings": draw_string(font,Vector2(0,220),"畫面與音效設定",HORIZONTAL_ALIGNMENT_CENTER,L.VIEWPORT_SIZE.x,40,INK)
+	elif screen == "settings": preload("res://settings_screen.gd").paint(self)
 	else: draw_title()
 	if ui_time_locked(): draw_time_stop()
 
@@ -696,7 +914,12 @@ func ui_time_locked() -> bool:
 	return model != null and model.time_stopped()
 
 # Handle before GUI controls, so mouse, keyboard and hotkeys all remain frozen.
-func _input(_event: InputEvent) -> void:
+func _input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and (event.keycode == KEY_F11 or (event.keycode == KEY_ENTER and event.alt_pressed)):
+		set_fullscreen(not fullscreen)
+		if screen == "settings": show_settings()
+		get_viewport().set_input_as_handled()
+		return
 	if ui_time_locked(): get_viewport().set_input_as_handled()
 
 func draw_time_stop() -> void:
@@ -749,6 +972,7 @@ func draw_landscape(rect: Rect2, horizon: float) -> void:
 	for x: int in range(int(top.x)+22,int(rect.end.x)-20,58):
 		for y: int in range(int(top.y)+14,int(line_y)-10,42):
 			draw_polyline(PackedVector2Array([Vector2(x,y-9),Vector2(x+15,y),Vector2(x,y+9),Vector2(x-15,y),Vector2(x,y-9)]),Color(0.85,0.92,0.89,0.22),1.4,true)
+	if fx_enabled: draw_sky_life(rect,line_y)
 	for layer: int in range(3):
 		var points := PackedVector2Array()
 		for i: int in range(65):
@@ -765,10 +989,34 @@ func draw_landscape(rect: Rect2, horizon: float) -> void:
 	# Let the existing parchment grain show through the painted pigments.
 	draw_texture_rect(PAPER,rect,false,Color(1,1,1,0.19))
 
+# Slow painted clouds and a few birds, so no menu page is a still picture. Real time only.
+# Both fade in and out near the page edge instead of sliding over the frame.
+func draw_sky_life(rect: Rect2, line_y: float) -> void:
+	var span := rect.size.x+120.0
+	for i: int in range(6):
+		var speed := 5.0+scenery_noise(i,201)*7.0
+		var x := rect.position.x-60.0+fposmod(scenery_noise(i,202)*span+clock*speed,span)
+		var y := rect.position.y+40.0+scenery_noise(i,203)*maxf(20.0,line_y-rect.position.y-160.0)
+		var size := 0.7+scenery_noise(i,204)*0.7
+		var edge := clampf(minf(x-rect.position.x-70.0*size,rect.end.x-x-70.0*size)/90.0,0.0,1.0)
+		if edge <= 0.0: continue
+		for puff: Array in [[-46.0,6.0,26.0],[-18.0,-8.0,34.0],[18.0,-4.0,30.0],[46.0,8.0,22.0],[0.0,10.0,30.0]]:
+			tf(Vector2(x+puff[0]*size,y+puff[1]*size),0,Vector2(1.25,0.62))
+			draw_circle(Vector2.ZERO,puff[2]*size,Color(0.97,0.96,0.90,0.30*edge))
+			tf()
+	for i: int in range(3):
+		var lap := 46.0+i*17.0 # seconds for one crossing
+		var k := fposmod(clock/lap+scenery_noise(i,211),1.0)
+		var at := Vector2(rect.position.x+20+k*(rect.size.x-40),rect.position.y+70+scenery_noise(i,212)*120+sin(clock*0.7+i*2.0)*10)
+		var flap := sin(clock*7.0+i*1.7)*5.0
+		draw_polyline(PackedVector2Array([at+Vector2(-9,-flap),at,at+Vector2(9,-flap)]),Color(INK,0.55*clampf(minf(k,1.0-k)*12.0,0.0,1.0)),1.8,true)
+
 func draw_battle() -> void:
 	if adventure.is_opening():
 		adventure.opening.paint(self)
 		return
+	field_mirror = mirror_view
+	tf()
 	var field: Rect2 = L.FIELD_FRAME
 	draw_texture_rect_region(PAPER,field,Rect2(field.position*0.6,field.size*0.6),FIELD_TINT)
 	draw_battle_landscape(field.grow(-7))
@@ -804,13 +1052,13 @@ func draw_battle() -> void:
 				var edge: int = [3,0,1,2][side]
 				ink_line(corners[edge],corners[(edge+1)%4],row*37+col*11+side,color,1.7)
 	if selected >= 0:
-		var sel_kind: String = model.kind_at(0,selected)
+		var sel_kind: String = model.kind_at(me,selected)
 		var is_spell: bool = B.CARDS.get(sel_kind,{}).get("type","") == "spell"
 		if not is_spell or B.CARDS[sel_kind].get("rolling",false):
 			for row: int in range(5):
 				for col: int in range(9):
 					var cell := Vector2i(col,row)
-					if model.can_play(0,selected,L.cell_center(cell)):
+					if model.can_play(me,selected,L.cell_center(cell)):
 						var r := Rect2(L.GRID_ORIGIN+Vector2(cell)*L.CELL_SIZE,L.CELL_SIZE).grow(-5)
 						var glow := 0.0 if place_flash <= 0 else 0.5+0.5*sin(place_flash*18)
 						draw_rect(r,Color(1.0,0.93,0.55,0.22+0.30*glow))
@@ -820,15 +1068,16 @@ func draw_battle() -> void:
 		var y := grid.position.y+lane*L.CELL_SIZE.y
 		ink_line(Vector2(grid.position.x,y),Vector2(grid.end.x,y),lane,Color(INK,0.55 if lane == 0 or lane == 5 else 0.38),2.0)
 	for lane: int in model.active_lanes:
-		var tab := Rect2(grid.position.x+4,grid.position.y+lane*L.CELL_SIZE.y+5,30,20)
+		var tab := Rect2((grid.end.x-34) if mirror_view else (grid.position.x+4),grid.position.y+lane*L.CELL_SIZE.y+5,30,20)
 		draw_rect(tab,Color(0.95,0.90,0.78,0.85))
 		draw_rect(tab,Color(INK,0.5),false,1)
-		draw_string(font,tab.position+Vector2(0,15),ROMAN[model.active_lanes.find(lane)],HORIZONTAL_ALIGNMENT_CENTER,tab.size.x,14,INK)
+		field_text(tab.position+Vector2(0,15),ROMAN[model.active_lanes.find(lane)],HORIZONTAL_ALIGNMENT_CENTER,tab.size.x,14,INK)
 	review.draw_pressure(self) # danger glow sits on the ground, under the troops
 	for b: Dictionary in model.buildings:
-		team_shadow(b.pos+Vector2(0,30),40,Color(0.25,0.17,0.08))
+		if preload("res://glutton_nest.gd").hidden(b) and b.team != me and not spectating: continue
+		if not preload("res://glutton_nest.gd").hidden(b): team_shadow(b.pos+Vector2(0,30),40,Color(0.25,0.17,0.08))
 		draw_combat_actor(b.kind,b,b.pos,1.0 if b.team == 0 else -1.0)
-		if b.hp < b.max_hp: bar(Rect2(b.pos-Vector2(30,43),Vector2(60,5)),b.hp,b.max_hp,RED if b.team == 0 else BLUE)
+		if b.hp < b.max_hp and not preload("res://glutton_nest.gd").hidden(b): bar(Rect2(b.pos-Vector2(30,43),Vector2(60,5)),b.hp,b.max_hp,RED if b.team == 0 else BLUE)
 		# Farm progress toward the next gold drop; brighter while doubled (farmer or 豐收).
 		if b.kind == "farm":
 			var doubled: bool = maxf(b.boost_until,b.harvest_until) > model.elapsed
@@ -837,64 +1086,54 @@ func draw_battle() -> void:
 			bar(Rect2(b.pos+Vector2(-30,36),Vector2(60,5)),b.production,B.CARDS.grave.period,Color("a885af"))
 		elif b.kind == "crystal":
 			bar(Rect2(b.pos+Vector2(-30,36),Vector2(60,5)),b.production,Arcane.crystal_period(b),Color("4fc3f7"))
+		preload("res://faction_cards.gd").draw_bar(self,b)
+		if fx_enabled and b.kind == "blood_tower": preload("res://blood_tower_fx.gd").tower(self,b)
 		if b.boost_until > model.elapsed:
-			draw_set_transform(b.pos+Vector2(0,22),0,Vector2(1,0.38))
+			tf(b.pos+Vector2(0,22),0,Vector2(1,0.38))
 			draw_circle(Vector2.ZERO,46+3*sin(model.elapsed*4),Color(1.0,0.82,0.30,0.30))
-			draw_set_transform(Vector2.ZERO)
+			tf()
 	draw_relations()
 	for zone: Dictionary in model.zones:
 		draw_circle(zone.pos,zone.radius,Color(0.35,0.42,0.19,0.20))
 		draw_arc(zone.pos,zone.radius,0,TAU,40,Color(0.28,0.35,0.16,0.65),1.5,true)
 		draw_fitted(art("plague"),Rect2(zone.pos-Vector2.ONE*zone.radius*0.65,Vector2.ONE*zone.radius*1.3),Color(1,1,1,0.42))
+	preload("res://faction_cards.gd").draw(self)
 	layout_formations()
 	var ordered: Array = model.units.duplicate()
 	ordered.sort_custom(func(a: Dictionary,b: Dictionary) -> bool: return a.draw.y < b.draw.y)
 	for u: Dictionary in ordered: draw_unit(u)
-	for lord: Dictionary in model.lords: draw_lord(lord)
+	preload("res://faction_cards.gd").draw_over(self)
 	var pulse := 0.5+0.5*sin(model.elapsed*10.0)
 	for lane: int in model.active_lanes:
 		var y := L.cell_center(Vector2i(0,lane)).y
 		for team: int in range(2):
 			var x := L.gate_icon_x(team)
 			var standing: bool = model.gates[team][lane] > 0
-			var gate_rect := Rect2(x-33,y-40,66,62)
-			var side_color: Color = RED if team == 0 else BLUE
-			if standing:
-				draw_texture_rect(art("gate",team),gate_rect,false)
-				bar(Rect2(x-28,y+25,56,7),model.gates[team][lane],B.GATE_HP,side_color)
-			else:
-				# Broken: a heap of rubble under a pulsing glow and an "已破" tag, so it cannot be missed.
-				draw_set_transform(Vector2(x,y+12),0,Vector2(1,0.45))
-				draw_circle(Vector2.ZERO,40+5*pulse,Color(side_color,0.18+0.14*pulse))
-				draw_set_transform(Vector2.ZERO)
-				draw_texture_rect(art("gate",team),gate_rect,false,Color(0.42,0.36,0.30,0.45))
-				for i: int in range(9):
-					var stone := Vector2(x-26+i*6.5,y+14+sin(i*2.3)*4)
-					draw_circle(stone,4+(i%3)*1.5,Color("6f6352"))
-					draw_arc(stone,4+(i%3)*1.5,0,TAU,10,Color(INK,0.7),1,true)
-				for d: float in [-1.0,1.0]: # two snapped planks across the doorway
-					draw_line(Vector2(x-20,y-24*d-4),Vector2(x-3,y-6*d-4),Color(side_color,0.95),5,true)
-					draw_line(Vector2(x+4,y+4*d-4),Vector2(x+20,y+22*d-4),Color(side_color,0.95),5,true)
+			draw_wall_section(team,lane,not standing)
+			if standing and model.gates[team][lane] < B.GATE_HP:
+				bar(Rect2(x-22,y+45,44,4),model.gates[team][lane],B.GATE_HP,RED if team == 0 else BLUE)
 		var gx := L.gate_icon_x(0)
+		if me != 0: continue
 		if model.alarm[lane] > 0: draw_arc(Vector2(gx,y-8),40+4*pulse,0,TAU,28,Color(RED,0.5+0.4*pulse),3)
 		elif model.building_alarm[lane] > 0: draw_arc(Vector2(gx,y-8),40,0,TAU,28,Color(0.85,0.6,0.1,0.7),2)
+	for lord: Dictionary in model.lords: draw_lord(lord)
 	for arrow: Dictionary in model.projectiles:
 		if arrow.get("rolling",false):
 			var stone_pos: Vector2 = arrow.pos-Vector2(0,32)
-			draw_set_transform(arrow.pos+Vector2(0,6),0,Vector2(1,0.25))
+			tf(arrow.pos+Vector2(0,6),0,Vector2(1,0.25))
 			draw_circle(Vector2.ZERO,37,Color(0.2,0.16,0.10,0.25))
-			draw_set_transform(Vector2.ZERO)
+			tf()
 			for i: int in range(4):
 				draw_circle(arrow.pos-Vector2(arrow.direction*(35+i*12),-4),6-i,Color(0.65,0.55,0.38,0.3-i*0.05))
-			draw_set_transform(stone_pos,arrow.angle)
+			tf(stone_pos,arrow.angle)
 			draw_texture_rect(art("rolling_boulder"),Rect2(-50,-50,100,100),false)
-			draw_set_transform(Vector2.ZERO)
+			tf()
 		elif arrow.kind == "axe_thrower":
-			draw_set_transform(arrow.pos,(1-arrow.remaining/B.ARROW_TIME)*TAU*2*arrow.get("direction",1.0))
+			tf(arrow.pos,(1-arrow.remaining/B.ARROW_TIME)*TAU*2*arrow.get("direction",1.0))
 			draw_line(Vector2(-9,0),Vector2(9,0),Color("78512d"),3,true)
 			draw_colored_polygon(PackedVector2Array([Vector2(3,-8),Vector2(12,-5),Vector2(12,5),Vector2(3,8)]),Color("a9a8a0"))
 			draw_polyline(PackedVector2Array([Vector2(3,-8),Vector2(12,-5),Vector2(12,5),Vector2(3,8)]),INK,1.5,true)
-			draw_set_transform(Vector2.ZERO)
+			tf()
 		elif arrow.has("impact"):
 			var flight: float = clampf(1-arrow.remaining/arrow.flight,0,1)
 			var shadow_pos: Vector2 = arrow.start.lerp(arrow.impact,flight)
@@ -903,6 +1142,13 @@ func draw_battle() -> void:
 			var stone: Vector2 = arrow.pos-Vector2(0,sin(flight*PI)*65)
 			draw_circle(stone,6,Color("86745c"))
 			draw_arc(stone,6,0,TAU,12,INK,1.5,true)
+		elif arrow.get("piercing",false) and arrow.kind == "long_dragon":
+			# Fire breath: a widening tongue of flame from the mouth to the front of the blast.
+			var mouth: Vector2 = arrow.start+Vector2(arrow.direction*40,8)
+			var front: Vector2 = arrow.pos+Vector2(0,8)
+			var flicker := sin(model.elapsed*40)*2
+			draw_polygon(PackedVector2Array([mouth+Vector2(0,-3),front+Vector2(0,-10-flicker),front+Vector2(arrow.direction*8,0),front+Vector2(0,10+flicker),mouth+Vector2(0,3)]),PackedColorArray([Color(0.85,0.30,0.08,0.75)]))
+			draw_polygon(PackedVector2Array([mouth,front+Vector2(-arrow.direction*6,-5),front,front+Vector2(-arrow.direction*6,5)]),PackedColorArray([Color(1.0,0.82,0.35,0.85)]))
 		elif arrow.get("piercing",false):
 			var tip: Vector2 = arrow.pos
 			var tail := Vector2(arrow.direction*24,0)
@@ -916,40 +1162,29 @@ func draw_battle() -> void:
 		else: draw_line(arrow.pos-Vector2(12*arrow.get("direction",1.0),0),arrow.pos,INK,2)
 	draw_preview()
 	draw_effects()
+	DayCycle.light(self,L.FIELD_FRAME.grow(-7))
+	field_mirror = false
+	tf()
 	draw_hud()
+	Ceremony.intro(self)
+	if net != null: draw_net_status()
 	panel(library.INFO_RECT,Color("ecdcb6"))
 	draw_string(font,library.INFO_RECT.position+Vector2(0,21),"戰局資料",HORIZONTAL_ALIGNMENT_CENTER,library.INFO_RECT.size.x,16,INK)
 	draw_string(font,library.INFO_RECT.position+Vector2(0,39),["簡單","普通","困難"][model.difficulty],HORIZONTAL_ALIGNMENT_CENTER,library.INFO_RECT.size.x,13,Color("6f5a3e"))
 	if model.ended and not model.time_stopped(): draw_result()
 	elif model.paused:
 		panel(L.OVERLAY_RECT,Color("efe0bd"))
-		draw_string(font,L.OVERLAY_RECT.position+Vector2(0,58),"戰局暫停" if not model.ended else ("紅獅勝利！我軍攻進藍旗主堡" if model.winner == 0 else "敗北：藍旗士兵攻進了我方主堡"),HORIZONTAL_ALIGNMENT_CENTER,L.OVERLAY_RECT.size.x,30,INK)
+		draw_string(font,L.OVERLAY_RECT.position+Vector2(0,58),"戰局暫停" if not model.ended else result_title(),HORIZONTAL_ALIGNMENT_CENTER,L.OVERLAY_RECT.size.x,30,INK)
 		for item: Array in overlay_buttons():
-			panel(item[0],Color("f6ead0"))
+			panel(item[0],Color("fbf1d8") if item[0].has_point(get_global_mouse_position()) else Color("f3e6c6"))
 			draw_string(font,item[0].position+Vector2(0,27),item[1],HORIZONTAL_ALIGNMENT_CENTER,item[0].size.x,20,INK)
 
-# T10 result screen: who won and how, with both sides' match statistics.
+func result_title() -> String:
+	return Ceremony.title(self)+"　"+Ceremony.story(self)
+
+# The closing page: who won and how, with both sides' figures (battle_ceremony.gd).
 func draw_result() -> void:
-	var r := RESULT_RECT
-	panel(r,Color("efe0bd"))
-	ink_frame(r.grow(-8))
-	var title := adventure.outcome if adventure.index >= 0 else ("紅獅勝利！我軍攻進藍旗主堡" if model.winner == 0 else "敗北：藍旗士兵攻進了我方主堡")
-	draw_string(font,r.position+Vector2(0,62),title,HORIZONTAL_ALIGNMENT_CENTER,r.size.x,32,RED if model.winner == 0 else BLUE)
-	var t := int(model.elapsed)
-	draw_string(font,r.position+Vector2(0,96),"戰鬥時間 %02d:%02d" % [t/60,t%60],HORIZONTAL_ALIGNMENT_CENTER,r.size.x,18,INK)
-	var rows: Array = [["打破的城門","breaches"],["產出金幣","produced"],["浪費的金幣","wasted"],["種下農田","planted"],["被燒掉的田","burned"],["出牌數","plays"]]
-	var left := r.position.x+170
-	draw_string(font,Vector2(left+210,r.position.y+135),"紅獅",HORIZONTAL_ALIGNMENT_CENTER,120,20,RED)
-	draw_string(font,Vector2(left+350,r.position.y+135),"藍旗",HORIZONTAL_ALIGNMENT_CENTER,120,20,BLUE)
-	for i: int in range(rows.size()):
-		var y := r.position.y+168+i*26
-		draw_string(font,Vector2(left,y),rows[i][0],HORIZONTAL_ALIGNMENT_LEFT,-1,18,INK)
-		for team: int in range(2):
-			var value: float = result_value(team,rows[i][1])
-			draw_string(font,Vector2(left+210+team*140,y),str(int(value)),HORIZONTAL_ALIGNMENT_CENTER,120,18,INK)
-	for item: Array in overlay_buttons():
-		panel(item[0],Color("f6ead0"))
-		draw_string(font,item[0].position+Vector2(0,27),item[1],HORIZONTAL_ALIGNMENT_CENTER,item[0].size.x,20,INK)
+	Ceremony.result(self)
 
 func result_value(team: int, key: String) -> float:
 	if key == "breaches": return model.gates[1-team].filter(func(hp: float) -> bool: return hp <= 0).size()
@@ -959,11 +1194,11 @@ func result_value(team: int, key: String) -> float:
 func team_base(center: Vector2, radius: float, color: Color) -> void:
 	# A filled disc in the team colour (not just a thin ring): sides read at a glance even for
 	# brown or white troops such as farmers, bandits, oxen, rams and skeletons.
-	draw_set_transform(center,0,Vector2(1,0.36))
+	tf(center,0,Vector2(1,0.36))
 	draw_circle(Vector2.ZERO,radius+2,Color(0.15,0.10,0.05,0.35))
 	draw_circle(Vector2.ZERO,radius,Color(color,0.62))
 	draw_circle(Vector2.ZERO,radius,Color(color.darkened(0.35),0.95),false,3.0)
-	draw_set_transform(Vector2.ZERO)
+	tf()
 
 # The battlefield floor: tinted zones, alternating lane shade, grass and pebbles, darker edges.
 func draw_ground(grid: Rect2) -> void:
@@ -994,9 +1229,9 @@ func tuft(base: Vector2, color: Color, height: float) -> void:
 		draw_line(base,base+Vector2(sin(a)*height*0.8,-cos(a)*height),color,1.3,true)
 
 func team_shadow(center: Vector2, radius: float, color: Color) -> void:
-	draw_set_transform(center,0,Vector2(1,0.32))
+	tf(center,0,Vector2(1,0.32))
 	draw_circle(Vector2.ZERO,radius,Color(color,0.45))
-	draw_set_transform(Vector2.ZERO)
+	tf()
 
 func draw_unit(u: Dictionary) -> void:
 	if u.hp <= 0: return
@@ -1048,8 +1283,10 @@ func draw_unit(u: Dictionary) -> void:
 	if u.get("slow_left",0.0) > 0:
 		draw_arc(pos+Vector2(0,16),20,0,TAU,16,Color("64b5f6",0.6),1.5)
 	if u.hp < u.max_hp: bar(Rect2(pos-Vector2(24,68),Vector2(48,5)),u.hp,u.max_hp,RED if u.team == 0 else BLUE)
-	var climb: float = u.get("climb",0.0)
-	if climb > 0 and climb < B.RUBBLE_TIME: bar(Rect2(pos-Vector2(24,75),Vector2(48,4)),climb,B.RUBBLE_TIME,Color.GOLD) # clearing the rubble
+
+# Each lane renders a seamlessly tileable fortified stone curtain-wall section (or matching breach).
+func draw_wall_section(team: int, lane: int, broken: bool) -> void:
+	preload("res://wall_art.gd").section(self,team,lane,broken)
 
 func draw_lord(lord: Dictionary) -> void:
 	if lord.hp <= 0: return
@@ -1066,10 +1303,10 @@ func layout_formations() -> void:
 
 func draw_preview() -> void:
 	if selected < 0: return
-	var pos := get_global_mouse_position()
-	var kind: String = model.kind_at(0,selected)
+	var pos := field_mouse()
+	var kind: String = model.kind_at(me,selected)
 	var data: Dictionary = B.CARDS[kind]
-	var color := Color(0.2,0.7,0.3,0.35) if model.can_play(0,selected,pos) else Color(0.8,0.1,0.1,0.35)
+	var color := Color(0.2,0.7,0.3,0.35) if model.can_play(me,selected,pos) else Color(0.8,0.1,0.1,0.35)
 	if data.type == "spell":
 		if data.get("rolling",false):
 			var lane := clampi(floori((pos.y-L.GRID_ORIGIN.y)/L.CELL_SIZE.y),0,4)
@@ -1078,7 +1315,7 @@ func draw_preview() -> void:
 			draw_line(start,finish,Color(0.8,0.3,0.1,0.18),data.radius*2)
 			draw_line(start,finish,color,3)
 			for actor: Dictionary in model.units+model.buildings+model.lords:
-				if actor.hp > 0 and actor.team == 0 and actor.pos.x >= start.x-data.radius and absf(actor.pos.y-start.y) <= data.radius:
+				if actor.hp > 0 and actor.team == me and (actor.pos.x-start.x)*(1.0 if me == 0 else -1.0) >= -data.radius and absf(actor.pos.y-start.y) <= data.radius:
 					draw_arc(actor.pos,32,0,TAU,24,Color(1,0.15,0.1,0.85),3,true)
 			draw_circle(start,data.radius,color,false,2)
 			return
@@ -1101,14 +1338,14 @@ func draw_preview() -> void:
 			var middle := clampi(cell.y,1,3)
 			lanes = [middle-1,middle,middle+1]
 		for lane: int in lanes:
-			var col: int = model.deployment_column(0,lane,cell.x)
+			var col: int = model.deployment_column(me,lane,cell.x)
 			if col >= 0: draw_line(L.cell_center(Vector2i(col,lane)),Vector2(L.gate_stop(1),L.cell_center(Vector2i(0,lane)).y),color,3)
 		if kind == "farmer":
 			for b: Dictionary in model.buildings:
-				if b.kind == "farm" and b.team == 0 and b.cell.y == cell.y and b.cell.x >= cell.x: draw_circle(b.pos,40,color,false,3)
+				if b.kind == "farm" and b.team == me and b.cell.y == cell.y and (b.cell.x-cell.x)*(1 if me == 0 else -1) >= 0: draw_circle(b.pos,40,color,false,3)
 
 # Colours of the cause-and-effect links (battle.gd link()): one family per relation.
-const LINK_COLORS := {"repair":Color("c4a75f"),"soul":Color("b9a3d6"),"devour":Color("9b2f2f"),"summon":Color("7b4fa0"),"heal":Color("4f9a4a"),"harvest":Color("e2b23a"),"curse":Color("926c9d")}
+const LINK_COLORS := {"repair":Color("c4a75f"),"soul":Color("b9a3d6"),"devour":Color("9b2f2f"),"summon":Color("7b4fa0"),"heal":Color("4f9a4a"),"harvest":Color("e2b23a"),"curse":Color("926c9d"),"mana":Color("4fc3f7"),"lightning":Color("cfe8ff")}
 
 # A light travelling from cause to effect along a shallow arc, with a fading trail and a ring where
 # it lands, so the player sees what fed what.
@@ -1140,7 +1377,7 @@ func draw_relations() -> void:
 			draw_arc(target.pos,14,0,TAU,16,Color(0.85,0.50,0.20,0.55),1.5)
 	# Buffed units already carry gold markers; avoid a web of field-wide lines.
 	for b: Dictionary in model.buildings:
-		if b.hp <= 0 or get_global_mouse_position().distance_to(b.pos) > 75: continue
+		if b.hp <= 0 or field_mouse().distance_to(b.pos) > 75: continue
 		if b.kind == "mill":
 			for farm: Dictionary in model.buildings:
 				if farm.hp > 0 and farm.kind == "farm" and farm.team == b.team and farm.cell.y == b.cell.y: dashed(b.pos,farm.pos,Color("e2b23a",0.55))
@@ -1209,11 +1446,16 @@ func draw_effects() -> void:
 					draw_circle(mote,7-i,Color(0.65,0.38,0.85,1-progress))
 					draw_circle(mote,3,Color(0.95,0.85,1.0,1-progress))
 				draw_arc(e.to,10+progress*24,0,TAU,24,Color(0.7,0.4,0.9,1-progress),3,true)
+			"blood_transfer": preload("res://blood_tower_fx.gd").transfer(self,e,progress)
 			"blood_gain":
 				draw_circle(e.pos+Vector2(0,-20-progress*25),3,Color(0.65,0.05,0.15,1-progress))
 			"repair":
 				draw_line(e.pos+Vector2(-6,-20-progress*15),e.pos+Vector2(6,-20-progress*15),Color(0.8,0.7,0.3,1-progress),3,true)
 				draw_line(e.pos+Vector2(0,-26-progress*15),e.pos+Vector2(0,-14-progress*15),Color(0.8,0.7,0.3,1-progress),3,true)
+			"roar":
+				for i: int in range(3):
+					var rr: float = e.radius*clampf(progress*1.2-i*0.15,0,1)
+					if rr > 0: draw_arc(e.pos+Vector2(0,-20),rr,0,TAU,32,Color(0.75,0.25,0.12,(1-progress)*0.8),3.0-i*0.6,true)
 			"drum":
 				var r: float = progress*220.0
 				draw_arc(e.pos,r,0,TAU,36,Color(1.0,0.82,0.28,(1-progress)*0.8),3.0,true)
@@ -1235,14 +1477,19 @@ func draw_effects() -> void:
 					draw_circle(e.pos+Vector2(cos(a),sin(a))*(progress*e.radius*0.8),3*(1-progress),Color(0.45,0.35,0.22,1-progress))
 			"summoned", "boneburst": draw_arc(e.pos,12+progress*36,0,TAU,24,Color(0.55,0.38,0.60,1-progress),2,true)
 			"skill": draw_skill_effect(e,progress)
-			"link": draw_link(e.pos,e.to,LINK_COLORS.get(e.style,INK),progress)
+			"levy_summon": FactionVisuals.summon(self,e.pos,progress)
+			"levy_dust": FactionVisuals.dust(self,e.pos,progress)
+			"link":
+				if e.style == "lightning": FactionVisuals.lightning(self,e,progress)
+				else: draw_link(e.pos,e.to,LINK_COLORS.get(e.style,INK),progress)
 			"slash": draw_slash(e.pos.x,e.lane,progress,e.team)
-			"ink": draw_circle(e.pos.lerp(Vector2(80,765) if e.team == 0 else Vector2(1322,35),progress),7,Color("d9a62e"))
-			"spell": draw_circle(e.pos,e.get("radius",50.0)*progress,Color(0.7,0.3,0.1,e.life*0.4))
+			"ink": draw_circle(e.pos.lerp(to_model(Vector2(80,765) if e.team == me else Vector2(1322,35)),progress),7,Color("d9a62e"))
+			"spell":
+				if not FactionVisuals.spell(self,e,progress): draw_circle(e.pos,e.get("radius",50.0)*progress,Color(0.7,0.3,0.1,e.life*0.4))
 			"cultivate", "hoe":
 				for i: int in range(6): draw_circle(e.pos+Vector2((i-3)*8*progress,-sin(progress*PI)*28),3,Color("8a642c"))
 			"play":
-				var source := card_rect(e.get("slot",0)).get_center() if e.team == 0 else Vector2(1240,40)
+				var source := to_model(card_rect(e.get("slot",0)).get_center() if e.team == me else Vector2(1240,40))
 				if progress < 0.6: draw_card_art(e.card,Rect2(source.lerp(e.pos,progress/0.6)-Vector2(35,30),Vector2(70,60)),e.team,Color(1,1,1,0.75))
 				else: draw_circle(e.pos,(progress-0.6)*90,Color(0.2,0.15,0.1,(1-progress)*0.3))
 			"death":
@@ -1269,8 +1516,9 @@ func draw_effects() -> void:
 				var gate := Vector2(L.gate_icon_x(0 if ours else 1),L.cell_center(Vector2i(0,e.lane)).y)
 				for k: int in range(3): draw_arc(gate,30+fmod(progress*2+k/3.0,1.0)*110,0,TAU,40,Color(flash,(1-progress)*0.8),4)
 			"ramp":
-				var clock := L.CLOCK_FRAME.get_center()
-				for k: int in range(3): draw_arc(clock,40+fmod(progress*1.5+k/3.0,1.0)*70,0,TAU,40,Color(0.88,0.69,0.17,(1-progress)*0.7),3)
+				var dial := L.CLOCK_FRAME.get_center()
+				for k: int in range(3): draw_arc(dial,40+fmod(progress*1.5+k/3.0,1.0)*70,0,TAU,40,Color(0.88,0.69,0.17,(1-progress)*0.7),3)
+			"nightfall": DayCycle.toll(self,e,progress)
 			"heal": label_at(e.pos+Vector2(-10,-30-progress*20),"+",20,Color(0.2,0.5,0.25,1-progress))
 			"fail":
 				var c := Color(0.75,0.12,0.1,1-progress)
@@ -1287,7 +1535,7 @@ func draw_skill_effect(e: Dictionary, progress: float) -> void:
 	var direction := 1.0 if e.team == 0 else -1.0
 	for point: Vector2 in e.get("targets",[]):
 		match e.lord:
-			"lion", "underworld", "rune", "vampire":
+			"lion", "underworld", "rune", "vampire", "beast":
 				draw_circle(point+Vector2(0,-20),18+progress*30,Color(1.0,0.85,0.45,strength*0.22))
 				draw_arc(point+Vector2(0,-20),14+progress*35,0,TAU,32,gold,2.0,true)
 				var tip := point+Vector2(direction*(25+progress*100),-18)
@@ -1318,19 +1566,21 @@ func draw_hud(single_lane: bool = false) -> void:
 	ink_frame(L.HUD_FRAME)
 	if not single_lane:
 		for team: int in range(2):
-			var x := 95.0 if team == 0 else 1070.0
+			var x := 95.0 if team == me else 1070.0
 			draw_texture_rect(art("crest",team),Rect2(x-58,21,48,50),false)
 			draw_texture_rect(ART.object_icon(0),Rect2(x+238,20,28,30),false)
 			var standing: int = model.active_lanes.filter(func(lane: int) -> bool: return model.gates[team][lane] > 0).size()
-			label_at(Vector2(x,43),("紅獅" if team == 0 else "藍旗")+"  城門 %d / %d" % [standing,model.active_lanes.size()],23,RED if team == 0 else BLUE)
+			label_at(Vector2(x,43),("紅獅" if team == 0 else "藍旗")+"  城牆 %d / %d" % [standing,model.active_lanes.size()],23,RED if team == 0 else BLUE)
 			for lane: int in model.active_lanes: bar(Rect2(x+model.active_lanes.find(lane)*70,53,62,10),model.gates[team][lane],B.GATE_HP,RED if team == 0 else BLUE)
 			label_at(Vector2(x+270,43),"%d / 50" % model.ink[team],18)
 	panel(Rect2(712,24,140,58),Color("f2e3c0"))
 	var time := int(model.elapsed)
 	label_at(Vector2(725,58),"%02d:%02d" % [time/60,time%60],30,RED if model.multiplier() > 1 else INK)
-	# Faster income shows as coins beside the clock: one for x1.5, two for x2.
-	for i: int in range(int(round((model.multiplier()-1.0)*2))):
-		draw_texture_rect(preload("res://economy_hud.gd").coin_texture(),Rect2(822,30+i*18,20,20),false)
+	# Faster income shows as coins beside the clock: one for x1.5, two for x2, three for the night's x3.
+	var coins: int = 0 if model.multiplier() <= 1.0 else (1 if model.multiplier() < 2.0 else (2 if model.multiplier() < 3.0 else 3))
+	for i: int in range(coins):
+		draw_texture_rect(preload("res://economy_hud.gd").coin_texture(),Rect2(824,(49-coins*8)+i*16,20,20),false)
+	if not single_lane: DayCycle.track(self)
 	panel(L.PAUSE_RECT)
 	label_at(L.PAUSE_RECT.position+Vector2(10,27),"Ⅱ",23)
 	preload("res://command_style.gd").stone(self,L.COMMAND_FRAME)
@@ -1342,7 +1592,7 @@ func draw_hud(single_lane: bool = false) -> void:
 	var fr := farm_rect
 	if selected == Battle.FARM_SLOT: fr.position.y -= 16
 	elif hover_slot == Battle.FARM_SLOT: fr.position.y -= 8
-	draw_card(model.kind_at(0,Battle.FARM_SLOT),fr,Battle.FARM_SLOT)
+	draw_card(model.kind_at(me,Battle.FARM_SLOT),fr,Battle.FARM_SLOT)
 	var tag := Rect2(farm_rect.position.x+farm_rect.size.x/2-24,farm_rect.end.y-22,48,18)
 	draw_rect(tag,Color("3f5a2c"))
 	draw_string(font,tag.position+Vector2(0,14),"常駐",HORIZONTAL_ALIGNMENT_CENTER,tag.size.x,13,Color("efdfb9"))
@@ -1351,11 +1601,11 @@ func draw_hud(single_lane: bool = false) -> void:
 		var r := card_rect(i)
 		if i == selected: r.position.y -= 16
 		elif i == hover_slot: r.position.y -= 8
-		draw_card(model.decks[0][i],r,i)
+		draw_card(model.decks[me][i],r,i)
 	# Next card: smaller, faded, labelled.
 	draw_line(Vector2(1093,728),Vector2(1093,888),Color(INK,0.35),2)
 	draw_string(font,Vector2(NEXT_RECT.position.x,742),"下一張",HORIZONTAL_ALIGNMENT_CENTER,NEXT_RECT.size.x,15,INK)
-	draw_card(model.decks[0][4],NEXT_RECT)
+	draw_card(model.decks[me][4],NEXT_RECT)
 	# It cannot be played yet, so it recedes: a parchment wash keeps it readable but quiet.
 	draw_rect(NEXT_RECT.grow(-3),Color(0.86,0.81,0.70,0.55))
 	if spectating:
@@ -1364,13 +1614,13 @@ func draw_hud(single_lane: bool = false) -> void:
 			draw_string(font,SPEED_RECTS[i].position+Vector2(0,25),"×%d" % SPEEDS[i],HORIZONTAL_ALIGNMENT_CENTER,SPEED_RECTS[i].size.x,18,INK)
 	var mouse := get_global_mouse_position()
 	if dragging and selected >= 0 and card_at(mouse) < 0 and model.cell_at(mouse).x < 0:
-		draw_card_art(model.kind_at(0,selected),Rect2(mouse-Vector2(40,36),Vector2(80,72)),0,Color(1,1,1,0.7))
+		draw_card_art(model.kind_at(me,selected),Rect2(mouse-Vector2(40,36),Vector2(80,72)),me,Color(1,1,1,0.7))
 	if single_lane: return
 	if spectating: label_at(Vector2(1220,766),"雙方領主",20)
 	else: draw_skill_button()
 	for lord: Dictionary in model.lords:
 		var y: float = 814+lord.team*42
-		var info: Dictionary = B.LORDS[lord.lord]
+		var info: Dictionary = B.lord_data(lord.lord)
 		var color: Color = RED if lord.team == 0 else BLUE
 		label_at(Vector2(1220,y),"%s · %s" % ["紅" if lord.team == 0 else "藍",info.name],16,color)
 		bar(Rect2(1220,y+8,170,6),lord.hp,lord.max_hp,color)
@@ -1379,7 +1629,7 @@ func draw_hud(single_lane: bool = false) -> void:
 
 # Our lord's skill: Q or click. Lit when it can be cast; shows the cooldown otherwise.
 func draw_skill_button() -> void:
-	var info: Dictionary = B.LORDS[model.lords[0].lord]
+	var info: Dictionary = B.LORDS[model.lords[me].lord]
 	var ready: bool = model.skill_error(0).is_empty()
 	panel(SKILL_RECT,Color("f2e3c0") if ready else Color("e3d2aa"),RED if ready else INK)
 	if ready: draw_rect(SKILL_RECT.grow(2),RED,false,3)
@@ -1390,7 +1640,7 @@ func draw_skill_button() -> void:
 	if ready:
 		var glow := 0.5+0.5*sin(Time.get_ticks_msec()/260.0)
 		draw_rect(SKILL_RECT.grow(4+glow*2),Color(0.95,0.75,0.25,0.25+0.35*glow),false,3)
-	elif model.skill_cd[0] > 0: curtain(SKILL_RECT.grow(-2),clampf(model.skill_cd[0]/B.SKILL_COOLDOWN,0,1))
+	elif model.skill_cd[me] > 0: curtain(SKILL_RECT.grow(-2),clampf(model.skill_cd[me]/B.skill_cooldown(model.lords[me].lord),0,1))
 	else: draw_rect(SKILL_RECT.grow(-2),Color(0.40,0.40,0.40,0.35))
 
 # A lord row's skill state as a small mark, no words: a glowing gem when it can be cast, a dial
@@ -1405,7 +1655,7 @@ func skill_mark(team: int, at: Vector2) -> void:
 			draw_circle(at,7,color.lightened(0.25))
 			draw_arc(at,7,0,TAU,16,Color("e8c25a"),2,true)
 		"冷卻中":
-			var done := 1.0-clampf(model.skill_cd[team]/B.SKILL_COOLDOWN,0,1)
+			var done := 1.0-clampf(model.skill_cd[team]/B.skill_cooldown(model.lords[team].lord),0,1)
 			draw_circle(at,8,Color(0.30,0.30,0.31,0.8))
 			if done > 0: draw_colored_polygon(PackedVector2Array([at]+range(25).map(func(i: int) -> Vector2: return at+Vector2.from_angle(-PI/2+TAU*done*i/24.0)*8)),Color(color,0.85))
 		"金幣不足":
@@ -1417,6 +1667,7 @@ func skill_mark(team: int, at: Vector2) -> void:
 # Hovering the button lights the coins it costs in the purse.
 func skill_state_text(team: int) -> String:
 	var lord: Dictionary = model.lords[team]
+	if not B.has_skill(lord.lord): return "沒有技能"
 	if lord.hp <= 0: return "領主倒下中"
 	if model.skill_cd[team] > 0: return "冷卻中"
 	if lord.lord == "underworld" and model.count_buildings(team,"grave") == 0: return "沒有墓碑"
@@ -1425,18 +1676,104 @@ func skill_state_text(team: int) -> String:
 
 func try_skill() -> bool:
 	if adventure.is_opening() and adventure.opening.active: return false
-	var reason: String = model.skill_error(0)
-	if reason.is_empty() and model.cast_skill(0): return true
+	var reason: String = model.skill_error(me)
+	if reason.is_empty() and net != null:
+		net.queue(["s"])
+		return true
+	if reason.is_empty() and model.cast_skill(me): return true
 	say(reason)
 	skill_shake = 0.45
-	if model.skill_cd[0] <= 0 and model.ink[0] < B.skill_cost(model.lords[0].lord):
+	if model.skill_cd[me] <= 0 and model.ink[me] < B.skill_cost(model.lords[me].lord):
 		purse_alarm = 0.9
-		purse_need = B.skill_cost(model.lords[0].lord)
+		purse_need = B.skill_cost(model.lords[me].lord)
 	if sound != null: sound.cue("fail")
 	return false
 
 
+func leave_net() -> void:
+	if net != null: net.close()
+	net = null
+	me = 0
+	mirror_view = false
+	field_mirror = false
+
+# Lobby: host (show my addresses) or join an address. Uses the saved deck and lord.
+func show_net() -> void:
+	if not DeckStore.valid(player_deck,player_lord):
+		show_deck()
+		return
+	if net == null: net = NetMatch.new()
+	screen = "net"
+	clear_ui()
+	button(Rect2(300,330,300,56),"開房（我當紅方）",func():
+		net.host(player_deck,player_lord)
+		show_net())
+	var edit := LineEdit.new()
+	edit.position = Vector2(820,330)
+	edit.size = Vector2(300,56)
+	edit.text = net_ip
+	edit.add_theme_font_override("font",font)
+	edit.add_theme_font_size_override("font_size",22)
+	var box := StyleBoxFlat.new()
+	box.bg_color = Color("f6ead0")
+	box.border_color = Color("846539")
+	box.set_border_width_all(2)
+	box.set_corner_radius_all(6)
+	box.content_margin_left = 12
+	edit.add_theme_stylebox_override("normal",box)
+	edit.add_theme_stylebox_override("focus",box)
+	edit.add_theme_color_override("font_color",INK)
+	edit.text_changed.connect(func(t: String): net_ip = t)
+	add_child(edit)
+	ui.append(edit)
+	button(Rect2(1140,330,160,56),"加入",func():
+		net.join(net_ip,player_deck,player_lord)
+		show_net())
+	button(Rect2(120,805,220,50),"回到標題",show_title)
+	button(Rect2(370,805,220,50),"更換牌組",func():
+		leave_net()
+		show_deck())
+	queue_redraw()
+
+func draw_net() -> void:
+	label_at(Vector2(120,110),"連線對戰",48)
+	label_at(Vector2(120,160),"雙方各用自己存好的牌組與領主。一方開房，另一方輸入開房者的 IP 加入。",20,Color("5a4a36"))
+	label_at(Vector2(120,190),"同一個 Wi-Fi 直接可連；跨網路需開房方的路由器轉發連接埠 %d，或用 Radmin VPN、ZeroTier 等虛擬區網。" % NetMatch.PORT,17,Color("6f5a3e"))
+	panel(Rect2(260,250,380,180))
+	label_at(Vector2(290,300),"開房",28)
+	panel(Rect2(780,250,560,180))
+	label_at(Vector2(810,300),"加入：輸入對方 IP",28)
+	label_at(Vector2(120,500),"我的牌組：%s · %s" % [B.LORDS[player_lord].name,"、".join(player_deck.map(func(k): return B.CARDS[k].name))],20)
+	var y := 560.0
+	if net != null and net.state == "hosting":
+		label_at(Vector2(120,y),"已開房，請對方輸入以下任一個 IP：",22,RED)
+		for ip: String in net.local_ips():
+			y += 34
+			label_at(Vector2(150,y),ip,26)
+	if net != null and not net.message.is_empty():
+		label_at(Vector2(120,y+60),net.message,22,RED if net.state in ["error","lost"] else INK)
+
+func start_net_battle() -> void:
+	me = net.local_team
+	mirror_view = me == 1
+	spectating = false
+	adventure.index = -1
+	model = net.make_battle()
+	enter_battle("連線對戰")
+
+# Waiting for the peer, peer lost, or the two simulations disagree.
+func draw_net_status() -> void:
+	var text := ""
+	if net.state == "lost": text = "對手已離線"
+	elif net.desync: text = "警告：雙方戰況不同步（版本或設定可能不同）"
+	elif net.state == "playing" and net.stalled_for > 0.5 and not model.ended: text = "等待對手…"
+	if text.is_empty(): return
+	panel(Rect2(560,104,480,44),Color("efe0bd"))
+	draw_string(font,Vector2(560,134),text,HORIZONTAL_ALIGNMENT_CENTER,480,22,RED)
+
 func show_title() -> void:
+	leave_net()
+	rogue.in_battle = false
 	adventure_deck_mode = false
 	screen = "title"
 	clear_ui()
@@ -1466,9 +1803,9 @@ func title_button(rect: Rect2, caption: String, action: Callable, primary: bool 
 # The blue castle faces the red one: draw it flipped left-right inside the same rect.
 const CASTLE_SHADE := Color(0.80,0.78,0.74)
 func draw_mirrored(tex: Texture2D, r: Rect2, shade: Color = Color.WHITE) -> void:
-	draw_set_transform(Vector2(2*r.position.x+r.size.x,0),0,Vector2(-1,1))
+	tf(Vector2(2*r.position.x+r.size.x,0),0,Vector2(-1,1))
 	draw_texture_rect(tex,r,false,shade)
-	draw_set_transform(Vector2.ZERO)
+	tf()
 
 func draw_title() -> void:
 	preload("res://main_menu.gd").paint(self)
@@ -1476,16 +1813,19 @@ func draw_title() -> void:
 func title_soldier(kind: String, pos: Vector2, team: int, size_scale: float) -> void:
 	ground_wash(pos+Vector2(0,14),Vector2(25*size_scale,7*size_scale),Color("3f442e"),int(pos.x),0.13)
 	var facing := 1.0 if team == 0 else -1.0
-	draw_set_transform(pos,-0.09*facing,Vector2(facing,1)*size_scale)
+	# Marching on the spot: each soldier steps to its own beat.
+	var step := sin(clock*6.0+pos.x*0.05+pos.y*0.03) if fx_enabled else 0.0
+	tf(pos+Vector2(0,-absf(step)*3.0),(-0.09+0.025*step)*facing,Vector2(facing,1)*size_scale)
 	draw_texture_rect(art(kind,team),actor_rect(kind),false)
-	draw_set_transform(Vector2.ZERO)
+	tf()
 	for i: int in range(2):
-		draw_line(pos+Vector2(-facing*(32+i*8),-8+i*9),pos+Vector2(-facing*(47+i*8),-8+i*9),Color(INK,0.3),1.4,true)
+		var dash := 15.0+5.0*sin(clock*5.0+i*1.3+pos.x*0.02) if fx_enabled else 15.0
+		draw_line(pos+Vector2(-facing*(32+i*8),-8+i*9),pos+Vector2(-facing*(32+dash+i*8),-8+i*9),Color(INK,0.3),1.4,true)
 
 func show_deck() -> void:
 	screen = "deck"
 	clear_ui()
-	if adventure_deck_mode and deck_tab == "lord": deck_tab = "unit"
+	if not deck_tab in deck_tabs(): deck_tab = "all"
 	var tabs := deck_tabs()
 	for i: int in range(tabs.size()):
 		var tab: String = tabs[i]
@@ -1508,12 +1848,13 @@ func show_deck() -> void:
 			b.tooltip_text = card_description(kind)
 		b.modulate = Color(1,1,1,0.01)
 	# Cards in the deck frame: click one to take it out again.
-	for i: int in range(player_deck.size()):
-		var kind: String = player_deck[i]
+	var shown: Array = B.menu_sorted(player_deck)
+	for i: int in range(shown.size()):
+		var kind: String = shown[i]
 		var b := button(deck_slot_rect(i+1),"",func(): toggle_deck_card(kind))
 		b.tooltip_text = card_description(kind)
 		b.modulate = Color(1,1,1,0.01)
-	if not adventure_deck_mode:
+	if "lord" in deck_tabs():
 		var p := button(PORTRAIT,"",func(): deck_tab = "lord"; deck_page = 0; show_deck())
 		p.tooltip_text = lord_tooltip(player_lord)
 		p.modulate = Color(1,1,1,0.01)
@@ -1550,16 +1891,19 @@ const SLOT_Y := 116.0
 const SLOT_SIZE := Vector2(128,162)
 const SLOT_STEP := 136.0
 const TAB_Y := 342.0
-const TAB_W := 200.0
+const TAB_W := 176.0
 const POOL_X := 211.0
 const POOL_Y := 410.0
 const POOL_STEP := Vector2(150,178)
 const POOL_CARD := Vector2(128,162)
 const POOL_PAGE := 16
-const TAB_NAMES := {"unit":"部隊","building":"建築","spell":"法術","lord":"領主"}
+const TAB_NAMES := {"all":"全部","melee":"近戰","ranged":"遠程","spell":"法術","building":"建築","lord":"領主"}
+const TAB_GROUP := {"melee":0,"ranged":1,"spell":2,"building":3}
 
 func deck_tabs() -> Array:
-	return ["unit","building","spell"] if adventure_deck_mode else ["unit","building","spell","lord"]
+	var tabs := ["all","melee","ranged","spell","building"]
+	if not adventure_deck_mode or adventure.unlocked_lords().size() > 1: tabs.append("lord")
+	return tabs
 
 func tab_rect(i: int) -> Rect2:
 	var n := deck_tabs().size()
@@ -1568,10 +1912,16 @@ func tab_rect(i: int) -> Rect2:
 func deck_slot_rect(i: int) -> Rect2:
 	return Rect2(Vector2(SLOT_X+i*SLOT_STEP,SLOT_Y),SLOT_SIZE)
 
+# Every tab lists melee, ranged, spells, then buildings (cheaper first inside a group).
 func tab_items(tab: String) -> Array:
-	if tab == "lord": return B.LORDS.keys()
-	var pool: Array = adventure.unlocked_cards() if adventure_deck_mode else DeckStore.pool(player_lord)
-	return B.CARDS.keys().filter(func(kind: String) -> bool: return B.CARDS[kind].type == tab and kind in pool)
+	if tab == "lord": return adventure.unlocked_lords() if adventure_deck_mode else B.lord_menu_order()
+	var pool: Array = adventure.card_pool() if adventure_deck_mode else DeckStore.pool(player_lord)
+	var kinds: Array = B.CARDS.keys().filter(func(kind: String) -> bool:
+		if not kind in pool: return false
+		if tab == "all": return true
+		if TAB_GROUP.has(tab): return B.card_group(kind) == TAB_GROUP[tab]
+		return B.CARDS[kind].type == tab) # "unit" etc. from older tools
+	return B.menu_sorted(kinds)
 
 func page_items() -> Array:
 	return tab_items(deck_tab).slice(deck_page*POOL_PAGE,(deck_page+1)*POOL_PAGE)
@@ -1607,6 +1957,11 @@ func pool_rect(index: int, _count: int = 0) -> Rect2:
 
 # Switching lords keeps the deck but swaps out cards of the other faction.
 func choose_lord(lord: String) -> void:
+	if adventure_deck_mode: # each adventure lord keeps its own deck
+		save_choice()
+		adventure.choose_lord(lord)
+		adventure.open_adventure_deck(self)
+		return
 	var fitted: Array = DeckStore.fit_to_lord(player_deck,lord)
 	if fitted != player_deck: menu_notice = "已換掉%s不能用的卡牌。" % B.LORDS[lord].name
 	player_lord = lord
@@ -1629,11 +1984,16 @@ func draw_check(at: Vector2) -> void:
 
 func draw_lord_card(kind: String, r: Rect2, chosen: bool) -> void:
 	var info: Dictionary = B.LORDS[kind]
-	panel(r,Color("f6e9c8") if chosen else Color("e8d8b2"),RED if chosen else Color("8a6f4a"))
-	draw_fitted(lord_art(kind),Rect2(r.position+Vector2(8,8),Vector2(r.size.x-16,r.size.y-62)),Color.WHITE,true)
-	draw_string(font,Vector2(r.position.x,r.end.y-36),info.name,HORIZONTAL_ALIGNMENT_CENTER,r.size.x,17,INK)
-	draw_string(font,Vector2(r.position.x,r.end.y-18),info.role,HORIZONTAL_ALIGNMENT_CENTER,r.size.x,13,Color("5a4a36"))
-	draw_string(font,Vector2(r.position.x,r.end.y-3),"%s %d" % [info.skill,int(B.skill_cost(kind))],HORIZONTAL_ALIGNMENT_CENTER,r.size.x,12,RED)
+	var tint: Color = preload("res://command_style.gd").TINTS.get(B.lord_faction(kind),Color("efe3c8"))
+	panel(r,tint.lerp(Color.WHITE,0.55 if chosen else 0.25),RED if chosen else Color("8a6f4a"))
+	draw_fitted(lord_art(kind),Rect2(r.position+Vector2(8,24),Vector2(r.size.x-16,r.size.y-86)),Color.WHITE,true)
+	draw_string(font,Vector2(r.position.x,r.end.y-44),info.name,HORIZONTAL_ALIGNMENT_CENTER,r.size.x,17,INK)
+	draw_string(font,Vector2(r.position.x,r.end.y-27),info.role,HORIZONTAL_ALIGNMENT_CENTER,r.size.x,13,Color("5a4a36"))
+	draw_string(font,Vector2(r.position.x,r.end.y-10),"%s %d" % [info.skill,int(B.skill_cost(kind))],HORIZONTAL_ALIGNMENT_CENTER,r.size.x,12,RED)
+	var faction: String = B.lord_faction(kind)
+	var tag := Rect2(r.position+Vector2(6,6),Vector2(36,17))
+	draw_rect(tag,preload("res://command_style.gd").TAGS.get(faction,Color("7d7466")))
+	draw_string(font,tag.position+Vector2(0,13),B.FACTIONS[faction],HORIZONTAL_ALIGNMENT_CENTER,tag.size.x,12,Color("f3e6c4"))
 	if chosen:
 		draw_rect(r.grow(3),RED,false,4)
 		draw_check(r.position+Vector2(r.size.x-10,10))
@@ -1643,12 +2003,12 @@ func draw_deck() -> void:
 	# Army frame.
 	panel(ARMY,Color("e6d3a8"),Color("6a5236"))
 	draw_rect(ARMY.grow(-6),Color("8a6f4a"),false,1)
-	var lord: String = "adventure" if adventure_deck_mode else player_lord
+	var lord: String = player_lord
 	var info: Dictionary = B.LORDS[lord]
 	panel(PORTRAIT,Color("f6e9c8"),RED)
 	draw_fitted(lord_art(lord,maxi(watch_edit,0)),PORTRAIT.grow(-10),Color.WHITE,true)
 	draw_string(font,Vector2(PORTRAIT.position.x,PORTRAIT.end.y+28),info.name,HORIZONTAL_ALIGNMENT_CENTER,PORTRAIT.size.x,22,INK)
-	draw_string(font,Vector2(PORTRAIT.position.x,PORTRAIT.end.y+50),"%s · 點頭像換領主" % info.role if not adventure_deck_mode else "%s · 冒險固定" % info.role,HORIZONTAL_ALIGNMENT_CENTER,PORTRAIT.size.x,13,muted)
+	draw_string(font,Vector2(PORTRAIT.position.x,PORTRAIT.end.y+50),"%s · 點頭像換領主" % info.role if "lord" in deck_tabs() else "%s · 征服首府可換領主" % info.role,HORIZONTAL_ALIGNMENT_CENTER,PORTRAIT.size.x,13,muted)
 	var title := "出征牌組" if adventure_deck_mode else "村莊牌組"
 	if watch_edit >= 0: title = "觀戰 · 紅方牌組" if watch_edit == 0 else "觀戰 · 藍方牌組"
 	label_at(Vector2(SLOT_X,80),title,30,INK if watch_edit < 0 else (RED if watch_edit == 0 else BLUE))
@@ -1658,12 +2018,13 @@ func draw_deck() -> void:
 	# Home card (fixed) + eight slots.
 	var home := deck_slot_rect(0)
 	panel(home.grow(4),Color("cfdcae"),Color("3f5a2c"))
-	draw_card(B.home_card(lord) if not adventure_deck_mode else "farm",home)
+	draw_card(B.home_card(lord),home)
 	draw_string(font,Vector2(home.position.x,home.end.y+22),"常駐",HORIZONTAL_ALIGNMENT_CENTER,home.size.x,14,Color("3f5a2c"))
+	var shown: Array = B.menu_sorted(player_deck)
 	for i: int in range(8):
 		var r := deck_slot_rect(i+1)
-		if i < player_deck.size():
-			draw_card(player_deck[i],r)
+		if i < shown.size():
+			draw_card(shown[i],r)
 		else:
 			draw_rect(r,Color(0.35,0.27,0.16,0.12))
 			draw_rect(r.grow(-4),Color(0.42,0.32,0.2,0.45),false,2)
@@ -1677,7 +2038,7 @@ func draw_deck() -> void:
 		var on: bool = tabs[i] == deck_tab
 		draw_rect(r,RED if on else Color("e6d3a8"))
 		draw_rect(r,Color("6a5236"),false,1.5)
-		draw_string(font,Vector2(r.position.x,r.position.y+33),"%s（%d）" % [TAB_NAMES[tabs[i]],tab_count(tabs[i])],HORIZONTAL_ALIGNMENT_CENTER,r.size.x,20,Color("fbf1dc") if on else INK)
+		draw_string(font,Vector2(r.position.x,r.position.y+33),"%s（%d）" % [TAB_NAMES[tabs[i]],tab_count(tabs[i])],HORIZONTAL_ALIGNMENT_CENTER,r.size.x,19,Color("fbf1dc") if on else INK)
 	# Collection.
 	var items := page_items()
 	for i: int in range(items.size()):
@@ -1722,7 +2083,7 @@ func edit_watch_side(team: int) -> void:
 	player_lord = watch_lords[team]
 	watch_edit = team
 	menu_notice = ""
-	deck_tab = "unit"
+	deck_tab = "all"
 	deck_page = 0
 	show_deck()
 
@@ -1765,7 +2126,8 @@ func watch_card_rect(team: int, index: int) -> Rect2:
 	return Rect2(watch_x(team)+214+(index%4)*130,300+(index/4)*170,120,152)
 
 func watch_lord_rect(team: int, index: int) -> Rect2:
-	return Rect2(watch_x(team)+index*92.5,170,86,100)
+	var step: float = 740.0/maxi(8,B.LORDS.size()) # the row is as wide as the army frame below it
+	return Rect2(watch_x(team)+index*step,170,step-6.5,100)
 
 func show_watch() -> void:
 	screen = "watch"
@@ -1778,7 +2140,7 @@ func show_watch() -> void:
 		button(Rect2(x+352,108,220,46),"牌組：%s ▸" % ("自訂" if source < 0 else WATCH_SOURCES[source]),func(): set_watch_source(side,(maxi(source,0)+1)%WATCH_SOURCES.size()); show_watch())
 		button(Rect2(x+582,108,158,46),"重新隨機",func(): set_watch_source(side,0); show_watch())
 		var index := 0
-		for lord_kind: String in B.LORDS:
+		for lord_kind: String in B.lord_menu_order():
 			var choice := lord_kind
 			var b := button(watch_lord_rect(team,index),"",func(): watch_lords[side] = choice; watch_decks[side] = DeckStore.fit_to_lord(watch_decks[side],choice); show_watch())
 			b.tooltip_text = lord_tooltip(lord_kind)
@@ -1809,7 +2171,7 @@ func draw_watch() -> void:
 		label_at(Vector2(x+76,138),"平均 %.1f 金幣" % DeckStore.average(watch_decks[team]),18,muted)
 		# Lord chips.
 		var index := 0
-		for lord_kind: String in B.LORDS:
+		for lord_kind: String in B.lord_menu_order():
 			var r := watch_lord_rect(team,index)
 			var chosen: bool = watch_lords[team] == lord_kind
 			panel(r,Color("f6e9c8") if chosen else Color("e3d2aa"),color if chosen else Color("8a6f4a"))
@@ -1827,7 +2189,8 @@ func draw_watch() -> void:
 		draw_fitted(lord_art(lord,team),portrait.grow(-10),Color.WHITE,true)
 		draw_string(font,Vector2(portrait.position.x,portrait.end.y+30),B.LORDS[lord].name,HORIZONTAL_ALIGNMENT_CENTER,portrait.size.x,22,INK)
 		draw_string(font,Vector2(portrait.position.x,portrait.end.y+54),"%s %d 金幣" % [B.LORDS[lord].skill,int(B.skill_cost(lord))],HORIZONTAL_ALIGNMENT_CENTER,portrait.size.x,14,color)
-		for i: int in range(8): draw_card(watch_decks[team][i],watch_card_rect(team,i))
+		var shown: Array = B.menu_sorted(watch_decks[team])
+		for i: int in range(shown.size()): draw_card(shown[i],watch_card_rect(team,i))
 		var hover := army.has_point(get_global_mouse_position())
 		var tag := Rect2(army.end.x-150,army.end.y-4,150,36)
 		panel(tag,color if hover else Color("f6e9c8"),color)
@@ -1840,8 +2203,8 @@ func card_description(kind: String) -> String:
 
 func help_columns() -> Array[String]:
 	return [
-		"[b]選牌與放置[/b]\n1–4 選手牌，F 選常駐牌；點卡再點戰場，或拖曳放置。右鍵取消選牌。Esc 取消選牌或切換暫停。\n空白鍵暫停；暫停或結束後按 R 重玩。\n\n[b]牌組與領主[/b]\n選一位領主與 8 張輪轉牌，另有一張常駐經濟牌。依領主陣營使用經典、黑暗、魔法與中立牌。\n領主由 AI 移動防守；按 Q 發動技能，費用與效果見技能按鈕及圖鑑。冷卻 %s 秒。\n\n[b]金幣與冷卻[/b]\n金幣上限 %s。開局手牌無冷卻，後續每張牌各自冷卻。\n%s 分鐘後回復與冷卻速度 ×1.5；%s 分鐘後 ×2。" % [B.number(B.SKILL_COOLDOWN),B.number(B.MAX_INK),B.number(B.RAMP_1/60),B.number(B.RAMP_2/60)],
-		"[b]種田與防守[/b]\n農田自己產金幣；農民從田後方出發，順路耕田加速並回血。相同建築覆蓋自己的舊建築可補滿生命。\n部隊只往前走，不追身後範圍外的敵人；城門不反擊，靠領主、部隊與建築防守。\n\n[b]破門與勝負[/b]\n建築與部隊限己方領地：建築、城牆周圍八格先佔先得，失去所有己方建築覆蓋就釋出。敵兵破門後需停下拆殘垣 %s 秒，再向家門前進。\n任何敵兵走進家門就輸，沒有時間限制。\n\n[b]觀戰模式[/b]\n開戰前調整雙方牌組與領主（預設隨機），AI 出牌；1–4 切換 ×1／×2／×4／×8，＋／－ 逐級調速。空白鍵暫停。" % B.number(B.RUBBLE_TIME)
+		"[b]選牌與放置[/b]\n1–4 選手牌，F 選常駐牌；點卡再點戰場，或拖曳放置。右鍵取消選牌。Esc 取消選牌或切換暫停。\n空白鍵暫停；暫停或結束後按 R 重玩。F11 切換全螢幕。\n\n[b]牌組與領主[/b]\n選一位領主與 8 張輪轉牌，另有一張常駐經濟牌。依領主陣營使用經典、黑暗、魔法與中立牌。\n領主由 AI 移動防守；按 Q 發動技能，費用與效果見技能按鈕及圖鑑。\n\n[b]種田與防守[/b]\n農田自己產金幣；農民從田後方出發，順路耕田加速並回血。相同建築覆蓋自己的舊建築可補滿生命。\n部隊只往前走，不追身後範圍外的敵人；城牆不反擊，靠領主、部隊與建築防守。",
+		"[b]一日戰役[/b]\n上方日晷的太陽走完一天：上午；%d 分鐘正午，金幣與冷卻 ×1.5；%d 分鐘黃昏，×2。\n%d 分鐘入夜：×%d，雙方城牆自行朽壞，每分鐘加倍。\n%d 分鐘天亮仍未分勝負，領地較大的一方獲勝。肉鴿模式不入夜，改在 %d 分鐘比城牆血量。\n\n[b]破門與勝負[/b]\n建築與部隊限己方領地：建築、城牆周圍八格先佔先得，失去所有己方建築覆蓋就釋出。城牆損毀後，敵兵直接穿過缺口，不需拆除殘垣。\n任何敵兵走進家門就輸。\n\n[b]觀戰模式[/b]\n開戰前調整雙方牌組與領主（預設隨機），AI 出牌；1–4 切換 ×1／×2／×4／×8，＋／－ 逐級調速。" % [int(B.RAMP_1/60),int(B.RAMP_2/60),int(B.NIGHT_START/60),int(B.NIGHT_GOLD),int(B.DAWN/60),int(preload("res://roguelike_catalog.gd").TIME_LIMIT/60)]
 	]
 
 func show_help() -> void:
@@ -1872,33 +2235,63 @@ func draw_help() -> void:
 	panel(L.HELP_PANEL)
 	label_at(L.HELP_TITLE,"操作與勝負",44)
 
+var settings_path := "user://settings.json"
+var settings_return := "title" # "battle" while the settings were opened from the pause banner
+
 func save_settings() -> void:
-	var file := FileAccess.open("user://settings.json",FileAccess.WRITE)
-	if file != null: file.store_string(JSON.stringify({"effects":fx_enabled,"shake":shake_enabled,"sound":sound_enabled}))
+	var file := FileAccess.open(settings_path,FileAccess.WRITE)
+	if file != null: file.store_string(JSON.stringify({"effects":fx_enabled,"shake":shake_enabled,"sound":sfx_volume > 0.001,"music_volume":music_volume,"sfx_volume":sfx_volume,"fullscreen":fullscreen}))
 
 func load_settings() -> void:
-	if not FileAccess.file_exists("user://settings.json"): return
-	var data = JSON.parse_string(FileAccess.get_file_as_string("user://settings.json"))
+	if not FileAccess.file_exists(settings_path): return
+	var data = JSON.parse_string(FileAccess.get_file_as_string(settings_path))
 	if data is Dictionary:
 		fx_enabled = bool(data.get("effects",true))
 		shake_enabled = bool(data.get("shake",true))
-		sound_enabled = bool(data.get("sound",true))
+		# Files from before the volume sliders only know sound on / off.
+		sfx_volume = clampf(float(data.get("sfx_volume",0.8 if bool(data.get("sound",true)) else 0.0)),0.0,1.0)
+		music_volume = clampf(float(data.get("music_volume",0.7)),0.0,1.0)
+		fullscreen = bool(data.get("fullscreen",false))
+
+# Slider positions are squared into gain, so the middle of the slider sounds like half as loud.
+func apply_audio_settings() -> void:
+	Music.set_bus_volume("Music",music_volume*music_volume)
+	Music.set_bus_volume("SFX",sfx_volume*sfx_volume)
+	sound_enabled = sfx_volume > 0.001
+	if sound != null: sound.enabled = sound_enabled
+
+# A window larger than the desktop (1600 x 900 on a small laptop) is shrunk to fit, then centred.
+func fit_window() -> void:
+	if DisplayServer.get_name() == "headless": return
+	if fullscreen:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+		return
+	var area := DisplayServer.screen_get_usable_rect(DisplayServer.window_get_current_screen())
+	var size := DisplayServer.window_get_size()
+	var room := Vector2(area.size)-Vector2(24,64) # window borders and title bar
+	if size.x <= room.x and size.y <= room.y: return
+	var k := minf(room.x/L.VIEWPORT_SIZE.x,room.y/L.VIEWPORT_SIZE.y)
+	size = Vector2i(L.VIEWPORT_SIZE*k)
+	DisplayServer.window_set_size(size)
+	DisplayServer.window_set_position(area.position+(area.size-size)/2)
+
+func set_fullscreen(on: bool) -> void:
+	fullscreen = on
+	save_settings()
+	if DisplayServer.get_name() == "headless": return
+	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN if on else DisplayServer.WINDOW_MODE_WINDOWED)
+	if not on: fit_window()
 
 func show_settings() -> void:
-	screen = "settings"
-	clear_ui()
-	button(Rect2(600,300,400,55),"特效："+("開" if fx_enabled else "關"),func(): fx_enabled = not fx_enabled; effects.clear(); save_settings(); show_settings())
-	button(Rect2(600,380,400,55),"震動："+("開" if shake_enabled else "關"),func(): shake_enabled = not shake_enabled; save_settings(); show_settings())
-	button(Rect2(600,460,400,55),"音效："+("開" if sound_enabled else "關"),func(): sound_enabled = not sound_enabled; sound.enabled = sound_enabled; save_settings(); show_settings())
-	button(Rect2(600,600,400,55),"回到標題",show_title)
-	queue_redraw()
+	preload("res://settings_screen.gd").build(self)
 
 func show_review() -> void:
 	screen = "recap"
 	clear_ui()
 	library.text_box(Rect2(140,161,1320,555),review.report(model),24)
 	title_button(Rect2(100,804,250,48),"返回結算",close_review)
-	title_button(Rect2(1250,804,250,48),"再次挑戰" if adventure.index >= 0 else "再戰一局",restart)
+	if rogue.in_battle: title_button(Rect2(1250,804,250,48),"肉鴿進度",func(): rogue.leave_battle(self))
+	else: title_button(Rect2(1250,804,250,48),"再次挑戰" if adventure.index >= 0 else "再戰一局",restart)
 	queue_redraw()
 
 func close_review() -> void:
@@ -1907,4 +2300,8 @@ func close_review() -> void:
 	queue_redraw()
 
 func show_adventure() -> void:
+	rogue.in_battle = false
 	adventure.show(self)
+
+func show_rogue() -> void:
+	rogue.show(self)

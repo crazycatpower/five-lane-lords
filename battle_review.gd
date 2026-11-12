@@ -12,8 +12,10 @@ func observe(model) -> void:
 	for e: Dictionary in model.events:
 		var message := ""
 		var side: String = ["紅方","藍方"][e.team] if e.team in [0,1] else ""
-		if e.kind == "breach": message = "%s打破第 %d 路城門" % [side,e.lane+1]
-		if e.kind == "skill": message = "%s施放%s" % [side,B.LORDS[e.lord].skill]
+		if e.kind == "breach": message = ("%s第 %d 路城牆朽壞倒塌" % [["紅方","藍方"][1-e.team],e.lane+1]) if e.get("crumbled",false) else ("%s打破第 %d 路城牆" % [side,e.lane+1])
+		if e.kind == "nightfall" and e.get("first",false): message = "入夜：金幣 ×%s，雙方城牆開始朽壞" % B.number(B.NIGHT_GOLD)
+		if e.kind == "dawn": message = "天亮：領地 紅 %d：藍 %d" % [e.land[0],e.land[1]]
+		if e.kind == "skill": message = "%s施放%s" % [side,B.lord_data(e.lord).get("skill","技能")]
 		if e.kind == "invaded":
 			message = "%s的%s從第 %d 路突破" % [side,B.CARDS.get(e.get("unit_kind",""),{}).get("name","部隊"),e.lane+1]
 			breakthrough = message
@@ -33,14 +35,14 @@ func draw_pressure(game) -> void:
 	# lane pulses red, harder and faster once that gate is already broken. No words.
 	var t: float = Time.get_ticks_msec()/1000.0
 	for lane: int in range(5):
-		var level := pressure(game.model,0,lane)
+		var level := pressure(game.model,game.me,lane)
 		if level == 0: continue
 		var beat := 0.5+0.5*sin(t*(9.0 if level == 2 else 5.0))
 		var alpha := (0.16+0.16*beat) if level == 1 else (0.28+0.24*beat)
 		var y: float = L.GRID_ORIGIN.y+lane*L.CELL_SIZE.y
 		# Red from our gate fading toward the middle of the field: it points at where the danger is.
-		var x0: float = L.GRID_ORIGIN.x-60
-		var x1: float = L.GRID_ORIGIN.x+L.GRID_SIZE.x*0.55
+		var x0: float = L.GRID_ORIGIN.x-60 if game.me == 0 else L.GRID_ORIGIN.x+L.GRID_SIZE.x+60
+		var x1: float = L.GRID_ORIGIN.x+L.GRID_SIZE.x*(0.55 if game.me == 0 else 0.45)
 		var red := Color(0.82,0.12,0.08,alpha)
 		var clear := Color(0.82,0.12,0.08,0.0)
 		game.draw_polygon(PackedVector2Array([Vector2(x0,y),Vector2(x1,y),Vector2(x1,y+L.CELL_SIZE.y),Vector2(x0,y+L.CELL_SIZE.y)]),PackedColorArray([red,clear,clear,red]))
@@ -49,8 +51,14 @@ func report(model) -> String:
 	for team: int in range(2):
 		var s: Dictionary = model.stats[team]
 		result += "%s：產出 %d 金幣 · 滿額溢出 %d · 出牌 %d 次 · 技能 %d 次\n" % [["紅方","藍方"][team],s.produced,s.wasted,s.plays,s.get("skills",0)]
+	for team: int in range(2):
+		var ranked: Array = model.stats[team].damage.keys().filter(func(k: String) -> bool: return B.CARDS.has(k))
+		ranked.sort_custom(func(a: String, b: String) -> bool: return model.stats[team].damage[a] > model.stats[team].damage[b])
+		if ranked.is_empty(): continue
+		result += "%s傷害前三：%s\n" % [["紅方","藍方"][team],"、".join(ranked.slice(0,3).map(func(k: String) -> String: return "%s %d" % [B.CARDS[k].name,model.stats[team].damage[k]]))]
 	result += "\n下局可嘗試："
-	if model.stats[0].wasted >= 10: result += "金幣接近上限時提早部署，減少產出溢出。"
+	if model.winner < 0 or (model.night_decay and model.elapsed >= B.DAWN-0.001): result += "入夜後城牆會自己倒下：趁對方領主在別路時，從空門那一路送兵進去，別等到天亮比領地。"
+	elif model.stats[0].wasted >= 10: result += "金幣接近上限時提早部署，減少產出溢出。"
 	elif model.winner == 1: result += "先查看突破路線，在敵兵抵達殘垣前補兵；破門後仍有回防機會。"
 	else: result += "比較兩軍技能時機，看看能否在進攻前保留足夠金幣。"
 	result += "\n\n關鍵事件（依時間，最多保留最近 200 筆）\n"

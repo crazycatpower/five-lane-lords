@@ -3,14 +3,16 @@ extends RefCounted
 static func build(g) -> void:
 	g.adventure.load_progress()
 	entry(g,Rect2(955,250,480,96),"冒險模式",g.show_adventure,36)
-	entry(g,Rect2(955,416,480,82),"自由對戰",func(): g.spectating = false; g.start_battle(),29)
-	entry(g,Rect2(955,545,480,82),"觀戰模式",g.show_watch,29)
+	entry(g,Rect2(955,414,480,38),"自由對戰",func(): g.spectating = false; g.start_battle(),24)
+	entry(g,Rect2(955,496,480,38),"肉鴿模式",g.show_rogue,24)
+	entry(g,Rect2(955,578,480,38),"觀戰模式",g.show_watch,24)
+	entry(g,Rect2(955,660,480,38),"連線對戰",g.show_net,24)
 	entry(g,Rect2(100,720,280,85),"牌組編成",g.show_deck,28)
 	entry(g,Rect2(448,720,280,85),"卡牌圖鑑",func(): g.library.open(),28)
 	g.title_button(Rect2(1085,190,230,42),"對戰難度："+["簡單","普通","困難"][g.difficulty],func(): g.difficulty = (g.difficulty+1)%3; g.show_title())
-	g.title_button(Rect2(941,757,170,48),"操作說明",g.show_help)
-	g.title_button(Rect2(1127,757,150,48),"設定",g.show_settings)
-	g.title_button(Rect2(1293,757,150,48),"離開",func(): g.get_tree().quit())
+	g.title_button(Rect2(941,770,170,46),"操作說明",g.show_help)
+	g.title_button(Rect2(1127,770,150,46),"設定",g.show_settings)
+	g.title_button(Rect2(1293,770,150,46),"離開",func(): g.get_tree().quit())
 static func entry(g, r: Rect2, caption: String, action: Callable, size: int) -> void:
 	var b: Button = g.title_button(r,caption,action)
 	b.add_theme_font_size_override("font_size",size)
@@ -28,26 +30,26 @@ static func polygon(g, points: PackedVector2Array, color: Color) -> void:
 	var edge := points.duplicate()
 	edge.append(points[0])
 	g.draw_polyline(edge,Color("5e4932"),2.5,true)
-static func banner(g, y: float, height: float, color: Color, subtitle: String) -> void:
+static func banner(g, y: float, height: float, color: Color, subtitle: String, subtitle_from_bottom: float = 24.0) -> void:
 	polygon(g,PackedVector2Array([Vector2(927,y+9),Vector2(1480,y+9),Vector2(1461,y+height/2),Vector2(1480,y+height),Vector2(927,y+height),Vector2(946,y+height/2)]),Color(0.15,0.12,0.08,0.2))
 	polygon(g,PackedVector2Array([Vector2(917,y),Vector2(1470,y),Vector2(1451,y+height/2),Vector2(1470,y+height),Vector2(917,y+height),Vector2(936,y+height/2)]),color)
 	g.draw_texture_rect(g.PAPER,Rect2(940,y+3,500,height-6),false,Color(1,1,1,0.09))
 	g.draw_line(Vector2(950,y+8),Vector2(1434,y+8),Color("d5b16e"),1.5)
 	g.draw_line(Vector2(950,y+height-8),Vector2(1434,y+height-8),Color("d5b16e"),1.5)
-	g.draw_string(g.font,Vector2(955,y+height-24),subtitle,HORIZONTAL_ALIGNMENT_CENTER,480,18,Color("e5cda1"))
+	g.draw_string(g.font,Vector2(955,y+height-subtitle_from_bottom),subtitle,HORIZONTAL_ALIGNMENT_CENTER,480,17 if subtitle_from_bottom < 24.0 else 18,Color("e5cda1"))
 # Nine wax seals across the adventure banner: red for cleared, gold ring on the next stage.
 static func adventure_progress(g, y: float) -> void:
 	var a = g.adventure
 	var count: int = a.STAGES.size()
 	var next: int = a.frontier()
 	var done: int = a.cleared_count()
-	var line := "全部通過！可以再次挑戰" if done == count else "下一關：第 %d 關「%s」" % [next+1,a.STAGES[next].name]
+	var line := "地圖已一統！可以再打一次" if done == count else "領地 %d / %d · 下一塊：「%s」" % [done,count,a.STAGES[next].name]
 	g.draw_string(g.font,Vector2(955,y+106),line,HORIZONTAL_ALIGNMENT_CENTER,480,18,Color("f1dcb0"))
 	for i: int in range(count):
-		var p := Vector2(1195+(i-(count-1)/2.0)*40,y+131)
-		if i == next and done < count: g.draw_circle(p,13,Color("f4d78c"))
-		g.draw_circle(p,10,Color("6e2a20") if a.is_cleared(i) else Color(0.95,0.88,0.7,0.35))
-		g.draw_arc(p,10,0,TAU,20,Color("e5cda1"),1.5,true)
+		var p := Vector2(1195+(i-(count-1)/2.0)*30,y+131)
+		if i == next and done < count: g.draw_circle(p,11,Color("f4d78c"))
+		g.draw_circle(p,8,Color("6e2a20") if a.is_cleared(i) else Color(0.95,0.88,0.7,0.35))
+		g.draw_arc(p,8,0,TAU,20,Color("e5cda1"),1.5,true)
 static func book(g, x: float, caption: String) -> void:
 	polygon(g,PackedVector2Array([Vector2(x,700),Vector2(x+286,689),Vector2(x+308,814),Vector2(x+14,828)]),Color("694535"))
 	polygon(g,PackedVector2Array([Vector2(x+10,695),Vector2(x+282,685),Vector2(x+299,804),Vector2(x+21,817)]),Color("c5ad7a"))
@@ -81,9 +83,12 @@ static func paint(g) -> void:
 	g.draw_string(g.font,Vector2(964,125),"五路戰線 · 一卷戰史",HORIZONTAL_ALIGNMENT_CENTER,480,27,g.INK)
 	banner(g,240,160,Color("963f30"),"")
 	adventure_progress(g,240)
-	banner(g,412,118,Color("3b5662"),"用你的牌組對戰 AI")
-	banner(g,542,118,Color("696845"),"兩邊都交給 AI，看牌組怎麼打")
-	g.draw_string(g.font,Vector2(951,694),"出征領主 · "+g.B.LORDS[g.player_lord].name,HORIZONTAL_ALIGNMENT_CENTER,490,21,g.INK)
+	banner(g,412,74,Color("3b5662"),"用你的牌組對戰 AI",14.0)
+	banner(g,494,74,Color("8a5a2b"),"八場連戰、邊打邊換牌，輸一場就結束",14.0)
+	banner(g,576,74,Color("696845"),"兩邊都交給 AI，看牌組怎麼打",14.0)
+	banner(g,658,72,Color("6b3f5e"),"輸入 IP，和朋友對戰",14.0)
+	g.draw_string(g.font,Vector2(951,752),"出征領主 · "+g.B.LORDS[g.player_lord].name,HORIZONTAL_ALIGNMENT_CENTER,490,19,g.INK)
 	book(g,88,"軍備名冊")
 	book(g,436,"萬物與軼聞")
 	g.draw_string(g.font,Vector2(90,860),"農田與墓碑之間，戰線已然展開。",HORIZONTAL_ALIGNMENT_CENTER,660,19,g.INK)
+	g.draw_string(g.font,Vector2(1380,862),"v"+g.VERSION,HORIZONTAL_ALIGNMENT_RIGHT,180,15,Color(g.INK,0.5))

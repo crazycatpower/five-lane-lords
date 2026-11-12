@@ -7,17 +7,17 @@ static func draw(g) -> void:
 	g.panel(PLATE,Color(0.92,0.86,0.72,0.92),Color("8a6f4a"))
 	# No help or notice text here any more (producer 2026-11-03): the panel is the purse.
 	var focus: int = g.selected if g.selected >= 0 else g.hover_slot
-	var need: float = B.CARDS[m.kind_at(0,focus)].cost if focus >= 0 and not g.spectating else 0.0
-	if not g.spectating and focus < 0 and g.SKILL_RECT.has_point(g.get_global_mouse_position()): need = B.skill_cost(m.lords[0].lord)
+	var need: float = B.CARDS[m.kind_at(g.me,focus)].cost if focus >= 0 and not g.spectating else 0.0
+	if not g.spectating and focus < 0 and g.SKILL_RECT.has_point(g.get_global_mouse_position()): need = B.skill_cost(m.lords[g.me].lord)
 	if g.purse_alarm > 0: need = maxf(need,g.purse_need) # a refused play shows what it wanted
-	draw_purse(g,m.ink[0],need,m.get_instance_id(),g.purse_alarm,m.ink[0] >= B.MAX_INK-0.01)
-	var home: String = m.home_cards[0]
+	draw_purse(g,m.ink[g.me],need,m.get_instance_id(),g.purse_alarm,m.ink[g.me] >= B.MAX_INK-0.01)
+	var home: String = m.home_cards[g.me]
 	g.label_at(Vector2(232,756),"金幣",18,muted)
-	g.label_at(Vector2(230,806),str(int(m.ink[0])),50,g.INK)
-	g.label_at(Vector2(232+g.font.get_string_size(str(int(m.ink[0])),HORIZONTAL_ALIGNMENT_LEFT,-1,50).x+6,805),"/ %d" % B.MAX_INK,20,muted)
+	g.label_at(Vector2(230,806),str(int(m.ink[g.me])),50,g.INK)
+	g.label_at(Vector2(232+g.font.get_string_size(str(int(m.ink[g.me])),HORIZONTAL_ALIGNMENT_LEFT,-1,50).x+6,805),"/ %d" % B.MAX_INK,20,muted)
 	g.draw_line(Vector2(232,818),Vector2(388,818),Color("b69b6f"),1)
-	g.label_at(Vector2(232,842),"每秒 +%.1f" % m.production_rate(0),18,muted)
-	g.label_at(Vector2(232,866),"%s %d" % [B.CARDS[home].name,m.count_buildings(0,home)],18,muted)
+	g.label_at(Vector2(232,842),"每秒 +%.1f" % m.production_rate(g.me),18,muted)
+	g.label_at(Vector2(232,866),"%s %d" % [B.CARDS[home].name,m.count_buildings(g.me,home)],18,muted)
 
 # Gold purse (producer 2026-11-03): every 2 gold is one coin that drops onto the heap in front of the
 # money bag. Hovering or selecting a card whitens the coins it would spend (the top of the heap);
@@ -75,9 +75,9 @@ static func draw_purse(g, ink: float, need: float, id: int, alarm: float = 0.0, 
 	var shake := Vector2(sin(alarm*60)*4*clampf(alarm/0.9,0,1),0)
 	if full:
 		var glow := 0.5+0.5*sin(t*5)
-		g.draw_set_transform(Vector2(HEAP_X,HEAP_BOTTOM-40),0,Vector2(1,0.8))
+		g.tf(Vector2(HEAP_X,HEAP_BOTTOM-40),0,Vector2(1,0.8))
 		g.draw_circle(Vector2.ZERO,92+glow*8,Color(1.0,0.82,0.30,0.18+0.14*glow))
-		g.draw_set_transform(Vector2.ZERO)
+		g.tf()
 	g.draw_texture_rect(ART.object_icon(0),PURSE,false)
 	var tex := coin_texture()
 	var spend := ceili(need/COIN_GOLD)

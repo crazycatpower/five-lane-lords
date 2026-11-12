@@ -1,6 +1,7 @@
 extends RefCounted
 const B = preload("res://balance.gd")
 const Frontier = preload("res://frontier_cards.gd")
+const Faction = preload("res://faction_cards.gd")
 const L = preload("res://layout.gd")
 
 # Pure decision: snapshot in, legal play out. No model mutation or random globals.
@@ -39,7 +40,7 @@ static func skill_plan(k: Dictionary) -> Dictionary:
 		"mage": wanted = k.get("troops",0) >= pr.get("mage_min_troops",10)
 		"underworld": wanted = k.get("graves",0) >= 2
 		"adventure": wanted = k.get("slash_targets",0) > 0
-		"lion": wanted = k.elapsed >= pr.get("skill_after",45.0)
+		"lion", "beast": wanted = k.elapsed >= pr.get("skill_after",45.0)
 		"harvest": wanted = k.elapsed >= pr.get("skill_after",45.0) and k.farms <= pr.get("harvest_max_farms",7.0)
 		"iron":
 			wanted = k.broken > 0 or k.gate_share < pr.get("iron_gate_share",0.6)
@@ -116,7 +117,7 @@ static func decide(s: Dictionary) -> Dictionary:
 	var recent: Array = s.get("recent",[])
 	for lane: int in active_lanes:
 		var gate: float = s.gates[1-team][lane]
-		attack[lane] = (B.GATE_HP-gate)*pr.get("atk_gate",0.4)+ours[lane]*0.3-foes[lane]*pr.get("atk_foes",0.8)-their_guard[lane]*0.5-recent.count(lane)*pr.get("atk_recent",140.0)+jitter(lane,s.elapsed)
+		attack[lane] = (1.0-gate/B.GATE_HP)*400.0*pr.get("atk_gate",0.4)+ours[lane]*0.3-foes[lane]*pr.get("atk_foes",0.8)-their_guard[lane]*0.5-recent.count(lane)*pr.get("atk_recent",140.0)+jitter(lane,s.elapsed)
 		if gate <= 0 and foes[lane] < 150: attack[lane] += 600 # an open gate with nobody guarding it: walk in
 		if my_graves[lane] > 0: attack[lane] += my_graves[lane] * 80.0 # fighting where graves are concentrated feeds their soul harvest
 	var target_lane: int = active_lanes[0]
@@ -167,15 +168,27 @@ static func decide(s: Dictionary) -> Dictionary:
 						best_score = score
 						best = c.duplicate()
 				continue
+			var faction_score: float = Faction.ai_score(c,s)
+			if defend >= 0 and lane == defend and c.kind in Faction.DEFENSIVE: faction_score += 400.0 # beats the plain defend plays (<= 1000)
+			if faction_score > best_score and (defend < 0 or lane == defend):
+				best_score = faction_score
+				best = c.duplicate()
+			if c.kind in Faction.SPELLS: continue
 			var dark_score := dark_card_score(c,s,ours,foes,my_troop_x)
 			if dark_score > best_score:
 				best_score = dark_score
 				best = c.duplicate()
 			if defend >= 0:
+				if data.type == "spell" and B.has_tag(c.kind,"defend_spell"):
+					var hit: Dictionary = area_value(c,s,data,defend)
+					if hit.reaches and hit.value > 0: score = 1000+minf(hit.value,2000)*0.1
+					if score > best_score:
+						best_score = score
+						best = c.duplicate()
+					continue
 				if lane != defend: continue
 				var fx: float = foe_x[lane]
-				if data.type == "spell" and B.has_tag(c.kind,"defend_spell"): score = 1000-c.pos.distance_to(Vector2(fx,c.pos.y))
-				elif data.type == "unit" and not B.has_tag(c.kind,"no_defend"):
+				if data.type == "unit" and not B.has_tag(c.kind,"no_defend"):
 					# Troops never turn round, so spawn between the attacker and our gate.
 					if (fx-c.pos.x)*forward >= 0: score = 900-absf(fx-c.pos.x)*0.5-data.cost*3
 				elif B.has_tag(c.kind,"defend_building"): score = 950-absf(fx-c.pos.x)
@@ -225,8 +238,8 @@ static func decide(s: Dictionary) -> Dictionary:
 					# Front-most legal cell of the chosen lane; other lanes only as a weaker fallback.
 					score = pr.get("wave_score",600.0)+col*4-data.cost-(0 if lane == target_lane else 60+(attack[target_lane]-attack[lane])*0.05)
 				elif wave and B.has_tag(c.kind,"wave_spell"):
-					for u: Dictionary in s.units:
-						if u.team != team and u.hp > 0 and u.pos.distance_to(c.pos) < data.radius: score = maxf(0,score)+80
+					var hit: Dictionary = area_value(c,s,data)
+					if hit.value >= data.cost*pr.get("spell_value_per_gold",20.0): score = 600.0+minf(hit.value,2000)*0.1
 				elif c.kind == "mill" and farm_total >= pr.get("mill_min_farms",3.0): score = pr.get("mill_score",650.0)+my_farms[lane]*10
 				elif c.kind == "harvest":
 					var count := 0
@@ -240,7 +253,24 @@ static func decide(s: Dictionary) -> Dictionary:
 				best = c.duplicate()
 		if not best.is_empty(): break
 	if not best.is_empty(): best["wave"] = wave and best_score < 700
+	if not best.is_empty(): best.pos = preload("res://spell_lead.gd").position(best.kind,best.pos,team)
 	return best
+
+# What an area spell at c.pos is worth: the enemy hp it would really remove (capped at each target's hp),
+# plus enemy buildings for spells that hit them. Also reports whether it reaches the lane being defended.
+static func area_value(c: Dictionary, s: Dictionary, data: Dictionary, defend: int = -1) -> Dictionary:
+	var dmg: float = data.get("damage",0.0)
+	if dmg <= 0 and data.has("tick_damage"): dmg = data.tick_damage*data.get("duration",1.0)/data.get("tick_interval",1.0)
+	var value := 0.0
+	var reaches := defend < 0
+	for u: Dictionary in s.units:
+		if u.hp <= 0 or u.team == s.team or u.pos.distance_to(c.pos) > data.radius: continue
+		value += minf(u.hp,dmg) if dmg > 0 else u.hp*0.5 # curse-like spells: worth part of the troop
+		if u.lane == defend: reaches = true
+	if data.get("building_damage",0.0) > 0:
+		for b: Dictionary in s.buildings:
+			if b.hp > 0 and b.team != s.team and b.pos.distance_to(c.pos) <= data.radius: value += minf(b.hp,data.building_damage)*0.5
+	return {"value":value,"reaches":reaches}
 
 # Deterministic per-lane tie-breaker that changes every 8 seconds (0..80).
 static func jitter(lane: int, elapsed: float) -> float:

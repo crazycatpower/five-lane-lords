@@ -20,6 +20,8 @@ var heading := ""
 var opening_caption := ""
 var victory_caption := ""
 var next_caption := ""
+var foe := "" # the territory's ruler: the "foe" portrait
+var camp := false
 
 func begin(g, won: bool = false) -> void:
 	victory = won
@@ -30,18 +32,21 @@ func begin(g, won: bool = false) -> void:
 	show(g)
 
 func setup_stage_story(idx: int, recruit: String, won: bool) -> void:
-	var adventure_data = preload("res://campaign_catalog.gd")
-	var stage: Dictionary = adventure_data.STAGES[idx]
-	heading = "第 %d 關 · %s" % [idx+1,stage.name]
-	opening_caption = "決戰亡靈領主" if idx == adventure_data.STAGES.size()-1 else ["戰亂與重稅","亡靈與勾結","三位領主的援軍"][stage.chapter]
-	victory_caption = "戰後 · "+stage.name
-	next_caption = "返回冒險地圖" if idx == adventure_data.STAGES.size()-1 else "前往下一關"
+	var catalog = preload("res://campaign_catalog.gd")
+	var cards = preload("res://balance.gd")
+	var stage: Dictionary = catalog.stages()[idx]
+	foe = stage.enemy_lord
+	camp = stage.enemy_camp
+	heading = stage.name
+	opening_caption = "%s · 守將 %s" % [catalog.CHAPTERS[stage.chapter].name,cards.lord_name(foe)]
+	victory_caption = "征服 · "+catalog.CHAPTERS[stage.chapter].name
+	next_caption = "返回征服地圖"
 	lines = preload("res://campaign_story_data.gd").dialogue(stage.id,recruit,won)
-	if won:
-		var rewards: Array = stage.rewards
-		if not rewards.is_empty():
-			var names: Array = rewards.map(func(k): return preload("res://balance.gd").CARDS[k].name)
-			lines.append(["卡牌解鎖","已解鎖："+"、".join(names)+"。\n可在冒險牌組中選用。",stage.get("support_lord","lord"),"lord"])
+	if won and not stage.rewards.is_empty():
+		var names: Array = stage.rewards.map(func(k): return cards.CARDS[k].name)
+		lines.append(["征服獎勵","解鎖卡牌："+"、".join(names)+"。\n可在出征牌組中選用。","lord","foe"])
+	var prize: String = catalog.UNLOCK_LORDS.get(stage.id,"")
+	if won and cards.LORDS.has(prize): lines.append(["新的領主",cards.lord_name(prize)+"願意為你出戰。\n在「編成牌組」的領主分頁換上，就能使用"+cards.FACTIONS[cards.lord_faction(prize)]+"陣營的卡牌。","foe","lord"])
 
 func advance(g) -> void:
 	if g.screen != "road_toll_story": return
@@ -62,16 +67,19 @@ func show(g) -> void:
 	g.title_button(Rect2(1200,784,280,54),caption,func(): advance(g),true).grab_focus()
 	g.queue_redraw()
 
-func texture(kind: String) -> Texture2D:
-	return {"mob":MOB,"guard":GUARD,"lord":LORD,"bandit":BANDIT,"knight":KNIGHT,"hunter":HUNTER,"lion":LION,"harvest":HARVEST,"iron":IRON,"underworld":UNDERWORLD,"skeleton":SKELETON,"necromancer":NECROMANCER}.get(kind, GUARD)
+# A portrait by its key: the ruler ("foe", in blue), one of the fixed cast, or any card's art.
+func texture(g, kind: String) -> Texture2D:
+	if kind == "foe": return g.art("bandit",1) if camp else g.lord_art(foe,1)
+	var cast := {"mob":MOB,"guard":GUARD,"lord":LORD,"bandit":BANDIT,"knight":KNIGHT,"hunter":HUNTER,"lion":LION,"harvest":HARVEST,"iron":IRON,"underworld":UNDERWORLD,"skeleton":SKELETON,"necromancer":NECROMANCER}
+	return cast[kind] if cast.has(kind) else g.art(kind)
 
 func paint(g) -> void:
 	g.draw_rect(Rect2(28,28,1544,844),Color(0.18,0.15,0.10,0.18))
 	g.label_at(Vector2(80,85),heading,36)
 	g.label_at(Vector2(80,123),victory_caption if victory else opening_caption,22)
 	var line: Array = lines[step]
-	var actor: Texture2D = texture(line[2])
-	var other: Texture2D = texture(line[3])
+	var actor: Texture2D = texture(g,line[2])
+	var other: Texture2D = texture(g,line[3])
 	var rect: Rect2 = g.fitted_rect(actor.get_size(),Rect2(125,150,600,430),true)
 	g.draw_texture_rect(actor,rect,false) # all portraits face right (the bandit art was turned 2026-11-03)
 	var right: Rect2 = g.fitted_rect(other.get_size(),Rect2(875,135,600,445),true)

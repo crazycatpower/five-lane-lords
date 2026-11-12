@@ -151,7 +151,7 @@ static func shoot_piercing_arrow(m, u: Dictionary, target: Dictionary = {}) -> v
 	var d: Dictionary = B.CARDS[u.kind]
 	var direction := 1.0 if u.team == 0 else -1.0
 	if not target.is_empty() and not is_equal_approx(target.pos.x,u.pos.x): direction = signf(target.pos.x-u.pos.x)
-	m.projectiles.append({"source":u,"piercing":true,"hit_ids":[],"travelled":0.0,"primary_hit":false,"pos":u.pos+Vector2(0,-30),"start":u.pos+Vector2(0,-30),"origin":u.pos,"end":u.pos+Vector2(direction*d.range*d.pierce_range_multiplier,-30),"direction":direction,"range":d.range*d.pierce_range_multiplier,"lane":u.lane,"target":target,"remaining":B.ARROW_TIME,"amount":d.damage,"team":u.team,"kind":u.kind})
+	m.projectiles.append({"source":u,"piercing":true,"hit_ids":[],"travelled":0.0,"primary_hit":false,"pos":u.pos+Vector2(0,-30),"start":u.pos+Vector2(0,-30),"origin":u.pos,"end":u.pos+Vector2(direction*u.get("range",d.range)*d.pierce_range_multiplier,-30),"direction":direction,"range":u.get("range",d.range)*d.pierce_range_multiplier,"lane":u.lane,"target":target,"remaining":B.ARROW_TIME,"amount":u.get("damage",d.damage),"team":u.team,"kind":u.kind})
 
 static func advance_piercing_arrow(m, a: Dictionary) -> void:
 	var previous: float = a.travelled
@@ -162,6 +162,7 @@ static func advance_piercing_arrow(m, a: Dictionary) -> void:
 		if target.team != a.team and target.hp > 0 and target.lane == a.lane and distance >= previous and distance <= reached and not target.id in a.hit_ids:
 			a.hit_ids.append(target.id)
 			m.damage(target,a.amount,a.team,a.kind,a.get("source",{}))
+			reveal(m, target)
 	if not a.primary_hit:
 		var point: Vector2 = a.target.pos if not a.target.is_empty() else Vector2(L.gate_stop(1-a.team),a.origin.y)
 		var distance: float = (point.x-a.origin.x)*a.direction

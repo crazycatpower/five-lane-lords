@@ -139,10 +139,11 @@ func draw_battle_info() -> void:
 	for team: int in range(2):
 		var y := 175+team*285
 		var lord: String = game.model.lords[team].lord
-		game.label_at(Vector2(95,y),["紅方","藍方"][team]+" · "+B.LORDS[lord].name,24,game.RED if team == 0 else game.BLUE)
+		game.label_at(Vector2(95,y),["紅方","藍方"][team]+" · "+B.lord_name(lord),24,game.RED if team == 0 else game.BLUE)
 		game.label_at(Vector2(600,y),composition(team),22)
 		game.draw_fitted(game.lord_art(lord,team),Rect2(95,y+40,132,170))
 		var kinds: Array = [game.model.home_cards[team]]+game.model.decks[team].duplicate()
-		for i: int in range(kinds.size()): game.draw_card(kinds[i],deck_rect(team,i))
+		for i: int in range(kinds.size()):
+			if not kinds[i].is_empty(): game.draw_card(kinds[i],deck_rect(team,i)) # a lord without farms has no home card
 		game.label_at(Vector2(275,y+241),"常駐牌",16)
 	game.label_at(Vector2(95,750),"牌組構成依本局實際配置顯示；輪轉順序會隨出牌改變。",19)
