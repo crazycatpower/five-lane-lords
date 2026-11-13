@@ -32,7 +32,7 @@ undefined
 
 ## 棘背翼獸
 
-![棘背翼獸](monster-thornback-wyvern.png)
+棘背翼獸（未收錄）
 
 空中襲擾方向：雙翼作前肢、兩條後腿，以棘背和長尾辨識。
 

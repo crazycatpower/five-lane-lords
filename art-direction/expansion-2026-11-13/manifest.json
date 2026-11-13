@@ -1,181 +1,483 @@
 {
-    "schema":  1,
+    "schema":  2,
     "date":  "2026-11-13",
     "generator":  "built-in image_gen",
     "runtime_integrated":  false,
+    "qualification":  "Selected concept artwork, not runtime-certified assets",
+    "excluded":  [
+                     "units/monster-thornback-wyvern.png",
+                     "garrisons/harvest-garrison.png",
+                     "garrisons/iron-garrison.png",
+                     "garrisons/adventure-garrison.png",
+                     "neutral-merchant/waystation.png",
+                     "merchant-specialists/powder-porter.png"
+                 ],
     "assets":  [
                    {
                        "path":  "buildings/dark-ossuary.png",
                        "category":  "buildings",
-                       "status":  "concept-review",
+                       "status":  "selected-concept",
+                       "width":  1312,
+                       "height":  1199,
                        "bytes":  1563539,
                        "sha256":  "3a8b12527563cdf9b84898ba8edf5dca7cb329dfc0e544394a7ec9d678811290"
                    },
                    {
                        "path":  "buildings/dark-soul-well.png",
                        "category":  "buildings",
-                       "status":  "concept-review",
+                       "status":  "selected-concept",
+                       "width":  1312,
+                       "height":  1199,
                        "bytes":  1641706,
                        "sha256":  "b3f0cc48687b630f72f05e8fa4b4657ccfe5ad2473f685ea88ba8b37d5580754"
                    },
                    {
                        "path":  "buildings/magic-observatory.png",
                        "category":  "buildings",
-                       "status":  "concept-review",
+                       "status":  "selected-concept",
+                       "width":  1312,
+                       "height":  1199,
                        "bytes":  1575347,
                        "sha256":  "85afa44647fdd4774f8f12bf38dc56c6e590d679bde46c86674250c741b0e26c"
                    },
                    {
                        "path":  "buildings/magic-rune-workshop.png",
                        "category":  "buildings",
-                       "status":  "concept-review",
+                       "status":  "selected-concept",
+                       "width":  1402,
+                       "height":  1122,
                        "bytes":  2319910,
                        "sha256":  "899299b68024b5ee8aee6f1da7c5ff4ce1a05832147044fe6e2c6b4c65ebc88b"
                    },
                    {
                        "path":  "buildings/monster-hatchery.png",
                        "category":  "buildings",
-                       "status":  "concept-review",
+                       "status":  "selected-concept",
+                       "width":  1312,
+                       "height":  1199,
                        "bytes":  1929787,
                        "sha256":  "ebf6abca70588728ac5b0823c46f649532910c1793c6de1a0fcddade1671e446"
                    },
                    {
                        "path":  "buildings/monster-war-lodge.png",
                        "category":  "buildings",
-                       "status":  "concept-review",
+                       "status":  "selected-concept",
+                       "width":  1312,
+                       "height":  1199,
                        "bytes":  2175859,
                        "sha256":  "505613cf7b828f6b6468d735be009a9aadee3c600010918f99dbb18ac0e31faf"
                    },
                    {
                        "path":  "buildings/normal-granary.png",
                        "category":  "buildings",
-                       "status":  "concept-review",
+                       "status":  "selected-concept",
+                       "width":  1312,
+                       "height":  1199,
                        "bytes":  2183825,
                        "sha256":  "4c0ae16c9f0feac81d63dca9d7888b947855f615ed287a0877ef640730b694e1"
                    },
                    {
                        "path":  "buildings/normal-smithy.png",
                        "category":  "buildings",
-                       "status":  "concept-review",
+                       "status":  "selected-concept",
+                       "width":  1312,
+                       "height":  1199,
                        "bytes":  2247172,
                        "sha256":  "19cd6bf33b371482c6080ca085b769551a19254a79502d7489c0e3ab02939b41"
                    },
                    {
-                       "path":  "garrisons/adventure-garrison.png",
-                       "category":  "garrisons",
-                       "status":  "needs-alpha-cleanup",
-                       "bytes":  2939245,
-                       "sha256":  "baa308f794b9350cb62e915ba0c78dc4c0adf1381578e30edc824647f368053f"
+                       "path":  "dark-blood-thralls/blood-oath-altar.png",
+                       "category":  "dark-blood-thralls",
+                       "status":  "selected-concept",
+                       "width":  1312,
+                       "height":  1199,
+                       "bytes":  1714084,
+                       "sha256":  "c99ecf2f9a03090dd3ad4d3693be92a2912e8a01fb0a1814adc84be02f84907d"
                    },
                    {
-                       "path":  "garrisons/harvest-garrison.png",
-                       "category":  "garrisons",
-                       "status":  "needs-alpha-cleanup",
-                       "bytes":  2593370,
-                       "sha256":  "6bcbc59e684d3554a7c43712a96d6e555620426e67aceb8cd356431b6c358344"
+                       "path":  "dark-blood-thralls/blood-oath-attendant.png",
+                       "category":  "dark-blood-thralls",
+                       "status":  "selected-concept",
+                       "width":  1312,
+                       "height":  1199,
+                       "bytes":  809180,
+                       "sha256":  "b3e96967cc52aea78e02fd5c5f2ac754da87bff102790aa921145cdb61e6b82f"
                    },
                    {
-                       "path":  "garrisons/iron-garrison.png",
-                       "category":  "garrisons",
-                       "status":  "needs-alpha-cleanup",
-                       "bytes":  2357706,
-                       "sha256":  "188cffd5f3c47dbc402454e9a2ec2a2ddbf3532456c092ac3ce7c721ec392c5e"
+                       "path":  "dark-blood-thralls/borrowed-bones.png",
+                       "category":  "dark-blood-thralls",
+                       "status":  "selected-concept",
+                       "width":  1312,
+                       "height":  1199,
+                       "bytes":  874916,
+                       "sha256":  "f0a47b79c82368b754a9afd9e009f506fedb353727440edf1d6efa665af829c8"
+                   },
+                   {
+                       "path":  "dark-blood-thralls/corpse-stitcher.png",
+                       "category":  "dark-blood-thralls",
+                       "status":  "selected-concept",
+                       "width":  1312,
+                       "height":  1199,
+                       "bytes":  998045,
+                       "sha256":  "d0b40002d8328e4a9e493409579b3a9fe8826cc33b18b5365e466b03d87d4ea2"
+                   },
+                   {
+                       "path":  "dark-blood-thralls/funeral-cottage.png",
+                       "category":  "dark-blood-thralls",
+                       "status":  "selected-concept",
+                       "width":  1312,
+                       "height":  1199,
+                       "bytes":  2089545,
+                       "sha256":  "2be255129623f79a224bcbb697c3baba935fbe30a5ab9f3498e8a2050c7c77d9"
+                   },
+                   {
+                       "path":  "dark-blood-thralls/grave-exchange.png",
+                       "category":  "dark-blood-thralls",
+                       "status":  "selected-concept",
+                       "width":  1312,
+                       "height":  1199,
+                       "bytes":  1556363,
+                       "sha256":  "92609f44639a576aec984a16ddb7b906b77b8f82ceca1f760a9e387e728c23ac"
+                   },
+                   {
+                       "path":  "dark-blood-thralls/mourning-bell.png",
+                       "category":  "dark-blood-thralls",
+                       "status":  "selected-concept",
+                       "width":  1312,
+                       "height":  1199,
+                       "bytes":  821704,
+                       "sha256":  "c1407ba5b5ce12e13445551534bc4c230e39a8dcbbe348462dab3c9081457e16"
+                   },
+                   {
+                       "path":  "dark-blood-thralls/mourning-shroud.png",
+                       "category":  "dark-blood-thralls",
+                       "status":  "selected-concept",
+                       "width":  1312,
+                       "height":  1199,
+                       "bytes":  1414541,
+                       "sha256":  "aa2eb74350ae81470d8c3a31126b1be5e237e1e7401d7f48987f08a5ec086b23"
+                   },
+                   {
+                       "path":  "dark-blood-thralls/pallbearer.png",
+                       "category":  "dark-blood-thralls",
+                       "status":  "selected-concept",
+                       "width":  1312,
+                       "height":  1199,
+                       "bytes":  1105388,
+                       "sha256":  "24c3bb02e482ffd67ed6ad37b800de4b0dd7b7ea27dc34ba5b499e30d7a52fe4"
+                   },
+                   {
+                       "path":  "dark-blood-thralls/sealed-coffin.png",
+                       "category":  "dark-blood-thralls",
+                       "status":  "selected-concept",
+                       "width":  1312,
+                       "height":  1199,
+                       "bytes":  1187540,
+                       "sha256":  "2c2552f1ca969b6c476570acf53aa0a4fd3ff920dc1352047023dcdadc590962"
+                   },
+                   {
+                       "path":  "dark-blood-thralls/sleepless-belfry.png",
+                       "category":  "dark-blood-thralls",
+                       "status":  "selected-concept",
+                       "width":  1199,
+                       "height":  1312,
+                       "bytes":  1668471,
+                       "sha256":  "3aa8d648996cb687ce6b4beae87b3f99d22de0bb284094b9648fa37771bee873"
                    },
                    {
                        "path":  "garrisons/lion-garrison.png",
                        "category":  "garrisons",
-                       "status":  "concept-review",
+                       "status":  "selected-concept",
+                       "width":  1401,
+                       "height":  1123,
                        "bytes":  2088386,
                        "sha256":  "25d816c8a49652d839d7ca18edc50402f6e356e8a12be3c2c406bbc6ed472185"
                    },
                    {
                        "path":  "garrisons/mage-garrison.png",
                        "category":  "garrisons",
-                       "status":  "concept-review",
+                       "status":  "selected-concept",
+                       "width":  1507,
+                       "height":  1044,
                        "bytes":  2223082,
                        "sha256":  "79237ecb2c1290823daef95ee714086b3963de429c5e1acfbbb24c749c46d680"
                    },
                    {
                        "path":  "garrisons/rune-garrison.png",
                        "category":  "garrisons",
-                       "status":  "concept-review",
+                       "status":  "selected-concept",
+                       "width":  1448,
+                       "height":  1086,
                        "bytes":  1749903,
                        "sha256":  "d3a06537492f8f23c2bdbd2f8d8a94059304485f5b75bc4f4db058758976eb9b"
                    },
                    {
                        "path":  "garrisons/underworld-garrison.png",
                        "category":  "garrisons",
-                       "status":  "concept-review",
+                       "status":  "selected-concept",
+                       "width":  1393,
+                       "height":  1129,
                        "bytes":  2389154,
                        "sha256":  "563b5e64eb8dcb12505bec7d3f95505f7950ba5d6a56c6b5ae93db3df3f6acf9"
                    },
                    {
                        "path":  "garrisons/vampire-garrison.png",
                        "category":  "garrisons",
-                       "status":  "concept-review",
+                       "status":  "selected-concept",
+                       "width":  1402,
+                       "height":  1122,
                        "bytes":  2224587,
                        "sha256":  "81a1c89625c87f332fb7e4488ef45f416804f06985ae1ae7e916448bfa051850"
                    },
                    {
+                       "path":  "gunpowder/beast-imp-bomb-runner.png",
+                       "category":  "gunpowder",
+                       "status":  "selected-concept",
+                       "width":  1312,
+                       "height":  1199,
+                       "bytes":  1425522,
+                       "sha256":  "70a9c97a93b6c3334a7c5c15053ec4ab95cd103fb6cb1e8a40b8f25c154c14e2"
+                   },
+                   {
+                       "path":  "gunpowder/classic-march-arquebusier.png",
+                       "category":  "gunpowder",
+                       "status":  "selected-concept",
+                       "width":  1312,
+                       "height":  1199,
+                       "bytes":  880235,
+                       "sha256":  "5d886a3d0eee5ec004fbeb3affddcb8c045013424e59eaa9024f25e23ef6cc09"
+                   },
+                   {
+                       "path":  "gunpowder/dark-funeral-grenadier.png",
+                       "category":  "gunpowder",
+                       "status":  "selected-concept",
+                       "width":  1312,
+                       "height":  1199,
+                       "bytes":  1201180,
+                       "sha256":  "be453ce9e120bd7703a5ec738bb3491328a26b37d96f83a1905f3c7fb6bd6029"
+                   },
+                   {
+                       "path":  "gunpowder/dark-skeleton-dog-cannon.png",
+                       "category":  "gunpowder",
+                       "status":  "selected-concept",
+                       "width":  1774,
+                       "height":  887,
+                       "bytes":  1296291,
+                       "sha256":  "c71c2121c2136d6f1707c6b7577eb3fe8c9aba4cf7344dbd816942b3f5fa0927"
+                   },
+                   {
+                       "path":  "gunpowder/magic-orrery-walker.png",
+                       "category":  "gunpowder",
+                       "status":  "selected-concept",
+                       "width":  1312,
+                       "height":  1199,
+                       "bytes":  1364081,
+                       "sha256":  "ea4c678b3d169b63c7a005eee919cb529e6d7d4e48ea5ae21164957b686b378c"
+                   },
+                   {
+                       "path":  "gunpowder/magic-seal-bearer.png",
+                       "category":  "gunpowder",
+                       "status":  "selected-concept",
+                       "width":  1312,
+                       "height":  1199,
+                       "bytes":  1353415,
+                       "sha256":  "7eca3bda6391d90c1ebd06d1037db092f928dd0eeb66dd6dfd432347c75ed043"
+                   },
+                   {
+                       "path":  "merchant-deserters/beast-oathless-imp.png",
+                       "category":  "merchant-deserters",
+                       "status":  "selected-concept",
+                       "width":  1312,
+                       "height":  1199,
+                       "bytes":  1653123,
+                       "sha256":  "6e00b8bd0825e6b30a6328a4e8589f40f7037d5dce6b1d57534d66536f5af34d"
+                   },
+                   {
+                       "path":  "merchant-deserters/classic-disgraced-lancer.png",
+                       "category":  "merchant-deserters",
+                       "status":  "selected-concept",
+                       "width":  1312,
+                       "height":  1199,
+                       "bytes":  1224415,
+                       "sha256":  "2ee8b31dec5289c472ccf65b0fa05d58b809ea20955f4f6d6f9a369df99ca45a"
+                   },
+                   {
+                       "path":  "merchant-deserters/dark-runaway-thrall.png",
+                       "category":  "merchant-deserters",
+                       "status":  "selected-concept",
+                       "width":  1227,
+                       "height":  1282,
+                       "bytes":  1169260,
+                       "sha256":  "e24a8c0c810db2e7a8044196f5f678d7ece7e88287d4af580dfae307dc7f2db6"
+                   },
+                   {
+                       "path":  "merchant-deserters/magic-renegade-artificer.png",
+                       "category":  "merchant-deserters",
+                       "status":  "selected-concept",
+                       "width":  1312,
+                       "height":  1199,
+                       "bytes":  1092908,
+                       "sha256":  "c9f0cdf2348b38b2ee8bbdbf6e806045a9a2524f42099667d44f84a3a1c8f507"
+                   },
+                   {
+                       "path":  "merchant-mercenaries/gatebreaker.png",
+                       "category":  "merchant-mercenaries",
+                       "status":  "selected-concept",
+                       "width":  1312,
+                       "height":  1199,
+                       "bytes":  1719824,
+                       "sha256":  "133399d7ec132b51870b5a40ebdf5f1a60fb4b3b85e1f1963f8fe40ca53c496b"
+                   },
+                   {
+                       "path":  "merchant-mercenaries/hook-collector.png",
+                       "category":  "merchant-mercenaries",
+                       "status":  "selected-concept",
+                       "width":  1050,
+                       "height":  1498,
+                       "bytes":  1478733,
+                       "sha256":  "839ce2e48da611c6a56c3bb630ba677b562258a7770a419c8b511fd89359505d"
+                   },
+                   {
+                       "path":  "merchant-mercenaries/twin-blade-gambler.png",
+                       "category":  "merchant-mercenaries",
+                       "status":  "selected-concept",
+                       "width":  1312,
+                       "height":  1199,
+                       "bytes":  1138882,
+                       "sha256":  "f32781e2715a2857dad19ee746b83209ebb03f43ad074fdfff45aede1fc477f1"
+                   },
+                   {
+                       "path":  "merchant-specialists/assassin.png",
+                       "category":  "merchant-specialists",
+                       "status":  "selected-concept",
+                       "width":  1312,
+                       "height":  1199,
+                       "bytes":  826754,
+                       "sha256":  "49607fecbdfb2a3aa2f605df3deee12e98dcff23bbfda95c5f883c3717fd007f"
+                   },
+                   {
+                       "path":  "merchant-specialists/monster-hunter.png",
+                       "category":  "merchant-specialists",
+                       "status":  "selected-concept",
+                       "width":  1312,
+                       "height":  1199,
+                       "bytes":  1400652,
+                       "sha256":  "89660c275bbb5563c4626cb88fef4dece2c5c384af9e09711c39932d92c9fe66"
+                   },
+                   {
+                       "path":  "merchant-specialists/powder-barrel.png",
+                       "category":  "merchant-specialists",
+                       "status":  "selected-concept",
+                       "width":  1275,
+                       "height":  1233,
+                       "bytes":  1556351,
+                       "sha256":  "3b4b353e48efd800b964978c0748f4e1725b85eedbe57a99408f1efc958c3377"
+                   },
+                   {
+                       "path":  "merchant-specialists/spellbreaker.png",
+                       "category":  "merchant-specialists",
+                       "status":  "selected-concept",
+                       "width":  1312,
+                       "height":  1199,
+                       "bytes":  1122935,
+                       "sha256":  "a16656f0ba2754837bb6100c1fff6ec70392f44b8889412bb340bb903510932b"
+                   },
+                   {
+                       "path":  "merchant-specialists/vampire-hunter.png",
+                       "category":  "merchant-specialists",
+                       "status":  "selected-concept",
+                       "width":  1199,
+                       "height":  1312,
+                       "bytes":  1297958,
+                       "sha256":  "2f4dac903b9cab6fb59bbaeb549b83eb6bb96532eb10b240026849afc2d854f4"
+                   },
+                   {
+                       "path":  "neutral-merchant/merchant-lord.png",
+                       "category":  "neutral-merchant",
+                       "status":  "selected-concept",
+                       "width":  1199,
+                       "height":  1312,
+                       "bytes":  1524707,
+                       "sha256":  "b979e3a47142918fa3f2d518c51e350f07ede223a8c5b93574342aa6336735a4"
+                   },
+                   {
+                       "path":  "neutral-merchant/mule-cargo-cart.png",
+                       "category":  "neutral-merchant",
+                       "status":  "selected-concept",
+                       "width":  1774,
+                       "height":  887,
+                       "bytes":  1995988,
+                       "sha256":  "f91aca98387593cc9a90aefe8981df251b48160e097405b552ed74e0e2d72105"
+                   },
+                   {
                        "path":  "units/dark-bellbearer.png",
                        "category":  "units",
-                       "status":  "concept-review",
+                       "status":  "selected-concept",
+                       "width":  1199,
+                       "height":  1312,
                        "bytes":  954990,
                        "sha256":  "9e2e5c723e7651512d66801b975c81103f621b7317c9512d52016b95bd286b83"
                    },
                    {
                        "path":  "units/dark-shroud-arbalist.png",
                        "category":  "units",
-                       "status":  "concept-review",
+                       "status":  "selected-concept",
+                       "width":  1312,
+                       "height":  1199,
                        "bytes":  1015764,
                        "sha256":  "6f060c912e62d7c4ce1e91d9a5abe22d8bc5f039ffc84f7379d8c490e5f99874"
                    },
                    {
                        "path":  "units/magic-astrolabe-surveyor.png",
                        "category":  "units",
-                       "status":  "concept-review",
+                       "status":  "selected-concept",
+                       "width":  1312,
+                       "height":  1199,
                        "bytes":  1038776,
                        "sha256":  "cff3eba3515e648668e7f5f6919af2c9fa1d8c9c7004c7a52fc67449a30c8169"
                    },
                    {
                        "path":  "units/magic-sigil-weaver.png",
                        "category":  "units",
-                       "status":  "concept-review",
+                       "status":  "selected-concept",
+                       "width":  1312,
+                       "height":  1199,
                        "bytes":  919917,
                        "sha256":  "769acc2c8479f9c04af055fa480e49811cfe949f4b4803683fb48362af05705d"
                    },
                    {
                        "path":  "units/monster-bog-troll.png",
                        "category":  "units",
-                       "status":  "concept-review",
+                       "status":  "selected-concept",
+                       "width":  1263,
+                       "height":  1246,
                        "bytes":  1630337,
                        "sha256":  "eea8466aaa6101d7f62265803bce162f6dafc376ead07b2b72a4c8bed5c91ea1"
                    },
                    {
-                       "path":  "units/monster-thornback-wyvern.png",
-                       "category":  "units",
-                       "status":  "needs-alpha-cleanup",
-                       "bytes":  2115799,
-                       "sha256":  "743deff31fd0515b9d8146853f00336e375f697e0fee19f73ab82ab513920e42"
-                   },
-                   {
                        "path":  "units/monster-tusk-boar.png",
                        "category":  "units",
-                       "status":  "concept-review",
+                       "status":  "selected-concept",
+                       "width":  1312,
+                       "height":  1199,
                        "bytes":  1221985,
                        "sha256":  "8b354e8af85e86b50421097067b44ce2cdc4d30ab2d4547f79006e8d01bf80d5"
                    },
                    {
                        "path":  "units/normal-beekeeper.png",
                        "category":  "units",
-                       "status":  "concept-review",
+                       "status":  "selected-concept",
+                       "width":  1199,
+                       "height":  1312,
                        "bytes":  1165010,
                        "sha256":  "04db9ec9e13427b7420ac09b7d7e98734e221b6d264ddea37a4d806399af0f9f"
                    },
                    {
                        "path":  "units/normal-macebreaker.png",
                        "category":  "units",
-                       "status":  "concept-review",
+                       "status":  "selected-concept",
+                       "width":  1312,
+                       "height":  1199,
                        "bytes":  997024,
                        "sha256":  "a97109982e76cb31a946f9591300dd29102068ce6848f37aef955df35b6d43ae"
                    }

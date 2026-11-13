@@ -1,0 +1,9 @@
+{
+    "generator":  "built-in image_gen",
+    "assets":  [
+                   {
+                       "file":  "merchant-lord.png",
+                       "prompt":  "Create ONE NEUTRAL MERCHANT LORD full-body game character for FiveLaneLords. Reference hunter provides STYLE ONLY, not identity: medieval illuminated manuscript marginal illustration, bold dark-brown hand-ink outlines, FLAT matte gouache ochre/ivory/muted teal/burgundy, minimal hatching and restrained pigment inside silhouettes, not photorealistic, 3D or glossy cartoon. A distinctive worldly middle-aged merchant prince with a broad clever face, short dark curled beard flecked grey, warm olive skin, observant eyes, dignified practical manner. Wears an ochre long trading coat over ivory tunic, muted teal shoulder mantle, soft burgundy round cap with small brass coin brooch, sturdy brown boots. Neutral identity, NO crown, lion emblem or faction-red uniform. An ornate balance-scale medallion at chest signals lord status. RIGHT hand holds a short brass-topped walking cane low forward; LEFT supports a compact CLOSED account ledger against waist, belt carries a small securely tied coin purse. One connected character only, all possessions carried; exactly two arms two legs. Facing RIGHT three-quarter side view, slight staggered braced ready stance suitable both walking and standing, knees subtly bent, full feet and cane in 8% margin. Clear silhouette at 80 pixels, no tiny clutter. TRUE TRANSPARENT background, no ground/cast shadow/haze/glow/scenery/frame/UI. Absolutely NO text, letters, numbers, labels, annotations, signatures or watermarks anywhere."
+                   }
+               ]
+}

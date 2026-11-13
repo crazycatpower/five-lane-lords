@@ -23,7 +23,7 @@ LION LORD MUSTER CAMP: a compact cluster of one large vermilion-and-ivory stripe
 
 ## 豐收領主：麥穗莊園
 
-![麥穗莊園](harvest-garrison.png)
+麥穗莊園（未收錄）
 
 有居民住宅、糧倉與開放院落。價值在穩定補給；建議駐守才能保護累積的收成，離開後容易被劫掠。
 
@@ -34,7 +34,7 @@ HARVEST LORD WHEATSTEAD: compact grouping of two modest ivory half-timbered that
 
 ## 鐵壁領主：石橋關卡
 
-![石橋關卡](iron-garrison.png)
+石橋關卡（未收錄）
 
 用窄通道與短橋表現守住要衝的價值。駐守支援附近防線修復；收益偏防守，避免同時大量產金。
 
@@ -45,7 +45,7 @@ IRON LORD BRIDGE CHECKPOINT: one very SHORT stout stone bridge with two broad re
 
 ## 邊境領主：邊境驛村
 
-![邊境驛村](adventure-garrison.png)
+邊境驛村（未收錄）
 
 驛站、旅舍與空馬廄構成可停留的村落。駐守取得補給或情報，適合冒險支線；不直接取代戰鬥輸出。
 
