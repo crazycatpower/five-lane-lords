@@ -14,8 +14,11 @@ func fresh():
 
 func run() -> void:
 	check(B.validate().is_empty(),"card validation: "+str(B.validate()))
-	for kind: String in ["mule_cart","hook_collector","twin_gambler","gatebreaker","disgraced_lancer","runaway_thrall","renegade_artificer","oathless_imp","assassin","vampire_hunter","monster_hunter","spellbreaker","powder_barrel"]:
-		check(B.card_faction(kind) == "","merchant cards are neutral: "+kind)
+	for kind: String in ["mule_cart","hook_collector","twin_gambler","gatebreaker","assassin","vampire_hunter","monster_hunter","spellbreaker","powder_barrel"]:
+		check(B.card_faction(kind) == "","merchant mercenaries are neutral: "+kind)
+	# The four whose art names a faction belong to it (faction re-sort 2026-11-13).
+	for pair: Array in [["disgraced_lancer","normal"],["runaway_thrall","dark"],["renegade_artificer","magic"],["oathless_imp","beast"]]:
+		check(B.card_faction(pair[0]) == pair[1],"%s belongs to %s" % pair)
 	for side: int in [0,1]:
 		var fw := 1.0 if side == 0 else -1.0
 		var tag := " (team %d)" % side
