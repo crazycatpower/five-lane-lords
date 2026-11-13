@@ -2,12 +2,12 @@ extends RefCounted
 const B = preload("res://balance.gd")
 # Card background by role (producer 2026-11-05); the faction is the coloured outer band (BAND_COLORS).
 const ROLES := {
- "economy":["glutton_nest","crystal","farm","grave","farmer","mill","harvest","artificer","mana_spring","sacrifice"],
- "melee":["militia","knight","shieldguard","corpse_giant","skeleton","ghoul","reaper","ram","spearbow","manor_retainer","chimera","arcane_golem","ox","levy","mass_grave","eyewing_dragon","belly_eye","thorn_dragon"],
- "harass":["bandit","raven","mob","phase_rider","blink_blade","fishbeak","bearded_imp","hooknose_flyer"],
- "ranged":["arcane_tower","hunter","catapult","tower","rain","fire","axe_thrower","rolling_boulder","arcane_archer","dark_wizard","chain_lightning","watchtower","long_dragon"],
- "support":["healer","drummer","necromancer","guard","arcane_shield","charge_horn","blood_tower"],
- "control":["teleport_trap","blast_trap","barricade","curse","plague","bonewall","scarecrow","summon_trap","chronomancer","time_field","net_hunter","dread_howl"]
+ "economy":["glutton_nest","crystal","farm","grave","farmer","mill","harvest","artificer","mana_spring","sacrifice","mule_cart","funeral_cottage","blood_altar","grave_exchange","granary","soul_well"],
+ "melee":["militia","knight","shieldguard","corpse_giant","skeleton","ghoul","reaper","ram","spearbow","manor_retainer","chimera","arcane_golem","ox","levy","mass_grave","eyewing_dragon","belly_eye","thorn_dragon","hook_collector","gatebreaker","disgraced_lancer","monster_hunter","spellbreaker","pallbearer","blood_attendant","borrowed_bones","macebreaker","bog_troll","tusk_boar","ossuary","monster_hatchery"],
+ "harass":["bandit","raven","mob","phase_rider","blink_blade","fishbeak","bearded_imp","hooknose_flyer","twin_gambler","runaway_thrall","oathless_imp","assassin","imp_bomb_runner"],
+ "ranged":["arcane_tower","hunter","catapult","tower","rain","fire","axe_thrower","rolling_boulder","arcane_archer","dark_wizard","chain_lightning","watchtower","long_dragon","vampire_hunter","arquebusier","funeral_grenadier","dog_cannon","orrery_walker","seal_bearer","shroud_arbalist","astrolabe_surveyor"],
+ "support":["healer","drummer","necromancer","guard","arcane_shield","charge_horn","blood_tower","corpse_stitcher","sleepless_belfry","mourning_shroud","bellbearer","sigil_weaver","field_smithy","rune_workshop","observatory","war_lodge"],
+ "control":["teleport_trap","blast_trap","barricade","curse","plague","bonewall","scarecrow","summon_trap","chronomancer","time_field","net_hunter","dread_howl","renegade_artificer","powder_barrel","mourning_maid","sealed_coffin","beekeeper"]
 }
 const ROLE_TINTS := {"economy":Color("f3d079"),"melee":Color("e7ac9b"),"ranged":Color("a9cbe6"),"support":Color("b2d5a2"),"control":Color("cbb0df"),"harass":Color("c98078")}
 # Faction label colours (the small tag on the card face).

@@ -43,14 +43,14 @@ static func run_to(m: Battle, seconds: float) -> void:
 static func run(t) -> void:
 	# ---- the phases and what they do to the gold --------------------------------------------
 	var m := quiet()
-	t.check(m.day_phase() == 0 and is_equal_approx(m.multiplier(),1.0),"morning: phase 0, gold x1")
+	t.check(m.day_phase() == 0 and is_equal_approx(m.multiplier(),1.0),"daytime (0-3m): phase 0, gold x1")
 	m.elapsed = B.RAMP_1
-	t.check(m.day_phase() == 1 and is_equal_approx(m.multiplier(),1.5),"noon: phase 1, gold x1.5")
+	t.check(m.day_phase() == 1 and is_equal_approx(m.multiplier(),1.5),"noon (3-4:30m): phase 1, gold x1.5")
 	m.elapsed = B.RAMP_2
-	t.check(m.day_phase() == 2 and is_equal_approx(m.multiplier(),2.0),"dusk: phase 2, gold x2")
+	t.check(m.day_phase() == 2 and is_equal_approx(m.multiplier(),2.0),"dusk (4:30-6m): phase 2, gold x2")
 	m.elapsed = B.NIGHT_START
-	t.check(m.day_phase() == 3 and is_equal_approx(m.multiplier(),B.NIGHT_GOLD),"night: phase 3, gold x NIGHT_GOLD")
-	t.check(B.RAMP_1 < B.RAMP_2 and B.RAMP_2 < B.NIGHT_START and B.NIGHT_START < B.DAWN,"the day runs noon, dusk, night, dawn in that order")
+	t.check(m.day_phase() == 3 and is_equal_approx(m.multiplier(),B.NIGHT_GOLD),"night (6-9m): phase 3, gold x NIGHT_GOLD")
+	t.check(B.RAMP_1 == 180.0 and B.RAMP_2 == 270.0 and B.NIGHT_START == 360.0 and B.DAWN == 540.0,"day 3m -> noon 1.5m -> dusk 1.5m -> night 3m -> dawn 9m")
 	# ---- gates stand all day and crumble at night, twice as fast each minute ----------------
 	m = quiet()
 	run_to(m,B.NIGHT_START-1.0)
@@ -69,7 +69,6 @@ static func run(t) -> void:
 	t.check(is_equal_approx(m.night_rate(),B.NIGHT_DECAY*2.0),"second minute: the rate has doubled")
 	t.check(m.events.filter(func(e: Dictionary) -> bool: return e.kind == "nightfall").size() == 1 and not m.events.any(func(e: Dictionary) -> bool: return e.kind == "nightfall" and e.get("first",false)),"each doubling tolls once more, not as the first")
 	# Untouched gates all fall together, well before dawn.
-	m.events.clear()
 	run_to(m,B.DAWN-1.0)
 	t.check(not m.ended,"gates crumbling to nothing does not end the match by itself")
 	t.check(m.gates[0].all(func(hp: float) -> bool: return hp <= 0) and m.gates[1].all(func(hp: float) -> bool: return hp <= 0),"every untouched gate is gone before dawn")
@@ -154,7 +153,7 @@ static func run(t) -> void:
 	g.player_lord = B.DEFAULT_LORD
 	g.start_battle()
 	t.check(g.model.night_decay and g.intro_left > 0,"a free battle has a night and opens with the banner")
-	t.check(g.in_battle() and DayCycle.marks(g) == [0.0,B.RAMP_1,B.RAMP_2,B.NIGHT_START,B.DAWN],"the day track shows morning, noon, dusk and night up to dawn")
+	t.check(g.in_battle() and DayCycle.marks(g) == [0.0,B.RAMP_1,B.RAMP_2,B.NIGHT_START,B.DAWN],"the day track shows day, noon, dusk and night up to dawn")
 	g.model.paused = true
 	t.check(g.overlay_buttons().map(func(b: Array) -> String: return b[1]) == ["繼續","重新開始","設定","回到標題"],"pause banner: continue, restart, settings, title")
 	t.check(g.overlay_buttons().all(func(b: Array) -> bool: return L.OVERLAY_RECT.encloses(b[0])),"the pause buttons fit inside the banner")

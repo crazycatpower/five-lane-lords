@@ -2,6 +2,7 @@ extends RefCounted
 const B = preload("res://balance.gd")
 const Frontier = preload("res://frontier_cards.gd")
 const Faction = preload("res://faction_cards.gd")
+const ExpansionMore = preload("res://expansion_more.gd")
 const L = preload("res://layout.gd")
 
 # Pure decision: snapshot in, legal play out. No model mutation or random globals.
@@ -168,12 +169,12 @@ static func decide(s: Dictionary) -> Dictionary:
 						best_score = score
 						best = c.duplicate()
 				continue
-			var faction_score: float = Faction.ai_score(c,s)
+			var faction_score: float = maxf(Faction.ai_score(c,s),ExpansionMore.ai_score(c,s))
 			if defend >= 0 and lane == defend and c.kind in Faction.DEFENSIVE: faction_score += 400.0 # beats the plain defend plays (<= 1000)
 			if faction_score > best_score and (defend < 0 or lane == defend):
 				best_score = faction_score
 				best = c.duplicate()
-			if c.kind in Faction.SPELLS: continue
+			if c.kind in Faction.SPELLS or c.kind in ExpansionMore.SPELLS: continue
 			var dark_score := dark_card_score(c,s,ours,foes,my_troop_x)
 			if dark_score > best_score:
 				best_score = dark_score

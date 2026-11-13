@@ -7,6 +7,8 @@ static func key(actor: Dictionary) -> String:
 	return "lord:%d" % actor.team if actor.kind == "lord" else "actor:%d" % actor.id
 
 static func style(kind: String) -> String:
+	var d: Dictionary = preload("res://balance.gd").CARDS.get(kind,{})
+	if d.has("attack_style"): return d.attack_style
 	match kind:
 		"axe_thrower": return "throw"
 		"hunter", "arcane_archer": return "bow"

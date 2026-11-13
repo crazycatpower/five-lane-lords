@@ -125,7 +125,7 @@ static func result(g) -> void:
 	g.draw_string(g.font,Vector2(r.position.x,r.position.y+122),title(g),HORIZONTAL_ALIGNMENT_CENTER,r.size.x,68,Color(color,alpha))
 	g.draw_string(g.font,Vector2(r.position.x+40,r.position.y+162),story(g),HORIZONTAL_ALIGNMENT_CENTER,r.size.x-80,21,Color(g.INK,alpha))
 	var t := int(m.elapsed)
-	g.draw_string(g.font,Vector2(r.position.x,r.position.y+190),"戰鬥時間 %02d:%02d · %s" % [t/60,t%60,["上午","正午","黃昏","入夜"][m.day_phase()]],HORIZONTAL_ALIGNMENT_CENTER,r.size.x,17,Color(0.44,0.36,0.25,alpha))
+	g.draw_string(g.font,Vector2(r.position.x,r.position.y+190),"戰鬥時間 %02d:%02d · %s" % [t/60,t%60,["白天","正午","黃昏","入夜"][m.day_phase()]],HORIZONTAL_ALIGNMENT_CENTER,r.size.x,17,Color(0.44,0.36,0.25,alpha))
 	# The winning lord stands at the left (ours in a draw), ringed with laurel after a win.
 	var shown: int = m.winner if m.winner >= 0 else g.me
 	var portrait := Rect2(r.position+Vector2(86,206),Vector2(180,172))

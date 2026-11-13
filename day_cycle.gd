@@ -38,7 +38,7 @@ static func track(g) -> void:
 		var x0: float = r.position.x+r.size.x*points[i]/end
 		var x1: float = r.position.x+r.size.x*points[i+1]/end
 		g.draw_rect(Rect2(x0,r.position.y,x1-x0,r.size.y),BANDS[i])
-		if i == 3: # a few stars in the night band
+		if g.model.night_decay and i == points.size()-2: # a few stars in the night band
 			for k: int in range(7):
 				var star := Vector2(lerpf(x0+5,x1-5,g.scenery_noise(k,91)),r.position.y+3+g.scenery_noise(k,92)*(r.size.y-6))
 				g.draw_circle(star,1.1,Color(1,0.97,0.82,0.55+0.4*sin(g.clock*2.0+k)))
@@ -84,7 +84,7 @@ static func sun(g, at: Vector2, radius: float) -> void:
 static func moon(g, at: Vector2, radius: float) -> void:
 	g.draw_circle(at,radius+4+sin(g.clock*3.0),Color(0.95,0.93,0.75,0.25))
 	g.draw_circle(at,radius,Color("f3ecc9"))
-	g.draw_circle(at+Vector2(radius*0.42,-radius*0.18),radius*0.82,BANDS[3])
+	g.draw_circle(at+Vector2(radius*0.42,-radius*0.18),radius*0.82,BANDS[BANDS.size()-1])
 	g.draw_arc(at,radius,0,TAU,24,Color(g.INK,0.9),1.5,true)
 
 # The light lying over the field right now (alpha 0 = plain daylight).

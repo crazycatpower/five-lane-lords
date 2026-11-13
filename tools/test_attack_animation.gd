@@ -8,7 +8,7 @@ static func run(t: SceneTree) -> void:
 	m.lord_active = [false,false]
 	for kind: String in B.CARDS:
 		var data: Dictionary = B.CARDS[kind]
-		if data.type != "unit" or not data.has("damage"): continue
+		if data.type != "unit" or not data.has("damage") or data.has("suicide_blast"): continue
 		var u: Dictionary = m.spawn_unit(0,2,kind,Vector2(650,390))
 		var foe: Dictionary = m.spawn_unit(1,2,"knight",Vector2(680,390))
 		animation.observe(m)

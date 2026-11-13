@@ -158,19 +158,19 @@ static func run(t) -> void:
 	t.check(r.run.gold == Catalog.GOLD_BY_TIER[Catalog.FLOOR_TIER[0]],"a floor-1 win pays %d gold" % Catalog.GOLD_BY_TIER[1])
 	t.check(r.win_gold(0,true) == int(Catalog.GOLD_BY_TIER[1]*Catalog.ELITE_GOLD_MULT),"an elite win pays 1.5x")
 	# Gates are SS in every mode; in a run our gates and lord keep their wounds until mended in the shop.
-	t.check(B.GATE_HP == B.tier_value("hp","SS") and Battle.new(1).gates[0][0] == B.GATE_HP,"gates have SS health in every battle")
+	t.check(B.GATE_HP == B.tier_value("hp","A") and Battle.new(1).gates[0][0] == B.GATE_HP,"gates have A health in every battle")
 	var wound_run = Rogue.new()
 	wound_run.save_path = "user://rogue-wound-test.json"
 	wound_run.begin("harvest","lion",31)
 	var hurt: Battle = wound_run.make_battle()
-	hurt.gates[0] = [B.GATE_HP,0.0,1200.0,B.GATE_HP,B.GATE_HP]
+	hurt.gates[0] = [B.GATE_HP,0.0,600.0,B.GATE_HP,B.GATE_HP]
 	hurt.lords[0].hp = 700.0
 	wound_run.record_wounds(hurt)
 	wound_run.settle(true)
 	wound_run.skip_reward()
 	wound_run.leave_shop()
 	var next: Battle = wound_run.make_battle()
-	t.check(next.gates[0] == [B.GATE_HP,0.0,1200.0,B.GATE_HP,B.GATE_HP] and next.lords[0].hp == 700.0,"gate and lord damage carry into the next battle")
+	t.check(next.gates[0] == [B.GATE_HP,0.0,600.0,B.GATE_HP,B.GATE_HP] and next.lords[0].hp == 700.0,"gate and lord damage carry into the next battle")
 	t.check(next.gates[1][1] == B.GATE_HP,"the foe's gates start whole")
 	var fallen: Battle = wound_run.make_battle()
 	fallen.lords[0].hp = 0.0
@@ -178,10 +178,10 @@ static func run(t) -> void:
 	t.check(wound_run.run.lord_hp == B.lord_data("lion").hp*Catalog.FALLEN_LORD_SHARE,"a lord down at victory comes back at 25%")
 	wound_run.run.lord_hp = 700.0
 	wound_run.open_shop()
-	wound_run.run.gold = 50
+	wound_run.run.gold = 10
 	var missing: float = wound_run.gate_missing()
 	wound_run.repair_gates()
-	t.check(wound_run.run.gold == 0 and is_equal_approx(wound_run.gate_missing(),missing-50*Catalog.GATE_HP_PER_GOLD),"short of gold, repairs spend what there is")
+	t.check(wound_run.run.gold == 0 and is_equal_approx(wound_run.gate_missing(),missing-10*Catalog.GATE_HP_PER_GOLD),"short of gold, repairs spend what there is")
 	wound_run.run.gold = 1000
 	var cost: int = wound_run.repair_cost()
 	wound_run.repair_gates()
@@ -211,41 +211,41 @@ static func run(t) -> void:
 	t.check(r.run.deck[3] == new_card and r.run.phase == "shop","the picked card replaces the chosen slot, then the shop opens")
 	t.check(r.run.shop.size() == 3 and r.run.shop.map(func(k: String) -> int: return Catalog.RELICS[k].price) == Catalog.RELIC_PRICES,"the shop offers one relic at each price")
 	# Card upgrades: 50 / 100 / 150 gold, one random stat one tier up, at most +3, never past SS.
-	r.run.deck[0] = "militia"
+	r.run.deck[0] = "bandit"
 	var gold_before: int = r.run.gold
-	r.upgrade("militia")
-	var ups: Dictionary = r.run.upgrades.militia
+	r.upgrade("bandit")
+	var ups: Dictionary = r.run.upgrades.bandit
 	t.check(r.run.gold == gold_before-50 and Upgrades.level(ups) == 1,"+1 costs 50 gold and raises one stat")
 	r.run.gold = 1000
-	r.upgrade("militia")
-	r.upgrade("militia")
-	t.check(r.run.gold == 1000-100-150 and Upgrades.level(r.run.upgrades.militia) == 3,"+2 costs 100, +3 costs 150")
-	t.check(not r.upgrade_error("militia").is_empty(),"no +4")
+	r.upgrade("bandit")
+	r.upgrade("bandit")
+	t.check(r.run.gold == 1000-100-150 and Upgrades.level(r.run.upgrades.bandit) == 3,"+2 costs 100, +3 costs 150")
+	t.check(not r.upgrade_error("bandit").is_empty(),"no +4")
 	r.run.deck[1] = "sacrifice"
 	t.check(r.upgrade_error("sacrifice") == "沒有可強化的能力","a card with no upgradeable stat cannot be upgraded")
 	t.check(Upgrades.options("knight",{"hp":20}).find("hp") < 0,"no stat goes past SS")
 	t.check(Upgrades.shifted("hp",1500.0,5) == B.TIERS.hp[Upgrades.CAP],"shifting stops at SS")
-	# Upgrades reach the battle: deployed militia carry the raised stats.
+	# Upgrades reach the battle: deployed bandit carry the raised stats.
 	r.leave_shop()
 	var upgraded: Battle = r.make_battle()
 	upgraded.units.clear()
-	upgraded.deploy(0,"militia",Vector2i(2,2))
+	upgraded.deploy(0,"bandit",Vector2i(2,2))
 	var raised: Dictionary = upgraded.units[0]
 	var shown := 0
-	for key: String in r.run.upgrades.militia:
-		var want: float = Upgrades.shifted(key,B.CARDS.militia[key],int(r.run.upgrades.militia[key]))
+	for key: String in r.run.upgrades.bandit:
+		var want: float = Upgrades.shifted(key,B.CARDS.bandit[key],int(r.run.upgrades.bandit[key]))
 		if key == "hp": shown += int(raised.max_hp == want)
 		elif key == "speed": shown += int(upgraded.movement_speed(raised) == want)
 		elif key == "interval": shown += int(upgraded.attack_interval(raised) == want)
 		else: shown += int(raised.get(key,-1.0) == want)
-	t.check(shown == r.run.upgrades.militia.size(),"every upgraded stat shows up in battle: "+str(r.run.upgrades.militia))
-	var text: String = r.desc("militia")
-	t.check(text.contains("強化 +3") and text != B.card_description("militia"),"card text shows the upgraded numbers")
-	var shown_hp: bool = not r.run.upgrades.militia.has("hp") or text.contains(B.number(Upgrades.shifted("hp",B.CARDS.militia.hp,int(r.run.upgrades.militia.hp))))
+	t.check(shown == r.run.upgrades.bandit.size(),"every upgraded stat shows up in battle: "+str(r.run.upgrades.bandit))
+	var text: String = r.desc("bandit")
+	t.check(text.contains("強化 +3") and text != B.card_description("bandit"),"card text shows the upgraded numbers")
+	var shown_hp: bool = not r.run.upgrades.bandit.has("hp") or text.contains(B.number(Upgrades.shifted("hp",B.CARDS.bandit.hp,int(r.run.upgrades.bandit.hp))))
 	t.check(shown_hp,"upgraded health appears in the card text")
 	upgraded.units.clear()
-	upgraded.deploy(1,"militia",Vector2i(6,2))
-	t.check(upgraded.units[0].max_hp == B.CARDS.militia.hp or not r.run.upgrades.militia.has("hp"),"the foe's militia are not upgraded")
+	upgraded.deploy(1,"bandit",Vector2i(6,2))
+	t.check(upgraded.units[0].max_hp == B.CARDS.bandit.hp or not r.run.upgrades.bandit.has("hp"),"the foe's bandit are not upgraded")
 	var rain_battle := Battle.new(1,[],[],"lion","bandit_chief")
 	rain_battle.card_upgrades[0] = {"rain":{"radius":1}}
 	t.check(Upgrades.spell_data("rain",{"radius":1}).radius == B.TIERS.radius[B.TIERS.radius.find(B.CARDS.rain.radius)-1],"a spell's upgraded radius")

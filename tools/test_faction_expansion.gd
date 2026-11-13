@@ -5,7 +5,7 @@ const DS = preload("res://deck_store.gd")
 
 static func run(t: SceneTree) -> void:
 	for faction: String in B.FACTIONS:
-		t.check(B.CARDS.keys().filter(func(k: String) -> bool: return B.card_faction(k) == faction and not B.CARDS[k].get("summon_only",false)).size() == {"":14,"normal":15,"dark":15,"magic":15,"beast":8}[faction],"faction card count: "+faction)
+		t.check(B.CARDS.keys().filter(func(k: String) -> bool: return B.card_faction(k) == faction and not B.CARDS[k].get("summon_only",false)).size() == {"":11,"normal":33,"dark":33,"magic":22,"beast":14}[faction],"faction card count: "+faction)
 	for lord: String in B.LORDS:
 		var expected: int = B.CARDS.keys().filter(func(k: String) -> bool: return not B.CARDS[k].get("summon_only",false) and not B.CARDS[k].get("unreleased",false) and B.card_faction(k) in ["",B.lord_faction(lord)] and not B.is_home_card(k,lord)).size()
 		t.check(DS.pool(lord).size() == expected,"lord rotating pool: "+lord)

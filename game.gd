@@ -737,7 +737,7 @@ func actor_rect(kind: String) -> Rect2:
 	if kind == "corpse_giant": return fitted_rect(art(kind).get_size(),Rect2(-52,-85,104,104),true)
 	if kind == "lord_adventure": return fitted_rect(get_adventure_frame(0,0).get_size(),Rect2(-57,-75,114,102),true)
 	if kind.begins_with("lord_"): return fitted_rect(art(kind).get_size(),Rect2(-47,-67,94,94),true)
-	if kind in ["farm","mill","tower","scarecrow","grave","bonewall","barricade","crystal","catapult","watchtower","mass_grave","blood_tower"]: return fitted_rect(art(kind).get_size(),Rect2(-45,-39,90,78),true)
+	if kind in ["catapult"] or B.CARDS.get(kind,{}).get("type","") == "building": return fitted_rect(art(kind).get_size(),Rect2(-45,-39,90,78),true)
 	var width := 112.0 if kind in ["ox","ram"] else 80.0
 	return fitted_rect(art(kind).get_size(),Rect2(-width/2,-63,width,80),true)
 
@@ -2204,7 +2204,7 @@ func card_description(kind: String) -> String:
 func help_columns() -> Array[String]:
 	return [
 		"[b]選牌與放置[/b]\n1–4 選手牌，F 選常駐牌；點卡再點戰場，或拖曳放置。右鍵取消選牌。Esc 取消選牌或切換暫停。\n空白鍵暫停；暫停或結束後按 R 重玩。F11 切換全螢幕。\n\n[b]牌組與領主[/b]\n選一位領主與 8 張輪轉牌，另有一張常駐經濟牌。依領主陣營使用經典、黑暗、魔法與中立牌。\n領主由 AI 移動防守；按 Q 發動技能，費用與效果見技能按鈕及圖鑑。\n\n[b]種田與防守[/b]\n農田自己產金幣；農民從田後方出發，順路耕田加速並回血。相同建築覆蓋自己的舊建築可補滿生命。\n部隊只往前走，不追身後範圍外的敵人；城牆不反擊，靠領主、部隊與建築防守。",
-		"[b]一日戰役[/b]\n上方日晷的太陽走完一天：上午；%d 分鐘正午，金幣與冷卻 ×1.5；%d 分鐘黃昏，×2。\n%d 分鐘入夜：×%d，雙方城牆自行朽壞，每分鐘加倍。\n%d 分鐘天亮仍未分勝負，領地較大的一方獲勝。肉鴿模式不入夜，改在 %d 分鐘比城牆血量。\n\n[b]破門與勝負[/b]\n建築與部隊限己方領地：建築、城牆周圍八格先佔先得，失去所有己方建築覆蓋就釋出。城牆損毀後，敵兵直接穿過缺口，不需拆除殘垣。\n任何敵兵走進家門就輸。\n\n[b]觀戰模式[/b]\n開戰前調整雙方牌組與領主（預設隨機），AI 出牌；1–4 切換 ×1／×2／×4／×8，＋／－ 逐級調速。" % [int(B.RAMP_1/60),int(B.RAMP_2/60),int(B.NIGHT_START/60),int(B.NIGHT_GOLD),int(B.DAWN/60),int(preload("res://roguelike_catalog.gd").TIME_LIMIT/60)]
+		"[b]一日戰役[/b]\n上方日晷的太陽走完一天：白天 3 分鐘（正常）；03:00 正午（×1.5）；04:30 黃昏（×2）。\n%d 分鐘入夜（×%d，雙方城牆持續掉血，每分鐘加倍）。\n%d 分鐘天亮仍未分勝負，領地較大的一方獲勝。肉鴿模式不入夜，改在 %d 分鐘比城牆血量。\n\n[b]破門與勝負[/b]\n建築與部隊限己方領地：建築、城牆周圍八格先佔先得，失去所有己方建築覆蓋就釋出。城牆損毀後，敵兵直接穿過缺口，不需拆除殘垣。\n任何敵兵走進家門就輸。\n\n[b]觀戰模式[/b]\n開戰前調整雙方牌組與領主（預設隨機），AI 出牌；1–4 切換 ×1／×2／×4／×8，＋／－ 逐級調速。" % [int(B.NIGHT_START/60),int(B.NIGHT_GOLD),int(B.DAWN/60),int(preload("res://roguelike_catalog.gd").TIME_LIMIT/60)]
 	]
 
 func show_help() -> void:

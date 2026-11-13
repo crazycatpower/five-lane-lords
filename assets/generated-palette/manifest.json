@@ -23,11 +23,29 @@
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/arcane_tower.png"
 	},
+	"arquebusier": {
+		"revision": "team-material-v2",
+		"sha256": "5d886a3d0eee5ec004fbeb3affddcb8c045013424e59eaa9024f25e23ef6cc09",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/arquebusier.png"
+	},
 	"artificer": {
 		"revision": "team-material-v2",
 		"sha256": "fe0f88bef9f4492daa76e6ab6de21976bea9f98f15fc63039a8082e3b60715b3",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/artificer.png"
+	},
+	"assassin": {
+		"revision": "team-material-v2",
+		"sha256": "49607fecbdfb2a3aa2f605df3deee12e98dcff23bbfda95c5f883c3717fd007f",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/assassin.png"
+	},
+	"astrolabe_surveyor": {
+		"revision": "team-material-v2",
+		"sha256": "cff3eba3515e648668e7f5f6919af2c9fa1d8c9c7004c7a52fc67449a30c8169",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/astrolabe_surveyor.png"
 	},
 	"axe_thrower": {
 		"revision": "team-material-v2",
@@ -53,6 +71,18 @@
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/bearded_imp.png"
 	},
+	"beekeeper": {
+		"revision": "team-material-v2",
+		"sha256": "04db9ec9e13427b7420ac09b7d7e98734e221b6d264ddea37a4d806399af0f9f",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/beekeeper.png"
+	},
+	"bellbearer": {
+		"revision": "team-material-v2",
+		"sha256": "9e2e5c723e7651512d66801b975c81103f621b7317c9512d52016b95bd286b83",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/bellbearer.png"
+	},
 	"belly_eye": {
 		"revision": "team-material-v2",
 		"sha256": "55db9ac5896bf1f6470715dc7636037e2a6872407a1fa2586efc27b68c18556b",
@@ -71,17 +101,41 @@
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/blink_blade.png"
 	},
+	"blood_altar": {
+		"revision": "team-material-v2",
+		"sha256": "c99ecf2f9a03090dd3ad4d3693be92a2912e8a01fb0a1814adc84be02f84907d",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/blood_altar.png"
+	},
+	"blood_attendant": {
+		"revision": "team-material-v2",
+		"sha256": "b3e96967cc52aea78e02fd5c5f2ac754da87bff102790aa921145cdb61e6b82f",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/blood_attendant.png"
+	},
 	"blood_tower": {
 		"revision": "team-material-v2",
 		"sha256": "ba2aa1e46b88ea17afd7e7faa27d2b5edd655fb99ff48b8c7372ca62cd918aff",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/blood_tower.png"
 	},
+	"bog_troll": {
+		"revision": "team-material-v2",
+		"sha256": "eea8466aaa6101d7f62265803bce162f6dafc376ead07b2b72a4c8bed5c91ea1",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/bog_troll.png"
+	},
 	"bonewall": {
 		"revision": "team-material-v2",
 		"sha256": "51ada8d64139a4e516b09fada2b4fb097edbfa6a448d76f1275c162ec7a7af37",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/bonewall.png"
+	},
+	"borrowed_bones": {
+		"revision": "team-material-v2",
+		"sha256": "f0a47b79c82368b754a9afd9e009f506fedb353727440edf1d6efa665af829c8",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/borrowed_bones.png"
 	},
 	"castle_red": {
 		"revision": "team-material-v2",
@@ -131,6 +185,12 @@
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/corpse_giant.png"
 	},
+	"corpse_stitcher": {
+		"revision": "team-material-v2",
+		"sha256": "d0b40002d8328e4a9e493409579b3a9fe8826cc33b18b5365e466b03d87d4ea2",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/corpse_stitcher.png"
+	},
 	"crest": {
 		"revision": "team-material-v2",
 		"sha256": "abc1f26850533b820446a82a04a8fcd5a95d51d55a41a356f8f05a5b325a7f92",
@@ -155,6 +215,18 @@
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/dark_wizard.png"
 	},
+	"disgraced_lancer": {
+		"revision": "team-material-v2",
+		"sha256": "2ee8b31dec5289c472ccf65b0fa05d58b809ea20955f4f6d6f9a369df99ca45a",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/disgraced_lancer.png"
+	},
+	"dog_cannon": {
+		"revision": "team-material-v2",
+		"sha256": "c71c2121c2136d6f1707c6b7577eb3fe8c9aba4cf7344dbd816942b3f5fa0927",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/dog_cannon.png"
+	},
 	"dread_howl": {
 		"revision": "team-material-v2",
 		"sha256": "ce5177039b5fa69cc69337a3bba167e208a5db72e7dd6647025e8992f6707444",
@@ -173,16 +245,34 @@
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/eyewing_dragon.png"
 	},
+	"field_smithy": {
+		"revision": "team-material-v2",
+		"sha256": "19cd6bf33b371482c6080ca085b769551a19254a79502d7489c0e3ab02939b41",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/field_smithy.png"
+	},
 	"fishbeak": {
 		"revision": "team-material-v2",
 		"sha256": "cc1505f33575b9f1961604cca92ae3fe7340013580da1bc991cc63bf1a14da65",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/fishbeak.png"
 	},
+	"funeral_cottage": {
+		"revision": "team-material-v2",
+		"sha256": "2be255129623f79a224bcbb697c3baba935fbe30a5ab9f3498e8a2050c7c77d9",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/funeral_cottage.png"
+	},
+	"funeral_grenadier": {
+		"revision": "team-material-v2",
+		"sha256": "be453ce9e120bd7703a5ec738bb3491328a26b37d96f83a1905f3c7fb6bd6029",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/funeral_grenadier.png"
+	},
 	"gate": {
 		"revision": "team-material-v2",
 		"sha256": "a86e87ab44e0a823c9d8a2c7d4044cbb5cabf7b53c7f79cd589e8988451fdd8b",
-		"size": 0,
+		"size": 0.0,
 		"source": "res://assets/manuscript-v1/lane-wall.png"
 	},
 	"gate_broken": {
@@ -190,6 +280,12 @@
 		"sha256": "af45d3370c0660905f1fb9608e017b31f14b056900da1e50fdd7a820c7bc7eba",
 		"size": 0.0,
 		"source": "res://assets/manuscript-v1/lane-wall-broken.png"
+	},
+	"gatebreaker": {
+		"revision": "team-material-v2",
+		"sha256": "133399d7ec132b51870b5a40ebdf5f1a60fb4b3b85e1f1963f8fe40ca53c496b",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/gatebreaker.png"
 	},
 	"ghoul": {
 		"revision": "team-material-v2",
@@ -209,11 +305,23 @@
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/glutton_nest_closed.png"
 	},
+	"granary": {
+		"revision": "team-material-v2",
+		"sha256": "4c0ae16c9f0feac81d63dca9d7888b947855f615ed287a0877ef640730b694e1",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/granary.png"
+	},
 	"grave": {
 		"revision": "team-material-v2",
 		"sha256": "5a1a4457183d0df7441719b4441bf420ae9d8baed917b15d6cd358a161ed7fd0",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/grave.png"
+	},
+	"grave_exchange": {
+		"revision": "team-material-v2",
+		"sha256": "92609f44639a576aec984a16ddb7b906b77b8f82ceca1f760a9e387e728c23ac",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/grave_exchange.png"
 	},
 	"guard": {
 		"revision": "team-material-v2",
@@ -227,6 +335,12 @@
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/healer.png"
 	},
+	"hook_collector": {
+		"revision": "team-material-v2",
+		"sha256": "839ce2e48da611c6a56c3bb630ba677b562258a7770a419c8b511fd89359505d",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/hook_collector.png"
+	},
 	"hooknose_flyer": {
 		"revision": "team-material-v2",
 		"sha256": "34aa6ac5e4d0104a34bb6ee396edbc8cabe55cee4b5b6db41f15cebcff2cddae",
@@ -238,6 +352,12 @@
 		"sha256": "1e90cf682f13ff80f4ca8dd9360ecfd67bb62d97885fdf964ca81cc2837d5c73",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/hunter.png"
+	},
+	"imp_bomb_runner": {
+		"revision": "team-material-v2",
+		"sha256": "70a9c97a93b6c3334a7c5c15053ec4ab95cd103fb6cb1e8a40b8f25c154c14e2",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/imp_bomb_runner.png"
 	},
 	"knight": {
 		"revision": "team-material-v2",
@@ -719,6 +839,12 @@
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/lord-vampire.png"
 	},
+	"macebreaker": {
+		"revision": "team-material-v2",
+		"sha256": "a97109982e76cb31a946f9591300dd29102068ce6848f37aef955df35b6d43ae",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/macebreaker.png"
+	},
 	"mana_spring": {
 		"revision": "team-material-v2",
 		"sha256": "b34900e648f097d9839fb87f74de2502abefa013c6f89c4178b6cef18c537af5",
@@ -755,6 +881,36 @@
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/mob.png"
 	},
+	"monster_hatchery": {
+		"revision": "team-material-v2",
+		"sha256": "ebf6abca70588728ac5b0823c46f649532910c1793c6de1a0fcddade1671e446",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/monster_hatchery.png"
+	},
+	"monster_hunter": {
+		"revision": "team-material-v2",
+		"sha256": "89660c275bbb5563c4626cb88fef4dece2c5c384af9e09711c39932d92c9fe66",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/monster_hunter.png"
+	},
+	"mourning_maid": {
+		"revision": "team-material-v2",
+		"sha256": "c1407ba5b5ce12e13445551534bc4c230e39a8dcbbe348462dab3c9081457e16",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/mourning_maid.png"
+	},
+	"mourning_shroud": {
+		"revision": "team-material-v2",
+		"sha256": "aa2eb74350ae81470d8c3a31126b1be5e237e1e7401d7f48987f08a5ec086b23",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/mourning_shroud.png"
+	},
+	"mule_cart": {
+		"revision": "team-material-v2",
+		"sha256": "f91aca98387593cc9a90aefe8981df251b48160e097405b552ed74e0e2d72105",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/mule_cart.png"
+	},
 	"necromancer": {
 		"revision": "team-material-v2",
 		"sha256": "54d3c3145e308976e15b9a1dbe4dbde7b5edfae150146223428b58f3bcd5f608",
@@ -767,11 +923,41 @@
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/net_hunter.png"
 	},
+	"oathless_imp": {
+		"revision": "team-material-v2",
+		"sha256": "6e00b8bd0825e6b30a6328a4e8589f40f7037d5dce6b1d57534d66536f5af34d",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/oathless_imp.png"
+	},
+	"observatory": {
+		"revision": "team-material-v2",
+		"sha256": "85afa44647fdd4774f8f12bf38dc56c6e590d679bde46c86674250c741b0e26c",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/observatory.png"
+	},
+	"orrery_walker": {
+		"revision": "team-material-v2",
+		"sha256": "ea4c678b3d169b63c7a005eee919cb529e6d7d4e48ea5ae21164957b686b378c",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/orrery_walker.png"
+	},
+	"ossuary": {
+		"revision": "team-material-v2",
+		"sha256": "3a8b12527563cdf9b84898ba8edf5dca7cb329dfc0e544394a7ec9d678811290",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/ossuary.png"
+	},
 	"ox": {
 		"revision": "team-material-v2",
 		"sha256": "ddf95614796724f27e553c9de0187ea0bc94b614095ce0552b82e607b31c6f19",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/ox.png"
+	},
+	"pallbearer": {
+		"revision": "team-material-v2",
+		"sha256": "24c3bb02e482ffd67ed6ad37b800de4b0dd7b7ea27dc34ba5b499e30d7a52fe4",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/pallbearer.png"
 	},
 	"phase_rider": {
 		"revision": "team-material-v2",
@@ -784,6 +970,12 @@
 		"sha256": "e39dff40c00d3d81a83c2c91e9b54c917180cba560c341c77ee35b29ec3d6695",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/plague.png"
+	},
+	"powder_barrel": {
+		"revision": "team-material-v2",
+		"sha256": "3b4b353e48efd800b964978c0748f4e1725b85eedbe57a99408f1efc958c3377",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/powder_barrel.png"
 	},
 	"ram": {
 		"revision": "team-material-v2",
@@ -803,11 +995,29 @@
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/reaper.png"
 	},
+	"renegade_artificer": {
+		"revision": "team-material-v2",
+		"sha256": "c9f0cdf2348b38b2ee8bbdbf6e806045a9a2524f42099667d44f84a3a1c8f507",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/renegade_artificer.png"
+	},
 	"rolling_boulder": {
 		"revision": "team-material-v2",
 		"sha256": "a28ada209920767fa763aeb2199d9e2ced921c9e50bb73f2e8cb32c67d8fb043",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/rolling_boulder.png"
+	},
+	"runaway_thrall": {
+		"revision": "team-material-v2",
+		"sha256": "e24a8c0c810db2e7a8044196f5f678d7ece7e88287d4af580dfae307dc7f2db6",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/runaway_thrall.png"
+	},
+	"rune_workshop": {
+		"revision": "team-material-v2",
+		"sha256": "899299b68024b5ee8aee6f1da7c5ff4ce1a05832147044fe6e2c6b4c65ebc88b",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/rune_workshop.png"
 	},
 	"sacrifice": {
 		"revision": "team-material-v2",
@@ -821,11 +1031,35 @@
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/scarecrow.png"
 	},
+	"seal_bearer": {
+		"revision": "team-material-v2",
+		"sha256": "7eca3bda6391d90c1ebd06d1037db092f928dd0eeb66dd6dfd432347c75ed043",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/seal_bearer.png"
+	},
+	"sealed_coffin": {
+		"revision": "team-material-v2",
+		"sha256": "2c2552f1ca969b6c476570acf53aa0a4fd3ff920dc1352047023dcdadc590962",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/sealed_coffin.png"
+	},
 	"shieldguard": {
 		"revision": "team-material-v2",
 		"sha256": "e8e0aee12ee396f67db38b57aac470eb2f52301ffed4206df791ea1b7ac86324",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/shieldguard.png"
+	},
+	"shroud_arbalist": {
+		"revision": "team-material-v2",
+		"sha256": "6f060c912e62d7c4ce1e91d9a5abe22d8bc5f039ffc84f7379d8c490e5f99874",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/shroud_arbalist.png"
+	},
+	"sigil_weaver": {
+		"revision": "team-material-v2",
+		"sha256": "769acc2c8479f9c04af055fa480e49811cfe949f4b4803683fb48362af05705d",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/sigil_weaver.png"
 	},
 	"skeleton": {
 		"revision": "team-material-v2",
@@ -833,11 +1067,29 @@
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/skeleton.png"
 	},
+	"sleepless_belfry": {
+		"revision": "team-material-v2",
+		"sha256": "3aa8d648996cb687ce6b4beae87b3f99d22de0bb284094b9648fa37771bee873",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/sleepless_belfry.png"
+	},
+	"soul_well": {
+		"revision": "team-material-v2",
+		"sha256": "b3f0cc48687b630f72f05e8fa4b4657ccfe5ad2473f685ea88ba8b37d5580754",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/soul_well.png"
+	},
 	"spearbow": {
 		"revision": "team-material-v2",
 		"sha256": "a3493881af632dc739f5f904dd78c0cd47e7b60e56cf37a4ce6ce3cb9fd23a07",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/militia-red.png"
+	},
+	"spellbreaker": {
+		"revision": "team-material-v2",
+		"sha256": "a16656f0ba2754837bb6100c1fff6ec70392f44b8889412bb340bb903510932b",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/spellbreaker.png"
 	},
 	"summon_trap": {
 		"revision": "team-material-v2",
@@ -868,6 +1120,30 @@
 		"sha256": "4976d6450247d438955ed3c790c71932265b447357c09366246eaf7fc5ab1774",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/tower.png"
+	},
+	"tusk_boar": {
+		"revision": "team-material-v2",
+		"sha256": "8b354e8af85e86b50421097067b44ce2cdc4d30ab2d4547f79006e8d01bf80d5",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/tusk_boar.png"
+	},
+	"twin_gambler": {
+		"revision": "team-material-v2",
+		"sha256": "f32781e2715a2857dad19ee746b83209ebb03f43ad074fdfff45aede1fc477f1",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/twin_gambler.png"
+	},
+	"vampire_hunter": {
+		"revision": "team-material-v2",
+		"sha256": "2f4dac903b9cab6fb59bbaeb549b83eb6bb96532eb10b240026849afc2d854f4",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/vampire_hunter.png"
+	},
+	"war_lodge": {
+		"revision": "team-material-v2",
+		"sha256": "505613cf7b828f6b6468d735be009a9aadee3c600010918f99dbb18ac0e31faf",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/war_lodge.png"
 	},
 	"watchtower": {
 		"revision": "team-material-v2",

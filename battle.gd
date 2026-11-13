@@ -3,6 +3,8 @@ const Windup = preload("res://attack_windup.gd")
 const Frontier = preload("res://frontier_cards.gd")
 const Faction = preload("res://faction_cards.gd")
 const GluttonNest = preload("res://glutton_nest.gd")
+const Expansion = preload("res://expansion_cards.gd")
+const ExpansionMore = preload("res://expansion_more.gd")
 const Monster = preload("res://monster_cards.gd")
 const Upgrades = preload("res://card_upgrades.gd")
 const DarkSorcery = preload("res://dark_sorcery.gd")
@@ -314,6 +316,7 @@ func play_check(team: int, slot: int, pos: Vector2) -> Refusal:
 		if not lane in active_lanes or pos.x < L.FIELD_FRAME.position.x or pos.x > L.FIELD_FRAME.end.x:
 			return Refusal.OFF_GRID
 		if not Faction.play_error(self,team,kind,pos).is_empty(): return Refusal.OFF_GRID
+		if not ExpansionMore.play_error(self,team,kind,pos).is_empty(): return Refusal.OFF_GRID
 		return Refusal.OK
 	var cell := cell_at(pos)
 	if cell.x < 0 or not cell.y in active_lanes: return Refusal.OFF_GRID
@@ -478,10 +481,13 @@ func damage(target: Dictionary, amount: float, team: int, kind: String, source: 
 	if not sacrifice:
 		amount *= 1.0-Arcane.resonance(self,target)
 		if target.get("armor",0.0) > 0 and not B.CARDS.get(source.get("kind",""),{}).get("ignore_armor",false): amount = maxf(1.0,amount-target.armor)
+		amount = Expansion.absorb(self,target,amount,source)
+		amount = ExpansionMore.absorb(target,amount,kind)
 		amount = Faction.absorb(self,target,amount)
 		if amount <= 0: return
 	var dealt := minf(amount,target.hp)
 	target.hp -= amount
+	if not sacrifice: ExpansionMore.after_hit(self,target,dealt,source)
 	if not sacrifice:
 		LordExpansion.drain(self,source,dealt,target.pos)
 		Arcane.blink(self,target)
@@ -601,6 +607,8 @@ func resolve_deaths() -> void:
 			event("boneburst",dead.pos,dead.team)
 			continue
 		Faction.on_death(self,dead)
+		Expansion.on_death(self,dead)
+		ExpansionMore.on_death(self,dead)
 		for b: Dictionary in buildings:
 			if b.hp > 0 and b.kind == "grave" and b.cell.y == dead.lane:
 				link(dead.pos,b.pos,b.team,"soul")
@@ -759,13 +767,16 @@ func lord_target(lord: Dictionary) -> Dictionary:
 func attack(u: Dictionary, target: Dictionary) -> void:
 	Arcane.reveal(self,u)
 	var data: Dictionary = B.CARDS[u.kind]
-	var amount: float = u.get("damage",data.damage)
+	var amount: float = ExpansionMore.modify_attack(self,u,target,Expansion.attack_damage(self,u,target,u.get("damage",data.damage)))
 	if u.kind == "ox":
 		if not u.charged:
 			amount = B.OX_CHARGE
 			u.charged = true
 			if not target.has("cell"): target.pos.x += u.face*B.OX_KNOCKBACK
 		if target.has("cell"): amount *= B.OX_BUILDING_BONUS
+	if ExpansionMore.attack(self,u,target,data):
+		u.cd = attack_interval(u)
+		return
 	if data.has("stun_on_hit"): Arcane.area_hit(self,u,target.pos)
 	elif data.get("pierce",false): Arcane.shoot_piercing_arrow(self,u,target)
 	elif data.get("projectile",false): shoot(u,target,amount)
@@ -868,6 +879,8 @@ func step(dt: float) -> void:
 	update_zones(dt)
 	Faction.update(self,dt)
 	Monster.update(self,dt)
+	Expansion.update(self,dt)
+	ExpansionMore.update(self,dt)
 	update_projectiles(dt)
 	for lord: Dictionary in lords:
 		if lord_active[lord.team]:
@@ -984,7 +997,7 @@ func movement_speed(u: Dictionary) -> float:
 		if index >= 0: base = B.TIERS.speed[maxi(B.tier_index("S"),index-steps)] # one tier per buff, never past S
 	if u.get("slow_left",0.0) > 0:
 		base *= 0.5
-	return base*Faction.speed_factor(self,u)
+	return base*Faction.speed_factor(self,u)*ExpansionMore.speed_factor(u)
 
 func attack_interval(u: Dictionary) -> float:
 	var data: Dictionary = B.CARDS[u.kind]
@@ -999,7 +1012,7 @@ func attack_interval(u: Dictionary) -> float:
 
 # Speed / attack-speed buffs on this troop; each one is a tier (producer 2026-11-05: all buffs stack).
 func buff_steps(u: Dictionary) -> int:
-	var steps := 0
+	var steps := 1 if u.get("expansion_haste_until",0.0) > elapsed else 0
 	if u.kind != "drummer":
 		var beats: int = team_drums[u.team].filter(func(t: float) -> bool: return t > elapsed).size()
 		steps += maxi(beats,1 if team_drum_until[u.team] > elapsed else 0) # tests may set team_drum_until directly
@@ -1039,6 +1052,7 @@ func update_unit(u: Dictionary, dt: float) -> bool:
 		Windup.cancel(u)
 		return false
 	var data: Dictionary = B.CARDS[u.kind]
+	if ExpansionMore.update_unit(self,u,data,dt): return false
 	if u.kind == "necromancer": summon_skeletons(u,data,dt)
 	if u.kind == "drummer":
 		u.drum_cd = u.get("drum_cd",10.0)-dt
@@ -1069,6 +1083,9 @@ func update_unit(u: Dictionary, dt: float) -> bool:
 	if u.has("range"): # an upgraded card reaches one tier further
 		reach = data.duplicate()
 		reach.range = u.range
+	if u.get("expansion_range_until",0.0) > elapsed and B.CARDS[u.kind].get("projectile",false):
+		var tier: int = B.TIERS.range.find(reach)
+		if tier > 2: reach = B.TIERS.range[tier-1]
 	var target := choose_target(u,Faction.unit_data(self,u,reach))
 	if not target.is_empty():
 		if Windup.ready(self,u,Windup.target_key(target),dt): attack(u,target)
@@ -1225,7 +1242,10 @@ func march(u: Dictionary, data: Dictionary, dt: float) -> bool:
 			Arcane.area_hit(self,u,Vector2(L.gate_stop(enemy),u.pos.y))
 			u.cd = attack_interval(u)
 			return false
-		var amount: float = u.get("damage",data.damage)
+		if ExpansionMore.gate_attack(self,u,data,enemy):
+			u.cd = attack_interval(u)
+			return false
+		var amount: float = ExpansionMore.gate_amount(self,u,u.get("damage",data.damage))
 		if u.kind == "ox":
 			amount = (B.OX_CHARGE if not u.charged else data.damage)*B.OX_BUILDING_BONUS
 			u.charged = true
@@ -1249,6 +1269,7 @@ func cast_spell(s: Dictionary) -> void:
 		Frontier.launch(self,s)
 		return
 	if Faction.cast(self,s): return
+	if ExpansionMore.cast(self,s): return
 	event("spell",s.pos,s.team,{"card":s.kind,"radius":data.radius})
 	if s.kind == "curse":
 		for u: Dictionary in units: # friend or foe: whoever dies cursed rises as the caster's skeleton
