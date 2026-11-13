@@ -1,0 +1,183 @@
+{
+    "schema":  1,
+    "date":  "2026-11-13",
+    "generator":  "built-in image_gen",
+    "runtime_integrated":  false,
+    "assets":  [
+                   {
+                       "path":  "buildings/dark-ossuary.png",
+                       "category":  "buildings",
+                       "status":  "concept-review",
+                       "bytes":  1563539,
+                       "sha256":  "3a8b12527563cdf9b84898ba8edf5dca7cb329dfc0e544394a7ec9d678811290"
+                   },
+                   {
+                       "path":  "buildings/dark-soul-well.png",
+                       "category":  "buildings",
+                       "status":  "concept-review",
+                       "bytes":  1641706,
+                       "sha256":  "b3f0cc48687b630f72f05e8fa4b4657ccfe5ad2473f685ea88ba8b37d5580754"
+                   },
+                   {
+                       "path":  "buildings/magic-observatory.png",
+                       "category":  "buildings",
+                       "status":  "concept-review",
+                       "bytes":  1575347,
+                       "sha256":  "85afa44647fdd4774f8f12bf38dc56c6e590d679bde46c86674250c741b0e26c"
+                   },
+                   {
+                       "path":  "buildings/magic-rune-workshop.png",
+                       "category":  "buildings",
+                       "status":  "concept-review",
+                       "bytes":  2319910,
+                       "sha256":  "899299b68024b5ee8aee6f1da7c5ff4ce1a05832147044fe6e2c6b4c65ebc88b"
+                   },
+                   {
+                       "path":  "buildings/monster-hatchery.png",
+                       "category":  "buildings",
+                       "status":  "concept-review",
+                       "bytes":  1929787,
+                       "sha256":  "ebf6abca70588728ac5b0823c46f649532910c1793c6de1a0fcddade1671e446"
+                   },
+                   {
+                       "path":  "buildings/monster-war-lodge.png",
+                       "category":  "buildings",
+                       "status":  "concept-review",
+                       "bytes":  2175859,
+                       "sha256":  "505613cf7b828f6b6468d735be009a9aadee3c600010918f99dbb18ac0e31faf"
+                   },
+                   {
+                       "path":  "buildings/normal-granary.png",
+                       "category":  "buildings",
+                       "status":  "concept-review",
+                       "bytes":  2183825,
+                       "sha256":  "4c0ae16c9f0feac81d63dca9d7888b947855f615ed287a0877ef640730b694e1"
+                   },
+                   {
+                       "path":  "buildings/normal-smithy.png",
+                       "category":  "buildings",
+                       "status":  "concept-review",
+                       "bytes":  2247172,
+                       "sha256":  "19cd6bf33b371482c6080ca085b769551a19254a79502d7489c0e3ab02939b41"
+                   },
+                   {
+                       "path":  "garrisons/adventure-garrison.png",
+                       "category":  "garrisons",
+                       "status":  "needs-alpha-cleanup",
+                       "bytes":  2939245,
+                       "sha256":  "baa308f794b9350cb62e915ba0c78dc4c0adf1381578e30edc824647f368053f"
+                   },
+                   {
+                       "path":  "garrisons/harvest-garrison.png",
+                       "category":  "garrisons",
+                       "status":  "needs-alpha-cleanup",
+                       "bytes":  2593370,
+                       "sha256":  "6bcbc59e684d3554a7c43712a96d6e555620426e67aceb8cd356431b6c358344"
+                   },
+                   {
+                       "path":  "garrisons/iron-garrison.png",
+                       "category":  "garrisons",
+                       "status":  "needs-alpha-cleanup",
+                       "bytes":  2357706,
+                       "sha256":  "188cffd5f3c47dbc402454e9a2ec2a2ddbf3532456c092ac3ce7c721ec392c5e"
+                   },
+                   {
+                       "path":  "garrisons/lion-garrison.png",
+                       "category":  "garrisons",
+                       "status":  "concept-review",
+                       "bytes":  2088386,
+                       "sha256":  "25d816c8a49652d839d7ca18edc50402f6e356e8a12be3c2c406bbc6ed472185"
+                   },
+                   {
+                       "path":  "garrisons/mage-garrison.png",
+                       "category":  "garrisons",
+                       "status":  "concept-review",
+                       "bytes":  2223082,
+                       "sha256":  "79237ecb2c1290823daef95ee714086b3963de429c5e1acfbbb24c749c46d680"
+                   },
+                   {
+                       "path":  "garrisons/rune-garrison.png",
+                       "category":  "garrisons",
+                       "status":  "concept-review",
+                       "bytes":  1749903,
+                       "sha256":  "d3a06537492f8f23c2bdbd2f8d8a94059304485f5b75bc4f4db058758976eb9b"
+                   },
+                   {
+                       "path":  "garrisons/underworld-garrison.png",
+                       "category":  "garrisons",
+                       "status":  "concept-review",
+                       "bytes":  2389154,
+                       "sha256":  "563b5e64eb8dcb12505bec7d3f95505f7950ba5d6a56c6b5ae93db3df3f6acf9"
+                   },
+                   {
+                       "path":  "garrisons/vampire-garrison.png",
+                       "category":  "garrisons",
+                       "status":  "concept-review",
+                       "bytes":  2224587,
+                       "sha256":  "81a1c89625c87f332fb7e4488ef45f416804f06985ae1ae7e916448bfa051850"
+                   },
+                   {
+                       "path":  "units/dark-bellbearer.png",
+                       "category":  "units",
+                       "status":  "concept-review",
+                       "bytes":  954990,
+                       "sha256":  "9e2e5c723e7651512d66801b975c81103f621b7317c9512d52016b95bd286b83"
+                   },
+                   {
+                       "path":  "units/dark-shroud-arbalist.png",
+                       "category":  "units",
+                       "status":  "concept-review",
+                       "bytes":  1015764,
+                       "sha256":  "6f060c912e62d7c4ce1e91d9a5abe22d8bc5f039ffc84f7379d8c490e5f99874"
+                   },
+                   {
+                       "path":  "units/magic-astrolabe-surveyor.png",
+                       "category":  "units",
+                       "status":  "concept-review",
+                       "bytes":  1038776,
+                       "sha256":  "cff3eba3515e648668e7f5f6919af2c9fa1d8c9c7004c7a52fc67449a30c8169"
+                   },
+                   {
+                       "path":  "units/magic-sigil-weaver.png",
+                       "category":  "units",
+                       "status":  "concept-review",
+                       "bytes":  919917,
+                       "sha256":  "769acc2c8479f9c04af055fa480e49811cfe949f4b4803683fb48362af05705d"
+                   },
+                   {
+                       "path":  "units/monster-bog-troll.png",
+                       "category":  "units",
+                       "status":  "concept-review",
+                       "bytes":  1630337,
+                       "sha256":  "eea8466aaa6101d7f62265803bce162f6dafc376ead07b2b72a4c8bed5c91ea1"
+                   },
+                   {
+                       "path":  "units/monster-thornback-wyvern.png",
+                       "category":  "units",
+                       "status":  "needs-alpha-cleanup",
+                       "bytes":  2115799,
+                       "sha256":  "743deff31fd0515b9d8146853f00336e375f697e0fee19f73ab82ab513920e42"
+                   },
+                   {
+                       "path":  "units/monster-tusk-boar.png",
+                       "category":  "units",
+                       "status":  "concept-review",
+                       "bytes":  1221985,
+                       "sha256":  "8b354e8af85e86b50421097067b44ce2cdc4d30ab2d4547f79006e8d01bf80d5"
+                   },
+                   {
+                       "path":  "units/normal-beekeeper.png",
+                       "category":  "units",
+                       "status":  "concept-review",
+                       "bytes":  1165010,
+                       "sha256":  "04db9ec9e13427b7420ac09b7d7e98734e221b6d264ddea37a4d806399af0f9f"
+                   },
+                   {
+                       "path":  "units/normal-macebreaker.png",
+                       "category":  "units",
+                       "status":  "concept-review",
+                       "bytes":  997024,
+                       "sha256":  "a97109982e76cb31a946f9591300dd29102068ce6848f37aef955df35b6d43ae"
+                   }
+               ]
+}
