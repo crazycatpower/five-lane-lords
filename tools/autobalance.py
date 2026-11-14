@@ -11,7 +11,7 @@ A card's win rate only counts matches where exactly one side holds it, so mirror
 Draws (time cap) count as half a win. Raw results go to tools/autobalance_runs/ (not committed);
 the summary is written to docs/自動平衡報告.md.
 """
-import argparse, json, math, os, re, subprocess, sys, time
+import argparse, hashlib, json, math, os, re, subprocess, sys, time
 from concurrent.futures import ThreadPoolExecutor
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -101,6 +101,7 @@ def card_details(results, cards):
 def analyse(results, cards):
     stat = {k: [0.0, 0] for k in cards if not k in ["farm", "grave", "crystal"]}  # home cards not in deck pool
     lords = {}
+    factions = {}
     red = [0, 0]
     draws = 0
     lengths = []
@@ -117,6 +118,12 @@ def analyse(results, cards):
             for kind in own - other:
                 stat[kind][0] += score[side]
                 stat[kind][1] += 1
+        fa, fb = r.get("factions", ["unknown", "unknown"])
+        if fa != fb:
+            for side, faction in enumerate((fa, fb)):
+                entry = factions.setdefault(faction, [0.0, 0])
+                entry[0] += score[side]
+                entry[1] += 1
         la, lb = r["lords"]
         if la != lb:
             for side, lord in ((0, la), (1, lb)):
@@ -133,6 +140,7 @@ def analyse(results, cards):
         "skills": sum(skills) / len(skills) if skills else 0,
         "cards": {k: (v[0] / v[1] if v[1] else 0.5, v[1]) for k, v in stat.items()},
         "lords": {k: (v[0] / v[1] if v[1] else 0.5, v[1]) for k, v in lords.items()},
+        "factions": {k: (v[0] / v[1], v[1]) for k, v in factions.items()},
         "red_rate": red[0] / red[1] if red[1] else 0.5,
         "draws": draws,
         "median": lengths[len(lengths) // 2] if lengths else 0,
@@ -185,6 +193,7 @@ def table(analysis, cards, changes, float_costs=None):
     head = (f"{analysis['matches']} 場；平手 {analysis['draws']}；決勝局中位數 {analysis['median']:.0f} 秒；"
             f"紅方勝率 {analysis['red_rate']:.1%}\n\n"
             f"前 3 分鐘每方平均被拆農田 {analysis['farms_lost']:.2f} 塊；第一次破門中位數 {analysis['breach']:.0f} 秒；每方平均發動領主技能 {analysis['skills']:.2f} 次\n\n領主勝率（雙方領主不同時）：{lords}\n")
+    head += "\n陣營勝率（只計跨陣營）：" + ", ".join(f"{k} {rate:.1%}（{n}）" for k, (rate, n) in analysis.get("factions", {}).items()) + "\n"
     notes = ("\n\n統計口徑：出牌次數以持有該牌的每方每場計算（含鏡像對局）；首次出牌時間只平均實際出過牌的樣本。"
              "每金幣傷害＝同兵種傷害總和／實際花費總和，包含部隊、建築、城門傷害。"
              "現有傷害桶按兵種歸類，可能包含軍團成員及領主召喚兵；不能當成單一卡牌的精確投資報酬。"
@@ -196,6 +205,7 @@ def table(analysis, cards, changes, float_costs=None):
 def main():
     global REPORT, RUNS
     p = argparse.ArgumentParser()
+    p.add_argument("--seed-base", type=int, default=1)
     p.add_argument("--total", type=int, default=10000)
     p.add_argument("--rounds", type=int, default=5)
     p.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 2) - 1))
@@ -229,7 +239,10 @@ def main():
     for r in range(args.rounds):
         cards = read_cards()
         t0 = time.time()
-        results = play_round(r, per_round, args.workers, args.cap, seed_base=1 + r * 1_000_000, must_have=args.must_have_lords, must_have_cards=args.must_have_cards)
+        fingerprint = hashlib.sha256(open(BALANCE, "rb").read()).hexdigest()
+        results = play_round(r, per_round, args.workers, args.cap, seed_base=args.seed_base + r * 1_000_000, must_have=args.must_have_lords, must_have_cards=args.must_have_cards)
+        if hashlib.sha256(open(BALANCE, "rb").read()).hexdigest() != fingerprint:
+            raise RuntimeError("balance.gd changed during this batch; results cannot be mixed")
         analysis = analyse(results, cards)
         last = r == args.rounds - 1 and not args.adjust_last
 
@@ -263,6 +276,7 @@ def main():
 
         if allowed is not None: changes = {k: v for k, v in changes.items() if k in allowed}
         section = f"\n## 第 {r + 1} 輪（{time.time() - t0:.0f} 秒）\n\n" + table(analysis, cards, changes, float_costs) + "\n"
+        section += f"\n數值 SHA256：`{fingerprint}`；種子起點 {args.seed_base + r * 1_000_000}。\n"
         print(section, flush=True)
         log.append(section)
         if changes: write_costs(changes)

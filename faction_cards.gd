@@ -155,8 +155,9 @@ static func flee(m, u: Dictionary, dt: float) -> bool:
 
 # A hit landed (after damage). Nets slow the target.
 static func on_hit(m, target: Dictionary, source: Dictionary) -> void:
-	if source.get("kind","") == "net_hunter" and target.has("lane") and not target.get("flying",false) and target.hp > 0:
-		target.slow_left = maxf(target.get("slow_left",0.0),B.CARDS.net_hunter.net_slow)
+	var net_slow: float = B.CARDS.get(source.get("kind",""),{}).get("net_slow",0.0)
+	if net_slow > 0 and target.has("lane") and not target.get("flying",false) and target.hp > 0:
+		target.slow_left = maxf(target.get("slow_left",0.0),net_slow)
 
 # Buildings with their own clock. True = handled.
 static func update_building(m, b: Dictionary, dt: float) -> bool:

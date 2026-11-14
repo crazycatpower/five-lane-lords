@@ -120,11 +120,11 @@ func play(seed_value: int, decks: Array, picks: Array, params: Array, cap: float
 			for kind: String in m.stats[team].used:
 				if not first_play[team].has(kind): first_play[team][kind] = m.elapsed
 		m.events.clear()
-	return {"seed":seed_value,"decks":decks,"lords":picks,"winner":m.winner if m.ended else -1,"t":snappedf(m.elapsed,0.1),"breach":snappedf(m.first_breach,0.1),"farms_lost_early":[m.stats[0].farms_lost_early,m.stats[1].farms_lost_early],"skills":[m.stats[0].get("skills",0),m.stats[1].get("skills",0)],"used":[m.stats[0].used,m.stats[1].used],"card_stats":[card_stats(m,0,decks[0],first_play[0]),card_stats(m,1,decks[1],first_play[1])],"damage_by_kind":[m.stats[0].damage,m.stats[1].damage]}
+	return {"seed":seed_value,"decks":decks,"lords":picks,"factions":[B.lord_faction(picks[0]),B.lord_faction(picks[1])],"ended":m.ended,"rng_state":str(m.rng.state),"elapsed_exact":var_to_str(m.elapsed),"winner":m.winner if m.ended else -1,"t":snappedf(m.elapsed,0.1),"breach":snappedf(m.first_breach,0.1),"farms_lost_early":[m.stats[0].farms_lost_early,m.stats[1].farms_lost_early],"skills":[m.stats[0].get("skills",0),m.stats[1].get("skills",0)],"used":[m.stats[0].used,m.stats[1].used],"card_stats":[card_stats(m,0,decks[0],first_play[0]),card_stats(m,1,decks[1],first_play[1])],"damage_by_kind":[m.stats[0].damage,m.stats[1].damage]}
 
 func card_stats(m: RefCounted, team: int, deck: Array, first: Dictionary) -> Dictionary:
 	var result := {}
-	for kind: String in ["farm"]+deck:
+	for kind: String in [B.home_card(m.lords[team].lord)]+deck:
 		result[kind] = {
 			"plays":m.stats[team].used.get(kind,0),
 			"first_play":first.get(kind,null),

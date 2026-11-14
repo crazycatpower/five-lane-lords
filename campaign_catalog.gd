@@ -56,8 +56,10 @@ static func stages() -> Array:
 		land("fishbeak_shore",4,"魚喙灘","fishbeak_boss",1,Vector2(440,690),["crossroads","imp_market"],["net_hunter"],"史官記：灘上的怪物說不清是魚是鳥，但牠們沒繳過稅。"),
 		land("imp_market",4,"鬍子魔集市","imp_thief",1,Vector2(590,712),["fishbeak_shore","dragon_vale","bone_ford"],["axe_thrower"],"史官記：集市今日特價——你的錢袋。"),
 		land("dragon_vale",4,"龍骨谷","dragon_lord",2,Vector2(750,690),["imp_market","royal_seat"],["catapult","fire"],"史官記：骨刺龍王不說話。牠背上的每一根刺都替牠說了。"),
-		land("royal_seat",5,"王都","iron",2,Vector2(935,480),["lion_keep","clock_tower","blood_chapel","dragon_vale"],[],"史官記：鐵壁領主守著空王座。四座首府都換了顏色，城門才會為人打開。"),
+		land("royal_seat",5,"王都","iron",2,Vector2(935,480),["lion_keep","clock_tower","blood_chapel","dragon_vale"],[],"史官記：鐵壁領主守著空王座。四座首府都換了顏色，城牆才會為人打開。"),
 	]
+	# The first outpost teaches a mixed force, not the roguelike chief's repeated ambush rush.
+	cache[1].enemy_deck = ["bandit","militia","hunter","farmer","healer","scarecrow","barricade","rain"]
 	cache[cache.size()-1].needs = CAPITALS
 	return cache
 

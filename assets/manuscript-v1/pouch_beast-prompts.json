@@ -1,0 +1,7 @@
+{
+  "tool": "built-in image_gen",
+  "date": "2026-11-14",
+  "prompt": "Create ONE production-ready transparent-background 2D game sprite, a medieval manuscript bestiary creature called Pouchbelly Beast. Whole body side view facing RIGHT, huge heavy rounded pale ochre leathery belly sac, small low head with wide blunt mouth, four squat short sturdy legs all anatomically supported, stubby tail curling upward on left, squat ungainly silhouette. No eyes on belly. One broad muted vermilion red fleshy dorsal crest along back clearly marks team color, all other skin ochre/olive-brown, ivory claws. Strange whimsical medieval marginalia monster, not generic fantasy dragon, no wings, no armor or weapons. Match hand-painted medieval illuminated manuscript: fine dark-brown ink contours, restrained crosshatching, earthy tempera pigments, delicate mottled texture INSIDE creature only, flat side view, no photorealism, no 3D, no glossy cartoon. Large belly expresses durable expendable tank. Clean full silhouette readable at 100px. Centered with 8% transparent margin on every side; no text, border, parchment rectangle, ground, shadow, glow, haze or background anywhere. Transparent alpha outside creature, retain all toes and tail. Only one creature.",
+  "cleanup": "Remove all background and halo, preserve exact creature, transparent alpha.",
+  "source": "exec-03c5a81f-03ba-45fb-9962-a987c23e553f.png"
+}

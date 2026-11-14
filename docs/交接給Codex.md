@@ -35,7 +35,7 @@
 - 一日戰役：入夜（`B.NIGHT_START`）後 `multiplier()` 回傳 `B.NIGHT_GOLD`，城牆每秒掉 `night_rate()`；`B.DAWN` 時 `dawn_verdict()` 以 `land()` 定勝負，平手 `winner = -1`。`night_decay = false` 可關掉整套（肉鴿與教學關已關）。讀 `winner` 的地方要能處理 -1。
 - 冒險的領地資料用 `Catalog.stages()` 取得（不是常數）；敵方領主可以是 `B.MINION_LORDS`。能否進攻看 `adventure.unlocked(i)`：鄰居已征服，王都另需四座首府。出征領主是 `adventure.lord`，可選的牌用 `adventure.card_pool()`，不要寫死 `"adventure"`。
 - 畫面演出（轉場、音樂、結算動畫）走 `game.gd` 的 `present()`，用真實時間 `clock`，不讀也不改對局狀態。
-- `tools/test_*.gd` 中 `extends RefCounted` 的是模組，只能由 `quick_test.gd` 載入；直接用 `-s` 執行會在螢幕跳警告視窗。不要整批執行 `tools/test_*.gd`。
+- 僅保留 `quick_test.gd`、`test_art_palette.gd`、`test_startup.gd`、`test_net_match.gd` 四支核心測試；`test_art_palette.gd` 為 `extends RefCounted` 模組，由 `quick_test.gd` 載入，不可直接以 `-s` 執行。勿再為單一改動新增 `test_*.gd` 檔案。
 - 兩個人同時改同一個檔會互相覆蓋。新功能放新模組，`game.gd`、`battle.gd`、`balance.gd` 只留掛鉤。
 
 ## 文件與工具

@@ -728,6 +728,7 @@ func draw_fitted_facing(texture: Texture2D, box: Rect2, face: float, shade: Colo
 	tf()
 
 func actor_rect(kind: String) -> Rect2:
+	if kind == "pouch_beast": return fitted_rect(art(kind).get_size(),Rect2(-58,-62,116,92),true)
 	if B.CARDS.get(kind,{}).get("series","") == "magic" and B.CARDS[kind].type == "unit": return fitted_rect(art(kind).get_size(),Rect2(-65,-95,130,112),true)
 	if kind == "glutton_nest": return fitted_rect(art(kind).get_size(),Rect2(-45,-28,90,62),true)
 	if B.CARDS.get(kind,{}).has("trap"): return fitted_rect(art(kind).get_size(),Rect2(-45,-8,90,46),true)
@@ -855,7 +856,7 @@ func draw_card(kind: String, rect: Rect2, slot: int = -1) -> void:
 	if screen != "battle":
 		# Outside battle the top-left corner shows the card's cooldown (in battle it shows the hand slot).
 		draw_rect(Rect2(rect.position+Vector2(7,7),Vector2(34,20)),Color("725138"))
-		draw_string(font,rect.position+Vector2(7,22),"%ds" % int(data.cooldown),HORIZONTAL_ALIGNMENT_CENTER,34,13,Color("efdfb9"))
+		draw_string(font,rect.position+Vector2(7,22),"%ss" % B.number(data.cooldown),HORIZONTAL_ALIGNMENT_CENTER,34,13,Color("efdfb9"))
 		# Faction tag (經典／黑暗／中立) between the cooldown and the cost.
 		var faction: String = B.card_faction(kind)
 		var tag := Rect2(rect.position+Vector2(s.x*0.5-18,8),Vector2(36,17))
@@ -1078,8 +1079,7 @@ func draw_battle() -> void:
 		field_text(tab.position+Vector2(0,15),ROMAN[model.active_lanes.find(lane)],HORIZONTAL_ALIGNMENT_CENTER,tab.size.x,14,INK)
 	review.draw_pressure(self) # danger glow sits on the ground, under the troops
 	for b: Dictionary in model.buildings:
-		if preload("res://glutton_nest.gd").hidden(b) and b.team != me and not spectating: continue
-		if not preload("res://glutton_nest.gd").hidden(b): team_shadow(b.pos+Vector2(0,30),40,Color(0.25,0.17,0.08))
+		team_shadow(b.pos+Vector2(0,30),40,Color(0.25,0.17,0.08))
 		draw_combat_actor(b.kind,b,b.pos,1.0 if b.team == 0 else -1.0)
 		if b.hp < b.max_hp and not preload("res://glutton_nest.gd").hidden(b): bar(Rect2(b.pos-Vector2(30,43),Vector2(60,5)),b.hp,b.max_hp,RED if b.team == 0 else BLUE)
 		# Farm progress toward the next gold drop; brighter while doubled (farmer or 豐收).
@@ -1144,8 +1144,11 @@ func draw_battle() -> void:
 			draw_circle(shadow_pos,5.0*flight,Color(0.2,0.16,0.10,0.35))
 			draw_arc(arrow.impact,arrow.radius,0,TAU,24,Color(0.8,0.35,0.15,0.3+0.15*sin(model.elapsed*12)),1.5)
 			var stone: Vector2 = arrow.pos-Vector2(0,sin(flight*PI)*65)
-			draw_circle(stone,6,Color("86745c"))
+			var shell_c := Color("3d3835") if arrow.kind in ["funeral_grenadier","dog_cannon"] else Color("86745c")
+			draw_circle(stone,6,shell_c)
 			draw_arc(stone,6,0,TAU,12,INK,1.5,true)
+			if arrow.kind in ["funeral_grenadier","dog_cannon"]:
+				draw_circle(stone+Vector2(3,-5),2.5,Color("f6a636"))
 		elif arrow.get("piercing",false) and arrow.kind == "long_dragon":
 			# Fire breath: a widening tongue of flame from the mouth to the front of the blast.
 			var mouth: Vector2 = arrow.start+Vector2(arrow.direction*40,8)
@@ -1156,13 +1159,19 @@ func draw_battle() -> void:
 		elif arrow.get("piercing",false):
 			var tip: Vector2 = arrow.pos
 			var tail := Vector2(arrow.direction*24,0)
-			draw_line(tip-tail*1.6,tip,Color("8966b8",0.35),5)
-			draw_line(tip-tail,tip,Color("c5a4eb"),2)
-			draw_polyline(PackedVector2Array([tip-Vector2(arrow.direction*6,4),tip,tip-Vector2(arrow.direction*6,-4)]),Color("ead7ff"),2)
+			var beam := [Color("c4a75f",0.4),Color("e5c158"),Color("fff1b8")] if arrow.kind == "orrery_walker" else [Color("8966b8",0.35),Color("c5a4eb"),Color("ead7ff")]
+			draw_line(tip-tail*1.6,tip,beam[0],5)
+			draw_line(tip-tail,tip,beam[1],2)
+			draw_polyline(PackedVector2Array([tip-Vector2(arrow.direction*6,4),tip,tip-Vector2(arrow.direction*6,-4)]),beam[2],2)
 		elif arrow.kind == "dark_wizard":
 			draw_line(arrow.pos-Vector2(18*arrow.get("direction",1.0),0),arrow.pos,Color(0.48,0.22,0.65,0.7),5,true)
 			draw_circle(arrow.pos,6,Color("aa6bce"))
 			draw_circle(arrow.pos,2.5,Color("f0deff"))
+		elif arrow.get("curse_splash",false):
+			draw_line(arrow.pos-Vector2(16*arrow.get("direction",1.0),0),arrow.pos,Color("4f6642",0.65),4,true)
+			draw_circle(arrow.pos,5.5,Color("6c8a53"))
+			draw_arc(arrow.pos,5.5,0,TAU,12,INK,1.4,true)
+			draw_circle(arrow.pos,2.0,Color("d9e6b2"))
 		else: draw_line(arrow.pos-Vector2(12*arrow.get("direction",1.0),0),arrow.pos,INK,2)
 	draw_preview()
 	draw_effects()
@@ -1286,6 +1295,23 @@ func draw_unit(u: Dictionary) -> void:
 			draw_circle(stun_pos+Vector2(cos(a)*10,sin(a)*4),2.5,Color("f6d354"))
 	if u.get("slow_left",0.0) > 0:
 		draw_arc(pos+Vector2(0,16),20,0,TAU,16,Color("64b5f6",0.6),1.5)
+	if u.get("root_left",0.0) > 0:
+		draw_arc(pos+Vector2(0,16),22,0,TAU,16,Color("3d2c3e",0.85),2.5)
+		for i: int in range(4):
+			var rp := pos+Vector2(0,16)+Vector2.from_angle(i*PI*0.5+PI*0.25)*22
+			draw_line(rp,rp+Vector2(0,6),Color("3d2c3e",0.85),2.0)
+	if u.get("hex_ticks",0) > 0:
+		draw_arc(pos+Vector2(0,16),19,0,TAU,16,Color("6c8a53",0.75),2.0)
+		for i: int in range(3):
+			var ha: float = model.elapsed*4.0+i*TAU/3.0
+			draw_circle(pos+Vector2(cos(ha)*11,-18-fmod(model.elapsed*16+i*6,14)),2.2,Color("8ba86b",0.8))
+	if u.get("armor_until",0.0) > model.elapsed:
+		draw_arc(pos+Vector2(0,16),21,0,PI,16,Color("c4a75f",0.85),2.5)
+	if u.get("shroud_until",0.0) > model.elapsed:
+		draw_circle(pos+Vector2(0,-20),24,Color("5e4b73",0.14))
+		draw_arc(pos+Vector2(0,-20),24,0,TAU,24,Color("9f86c0",0.5),1.8)
+	if u.get("borrowed_until",-1.0) >= 0:
+		draw_arc(pos+Vector2(0,16),16,0,TAU,16,Color("b9a3d6",0.55),1.5)
 	if u.hp < u.max_hp: bar(Rect2(pos-Vector2(24,68),Vector2(48,5)),u.hp,u.max_hp,RED if u.team == 0 else BLUE)
 
 # Each lane renders a seamlessly tileable fortified stone curtain-wall section (or matching breach).
@@ -1408,8 +1434,10 @@ func dashed(a: Vector2, b: Vector2, color: Color) -> void:
 		d += 12.0
 
 func draw_effects() -> void:
+	if not fx_enabled: return
 	for e: Dictionary in effects:
 		var progress: float = 1-e.life/e.duration
+		if FactionVisuals.event(self,e,progress): continue
 		match e.kind:
 			"hero_slash":
 				var direction := 1.0 if e.team == 0 else -1.0
@@ -1474,6 +1502,13 @@ func draw_effects() -> void:
 			"curse_rise":
 				draw_arc(e.pos,10+progress*36,0,TAU,24,Color("926c9d",1-progress),2.5,true)
 				draw_circle(e.pos-Vector2(0,progress*28),5*(1-progress),Color("c89fe0",1-progress))
+			"witch_curse":
+				var wr: float = e.get("radius",75.0)*(0.3+progress*0.7)
+				draw_circle(e.pos,wr,Color("5c7548",(1-progress)*0.18))
+				draw_arc(e.pos,wr,0,TAU,28,Color("7b965f",(1-progress)*0.85),2.5,true)
+				for i: int in range(6):
+					var wa: float = i*TAU/6.0+progress*0.6
+					draw_circle(e.pos+Vector2(cos(wa)*wr*0.68,sin(wa)*wr*0.28-progress*14),2.6*(1-progress),Color("a37fb8",1-progress))
 			"stone_impact":
 				draw_arc(e.pos,e.radius*progress,0,TAU,28,Color(0.40,0.30,0.18,1-progress),3,true)
 				for i in range(8):

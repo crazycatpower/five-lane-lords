@@ -2,6 +2,7 @@ extends RefCounted
 const B = preload("res://balance.gd")
 const Frontier = preload("res://frontier_cards.gd")
 const Faction = preload("res://faction_cards.gd")
+const GluttonNest = preload("res://glutton_nest.gd")
 const ExpansionMore = preload("res://expansion_more.gd")
 const L = preload("res://layout.gd")
 
@@ -51,6 +52,7 @@ static func skill_plan(k: Dictionary) -> Dictionary:
 
 static func decide(s: Dictionary) -> Dictionary:
 	var pr: Dictionary = weights(s)
+	var night: bool = s.get("night_decay",true) and s.elapsed >= B.NIGHT_START
 	var team: int = s.team
 	var forward := 1.0 if team == 0 else -1.0
 	var home_x := L.gate_stop(team)
@@ -109,7 +111,8 @@ static func decide(s: Dictionary) -> Dictionary:
 	var largest := 0.0
 	for lane: int in active_lanes:
 		if foe_reach[lane] > pr.get("defend_reach",DEFEND_REACH)*L.CELL_SIZE.x: continue
-		var need: float = urgency[lane]*(3.0 if s.gates[team][lane] <= 0 else 1.0)-ours[lane]
+		var weak_wall: bool = s.gates[team][lane] < B.GATE_HP*0.3
+		var need: float = urgency[lane]*(3.0 if s.gates[team][lane] <= 0 else pr.get("weak_wall_defend",1.0) if weak_wall else 1.0)-ours[lane]
 		if need > largest:
 			largest = need
 			danger = lane
@@ -129,6 +132,7 @@ static func decide(s: Dictionary) -> Dictionary:
 			target_lane = lane
 	var farm_goal: int = int(pr.get("farm_goal",[3,6,99][s.difficulty]))
 	var threshold: float = float(pr.get("wave_at",[15.0,25.0,35.0][s.difficulty]))
+	if night: threshold *= pr.get("night_wave",1.0)
 	var wave: bool = s.elapsed < s.wave_until or s.ink >= threshold
 	var enemy_farm_total: int = their_farms.reduce(func(a: int,b: int) -> int: return a+b,0)
 	var best: Dictionary = {}
@@ -141,6 +145,13 @@ static func decide(s: Dictionary) -> Dictionary:
 			var score := -INF
 			var lane: int = c.cell.y
 			var col: int = c.cell.x if team == 0 else 8-c.cell.x
+			if data.type == "unit" and not data.get("flying",false):
+				var eaten_on_spawn := false
+				for b: Dictionary in s.buildings:
+					if b.hp > 0 and b.team == team and b.cell.y == lane and GluttonNest.hidden(b) and (b.pos.x-c.pos.x)*forward >= -B.CARDS.glutton_nest.trigger_radius:
+						eaten_on_spawn = true
+						break
+				if eaten_on_spawn: continue
 			if data.type == "building":
 				var here: Dictionary = own_building(s.buildings,team,c.cell)
 				if not here.is_empty():
@@ -151,6 +162,7 @@ static func decide(s: Dictionary) -> Dictionary:
 					# up to the farm goal first and leave upkeep to artificers; only re-cast on a crystal
 					# that is nearly spent once the goal is met.
 					if here.kind == "crystal": repair_below = 0.3 if crystal_total >= farm_goal else -1.0
+					elif here.kind == "glutton_nest": repair_below = -1.0
 					if health < repair_below:
 						score = 700.0+(1.0-health)*150.0
 						if score > best_score:
@@ -175,6 +187,17 @@ static func decide(s: Dictionary) -> Dictionary:
 				best_score = faction_score
 				best = c.duplicate()
 			if c.kind in Faction.SPELLS or c.kind in ExpansionMore.SPELLS: continue
+			var placement: float = ExpansionMore.placement_score(c,s,pr)
+			if placement > best_score and (defend < 0 or lane == defend):
+				best_score = placement
+				best = c.duplicate()
+			if ExpansionMore.conditional_building(data): continue
+			if c.kind == "glutton_nest":
+				var nest_score := GluttonNest.ai_score(c,s,target_lane,defend)
+				if nest_score > best_score:
+					best_score = nest_score
+					best = c.duplicate()
+				continue
 			var dark_score := dark_card_score(c,s,ours,foes,my_troop_x)
 			if dark_score > best_score:
 				best_score = dark_score
@@ -249,6 +272,7 @@ static func decide(s: Dictionary) -> Dictionary:
 					if count >= pr.get("harvest_min",2.0): score = pr.get("harvest_score",670.0)+count
 			if defend < 0 and score == -INF and s.ink >= pr.get("spend_at",SPEND_AT):
 				score = spend_score(c,s,team,lane,col,target_lane,foes,urgency,my_farms,s.get("owned_cells",15)-own_buildings)
+			if night and B.is_home_card(c.kind,s.get("lord","lion")): score -= pr.get("night_economy_penalty",0.0)
 			if score > best_score:
 				best_score = score
 				best = c.duplicate()

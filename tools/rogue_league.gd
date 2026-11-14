@@ -4,7 +4,8 @@ extends SceneTree
 # Bradley-Terry rating per tier. With --apply, re-tiers the 小怪 by rating (weakest third -> tier 1,
 # middle -> 2, strongest -> 3) by rewriting the "tier" values in roguelike_catalog.gd.
 #   godot_console --headless --path . -s tools/rogue_league.gd -- [--opponents=4] [--workers=4] [--apply]
-# Runs the games in parallel worker processes; about 15 minutes for the full roster at 4 opponents.
+# Worker count limits CPU use; runtime grows with the live roster.
+# --runs --count=20 --seed=131100 audits complete eight-floor runs with normal AI weights.
 # --duo instead measures the player: every 內政+戰鬥 pair with its starting deck against the same six
 # tier-1 小怪, under real roguelike rules (foe 10 gold and 簡單 AI, player hard AI). About 10 minutes.
 const B = preload("res://balance.gd")
@@ -46,6 +47,8 @@ static func pairings(foes: Array, opponents: int) -> Array:
 static func play(red: String, blue: String, seed_value: int) -> int:
 	var m := Battle.new(seed_value,Catalog.foe_deck(red),Catalog.foe_deck(blue),red,blue)
 	m.difficulty = 2
+	m.night_decay = false
+	m.record_events = false
 	m.ai_enabled = [true,true]
 	while not m.ended:
 		m.step(1.0/30.0)
@@ -80,6 +83,7 @@ static func play_duo(job: Array, index: int, slice: int) -> int:
 	r.run.foes[0] = job[2]
 	var m = r.make_battle()
 	m.difficulty = 0
+	m.record_events = false
 	m.ai_enabled = [true,true]
 	m.ai_params[0] = AI.EVOLVED.duplicate()
 	while not m.ended:
@@ -91,23 +95,32 @@ func spawn_workers(workers: int, extra: Array) -> Array:
 	var files: Array = []
 	var pids: Array = []
 	for k: int in range(workers):
-		var file := ProjectSettings.globalize_path("user://rogue_league_%d.tsv" % k)
+		var file := ProjectSettings.globalize_path("user://rogue_league_%d_%d.tsv" % [OS.get_process_id(),k])
 		files.append(file)
-		pids.append(OS.create_process(OS.get_executable_path(),["--headless","--path",ProjectSettings.globalize_path("res://"),"-s","res://tools/rogue_league.gd","--","--worker",str(k),str(workers),file]+extra))
+		var pid := OS.create_process(OS.get_executable_path(),["--headless","--path",ProjectSettings.globalize_path("res://"),"-s","res://tools/rogue_league.gd","--","--worker",str(k),str(workers),file]+extra)
+		if pid <= 0:
+			printerr("Unable to start league worker %d" % k)
+			quit(1)
+			return []
+		pids.append(pid)
 	while pids.any(func(pid: int) -> bool: return OS.is_process_running(pid)): OS.delay_msec(1000)
 	var rows: Array = []
 	for file: String in files:
+		if not FileAccess.file_exists(file):
+			printerr("Worker output missing: "+file)
+			quit(1)
+			return []
 		for line: String in FileAccess.get_file_as_string(file).split("\n",false): rows.append(line.split("\t"))
 	return rows
 
 func duo_report(rows: Array) -> void:
-	var by := {"內政":{},"戰鬥":{}}
+	var by := {"內政":{},"戰鬥":{},"搭配":{},"敵人":{}}
 	var total := 0
 	for f: PackedStringArray in rows:
 		if f.size() < 4: continue
 		var win := 1 if f[3] == "0" else 0
 		total += win
-		for pair: Array in [["內政",f[0]],["戰鬥",f[1]]]:
+		for pair: Array in [["內政",f[0]],["戰鬥",f[1]],["搭配",f[0]+" / "+f[1]],["敵人",f[2]]]:
 			var bucket: Dictionary = by[pair[0]]
 			bucket[pair[1]] = bucket.get(pair[1],[0,0])
 			bucket[pair[1]][0] += win
@@ -117,10 +130,20 @@ func duo_report(rows: Array) -> void:
 		print("\n== 當%s領主 ==" % role)
 		var keys: Array = by[role].keys()
 		keys.sort_custom(func(a: String, b: String) -> bool: return by[role][a][0]*by[role][b][1] > by[role][b][0]*by[role][a][1])
-		for k: String in keys: print("  %3.0f%%  %s" % [100.0*by[role][k][0]/by[role][k][1],B.lord_name(k)])
+		for k: String in keys: print("  %3.0f%% (%d/%d)  %s" % [100.0*by[role][k][0]/by[role][k][1],by[role][k][0],by[role][k][1],B.lord_name(k) if role != "搭配" else k])
 
 func run() -> void:
 	var args := OS.get_cmdline_user_args()
+	if "--runs" in args:
+		run_report(option(args,"count",20),option(args,"seed",131100))
+		quit()
+		return
+	print("balance SHA256: "+FileAccess.get_sha256("res://balance.gd"))
+	var errors: Array = Catalog.validate()
+	if not errors.is_empty():
+		printerr(errors)
+		quit(1)
+		return
 	var opponents := option(args,"opponents",4)
 	var pairs := pairings(roster(),opponents)
 	if "--worker" in args and "--duo" in args:
@@ -138,7 +161,12 @@ func run() -> void:
 		return
 	if "--duo" in args:
 		print("rogue league --duo: %d games on %d workers" % [duo_jobs().size(),option(args,"workers",4)])
-		duo_report(spawn_workers(option(args,"workers",4),["--duo"]))
+		var rows := spawn_workers(option(args,"workers",4),["--duo"])
+		if rows.size() != duo_jobs().size():
+			printerr("Incomplete duo sample: %d/%d" % [rows.size(),duo_jobs().size()])
+			quit(1)
+			return
+		duo_report(rows)
 		quit()
 		return
 	if "--worker" in args:
@@ -151,7 +179,7 @@ func run() -> void:
 			for swap: int in range(2):
 				var red: String = pairs[p][swap]
 				var blue: String = pairs[p][1-swap]
-				out.store_line("%s\t%s\t%d" % [red,blue,play(red,blue,5000+p*2+swap)])
+				out.store_line("%s\t%s\t%d" % [red,blue,play(red,blue,5000+p)])
 				out.flush()
 		out.close()
 		quit()
@@ -161,6 +189,10 @@ func run() -> void:
 	var games: Array = []
 	for f: PackedStringArray in spawn_workers(workers,["--opponents=%d" % opponents]):
 		if f.size() == 3: games.append([f[0],f[1],int(f[2])])
+	if games.size() != pairs.size()*2:
+		printerr("Incomplete league sample: %d/%d; no tiers written" % [games.size(),pairs.size()*2])
+		quit(1)
+		return
 	var rating := ratings(games)
 	report(games,rating)
 	if "--apply" in args: apply_tiers(rating)
@@ -220,3 +252,80 @@ static func apply_tiers(rating: Dictionary) -> void:
 	file.store_string(text)
 	file.close()
 	print("\nre-tiered %d 小怪領主 in roguelike_catalog.gd" % changed)
+
+# Complete runs use public Rogue actions, including wounds, rewards and shop spending.
+# A normal player uses explicit ordinary weights; the foe retains each floor's own level.
+static func reward_value(kind: String) -> float:
+	var d: Dictionary = B.CARDS[kind]
+	if d.type == "unit":
+		return (float(d.hp)*0.02+float(d.damage)/float(d.interval))*int(d.get("count",1))/maxf(1.0,d.cost)
+	return 0.0
+
+static func run_report(count: int, seed_start: int) -> void:
+	var path := "user://rogue-runs-%d.json" % OS.get_process_id()
+	var report := {"balance_sha256":FileAccess.get_sha256("res://balance.gd"),"catalog_sha256":FileAccess.get_sha256(CATALOG_PATH),"ai_sha256":FileAccess.get_sha256("res://enemy_ai.gd"),"seed":seed_start,"player":"normal weights; shared per-floor decision delay","runs":[],"floors":[]}
+	var errors: Array = Catalog.validate()
+	if not errors.is_empty():
+		printerr(errors)
+		return
+	for floor_index: int in range(Catalog.FLOORS): report.floors.append({"entered":0,"won":0,"elite":0})
+	var lords: Array = B.LORDS.keys()
+	for trial: int in range(count):
+		var d: String = lords[trial%lords.size()]
+		var c: String = lords[(trial/lords.size()+trial+1)%lords.size()]
+		if d == c: c = lords[(lords.find(c)+1)%lords.size()]
+		var r = Rogue.new()
+		r.save_path = "user://rogue-run-save-%d.json" % OS.get_process_id()
+		r.begin(d,c,seed_start+trial)
+		var row := {"domestic":d,"combat":c,"seed":seed_start+trial,"battles":[],"repairs":0,"upgrades":0,"rewards":0}
+		while r.run.phase == "map":
+			var floor_index: int = r.run.floor
+			# Half of runs take one elite at floor 3, once rewards have provided preparation.
+			if trial%2 == 1 and floor_index == 2: r.set_elite(true)
+			var elite: bool = r.run.elite
+			var m = r.make_battle()
+			m.record_events = false
+			m.ai_enabled = [true,true]
+			m.ai_params[0] = {"normal_defaults":1.0}
+			while not m.ended:
+				m.step(1.0/30.0)
+				Rogue.time_limit(m)
+			var won: bool = m.winner == 0
+			report.floors[floor_index].entered += 1
+			report.floors[floor_index].won += int(won)
+			report.floors[floor_index].elite += int(elite)
+			row.battles.append({"floor":floor_index+1,"foe":r.foe(),"elite":elite,"won":won,"seconds":m.elapsed})
+			if won: r.record_wounds(m)
+			r.settle(won)
+			if r.run.phase == "reward":
+				var best: String = ""
+				for kind: String in r.run.offer:
+					if best.is_empty() or reward_value(kind)>reward_value(best): best = kind
+				var slot := 0
+				for i: int in range(1,r.run.deck.size()):
+					if reward_value(r.run.deck[i])<reward_value(r.run.deck[slot]): slot = i
+				if not best.is_empty() and reward_value(best)>reward_value(r.run.deck[slot]):
+					r.pick(best)
+					r.replace(slot)
+					row.rewards += 1
+				else: r.skip_reward()
+				if r.gate_missing()>0:
+					r.repair_gates()
+					row.repairs += 1
+				r.heal_lord()
+				var kinds: Array = r.run.deck.duplicate()
+				kinds.sort_custom(func(a: String,b: String)->bool: return reward_value(a)>reward_value(b))
+				for kind: String in kinds:
+					if r.upgrade_error(kind).is_empty():
+						r.upgrade(kind)
+						row.upgrades += 1
+				r.leave_shop()
+		row["cleared"] = r.run.phase == "won"
+		report.runs.append(row)
+		var output := FileAccess.open(path,FileAccess.WRITE)
+		output.store_string(JSON.stringify(report,"  "))
+		output.close()
+		print("run %d/%d %s / %s: %d wins, clear=%s" % [trial+1,count,d,c,r.best,str(row.cleared)])
+	print(JSON.stringify(report.floors))
+	print("Report: "+ProjectSettings.globalize_path(path))
+

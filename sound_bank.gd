@@ -19,6 +19,8 @@ const CUES := {
 	"fail":"dropLeather",
 	"skill":"horn",
 	"catapult_fire":"creak1",
+	"nest_windup":"creak1",
+	"nest_bite":"ram_hit",
 	"stone_impact":"stone_crash",
 	"drum":"war_drum",
 	"curse_rise":"dark_magic",
@@ -29,6 +31,10 @@ const CUES := {
 	"axe":"throwing_axe",
 	"lightning":"lightning",
 	"ram":"ram_hit",
+	"charge_impact":"ram_hit",
+	"support_pulse":"holy_heal",
+	"blood_gain":"dark_magic",
+	"summoned":"dark_magic",
 	"nightfall":"bell",
 	"dawn":"bell",
 	"ui_hover":"ui_tick",
@@ -36,6 +42,8 @@ const CUES := {
 }
 
 const COOLDOWNS := {
+	"nest_windup": 250,
+	"nest_bite": 200,
 	"arrow": 180,
 	"spear": 150,
 	"axe": 160,
@@ -45,11 +53,17 @@ const COOLDOWNS := {
 	"boulder": 300,
 	"lightning": 150,
 	"drum": 150,
+	"charge_impact": 220,
+	"support_pulse": 600,
+	"blood_gain": 400,
+	"summoned": 200,
 	"ui_hover": 45,
 	"ui_click": 45
 }
 
 const VOLUMES := {
+	"nest_windup": -9.0,
+	"nest_bite": -6.0,
 	"arrow": -10.0,
 	"axe": -7.0,
 	"spear": -6.0,
@@ -58,6 +72,10 @@ const VOLUMES := {
 	"hit": -6.0,
 	"ram": -3.0,
 	"drum": 2.0,
+	"charge_impact": -3.0,
+	"support_pulse": -12.0,
+	"blood_gain": -9.0,
+	"summoned": -9.0,
 	"skill": 1.5,
 	"breach": 2.0,
 	"boulder": 1.0,
@@ -100,7 +118,7 @@ func cue(kind: String) -> void:
 		player.play()
 
 func cue_event(e: Dictionary) -> void:
-	if not enabled or DisplayServer.get_name() == "headless": return
+	if not enabled or e.get("silent",false) or DisplayServer.get_name() == "headless": return
 	var k: String = e.get("kind", "")
 	if k == "spell":
 		var card: String = e.get("card", "")
@@ -130,8 +148,14 @@ func cue_event(e: Dictionary) -> void:
 		cue("arrow")
 	elif k == "drum":
 		cue("drum")
-	elif k == "link" and e.get("style", "") == "lightning":
-		cue("lightning")
+	elif k == "witch_curse":
+		cue("curse_rise")
+	elif k == "link":
+		match e.get("style", ""):
+			"lightning": cue("lightning")
+			"heal", "repair": cue("support_pulse")
+			"soul", "devour", "curse": cue("blood_gain")
+			"summon": cue("summoned")
 	elif k == "skill":
 		var lord: String = e.get("lord", "")
 		if lord == "lion":

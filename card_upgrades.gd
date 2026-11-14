@@ -6,7 +6,7 @@ const B = preload("res://balance.gd")
 const MAX_LEVEL := 3
 const PRICES := [50,100,150] # +1, +2, +3
 const CAP := 1 # TIER_NAMES index of SS
-const NAMES := {"hp":"生命","damage":"傷害","interval":"攻速","range":"射程","speed":"移速","radius":"範圍","building_damage":"建築傷害","gate_damage":"城門傷害"}
+const NAMES := {"hp":"生命","damage":"傷害","interval":"攻速","range":"射程","speed":"移速","radius":"範圍","building_damage":"建築傷害","gate_damage":"城牆傷害"}
 const DAMAGE_SPELLS := ["rain","fire"] # spells cast_spell reads damage from
 const RADIUS_SPELLS := ["rain","fire","harvest","plague","curse"] # spells cast_spell reads radius from
 

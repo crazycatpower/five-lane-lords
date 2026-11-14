@@ -371,6 +371,7 @@ func play(team: int, slot: int, pos: Vector2) -> bool:
 		recent_lanes[team].append(cell.y)
 		if recent_lanes[team].size() > 3: recent_lanes[team].pop_front()
 	event("play",pos,team,{"card":kind,"slot":slot})
+	ExpansionMore.on_card_played(self,team,kind,cell.y)
 	return true
 
 func add_building(team: int, cell: Vector2i, kind: String) -> Dictionary:
@@ -700,11 +701,11 @@ func cast_skill(team: int) -> bool:
 				u.march = B.LION_KNIGHT_SPEED
 				if record_events: visual_targets.append(u.pos)
 		"beast":
-			# A pack of fishbeaks out of every wall we still hold; they hunt whatever is nearest.
+			# Summon the configured basic frontline beast from every wall we still hold.
 			for lane: int in active_lanes:
 				if territory_owner(Vector2i(0 if team == 0 else L.GRID_COLUMNS-1,lane)) != team: continue
 				for i: int in range(B.LORDS.beast.pack_count):
-					var u := spawn_unit(team,lane,"fishbeak",L.spawn_position(team,lane))
+					var u := spawn_unit(team,lane,B.LORDS.beast.pack_kind,L.spawn_position(team,lane))
 					u.card = "skill"
 					u.spawn_delay = i*0.12
 				if record_events: visual_targets.append(L.spawn_position(team,lane))
@@ -818,7 +819,9 @@ func update_projectiles(dt: float) -> void:
 				event("stone_impact",arrow.impact,arrow.team,{"radius":arrow.radius})
 			continue
 		arrow.pos = arrow.start.lerp(arrow.target.get("draw",arrow.target.pos)+Vector2(0,-30),clampf(1-arrow.remaining/B.ARROW_TIME,0,1))
-		if arrow.remaining <= 0 and arrow.target.hp > 0: damage(arrow.target,arrow.amount,arrow.team,arrow.kind,arrow.get("source",{}))
+		if arrow.remaining <= 0:
+			if ExpansionMore.hit_projectile(self,arrow): continue
+			if arrow.target.hp > 0: damage(arrow.target,arrow.amount,arrow.team,arrow.kind,arrow.get("source",{}))
 	projectiles = projectiles.filter(func(a: Dictionary) -> bool: return a.remaining > 0)
 
 func heal(u: Dictionary, dt: float) -> void:
@@ -1084,8 +1087,10 @@ func update_unit(u: Dictionary, dt: float) -> bool:
 		reach = data.duplicate()
 		reach.range = u.range
 	if u.get("expansion_range_until",0.0) > elapsed and B.CARDS[u.kind].get("projectile",false):
-		var tier: int = B.TIERS.range.find(reach)
-		if tier > 2: reach = B.TIERS.range[tier-1]
+		var tier: int = B.TIERS.range.find(reach.range)
+		if tier > B.tier_index("S"):
+			if not u.has("range"): reach = data.duplicate()
+			reach.range = B.TIERS.range[tier-1]
 	var target := choose_target(u,Faction.unit_data(self,u,reach))
 	if not target.is_empty():
 		if Windup.ready(self,u,Windup.target_key(target),dt): attack(u,target)
@@ -1354,7 +1359,7 @@ func snapshot(team: int) -> Dictionary:
 				for col: int in range(1,9):
 					var corner: Vector2 = L.GRID_ORIGIN+Vector2(col*L.CELL_SIZE.x,row*L.CELL_SIZE.y)
 					if can_play(team,slot,corner): candidates.append({"slot":slot,"kind":kind,"pos":corner,"cell":Vector2i(col,row),"corner":true})
-	return {"team":team,"ink":ink[team],"enemy_ink":ink[1-team],"difficulty":difficulty,"elapsed":elapsed,"wave_until":wave_until[team],"memory":memory[team].duplicate(),"recent":recent_lanes[team].duplicate(),"saving":ai_save[team],"params":ai_params[team],"units":units,"buildings":buildings,"lords":lords.filter(func(l: Dictionary) -> bool: return lord_active[l.team]),"gates":gates,"candidates":candidates,"owned_cells":territory.count(team),"active_lanes":active_lanes.duplicate()}
+	return {"team":team,"lord":lords[team].lord,"night_decay":night_decay,"ink":ink[team],"enemy_ink":ink[1-team],"difficulty":difficulty,"elapsed":elapsed,"wave_until":wave_until[team],"memory":memory[team].duplicate(),"recent":recent_lanes[team].duplicate(),"saving":ai_save[team],"params":ai_params[team],"units":units,"buildings":buildings,"lords":lords.filter(func(l: Dictionary) -> bool: return lord_active[l.team]),"gates":gates,"candidates":candidates,"owned_cells":territory.count(team),"active_lanes":active_lanes.duplicate()}
 
 func update_ai(dt: float) -> void:
 	if elapsed < ai_start: return

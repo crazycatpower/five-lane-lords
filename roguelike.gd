@@ -167,7 +167,7 @@ func heal_cost() -> int:
 
 func repair_error() -> String:
 	if run.is_empty() or run.phase != "shop": return "現在不能修理"
-	if gate_missing() <= 0.0: return "城門完好"
+	if gate_missing() <= 0.0: return "城牆完好"
 	if run.gold <= 0: return "金幣不足"
 	return ""
 
@@ -322,7 +322,7 @@ func start_battle(game) -> void:
 	game.model = make_battle()
 	in_battle = true
 	outcome = ""
-	game.enter_battle("肉鴿 第 %d / %d 場 · 對手：%s · %d 分鐘未分勝負時，城門血量多的一方獲勝" % [run.floor+1,Catalog.FLOORS,B.lord_name(foe()),int(Catalog.TIME_LIMIT/60)])
+	game.enter_battle("肉鴿 第 %d / %d 場 · 對手：%s · %d 分鐘未分勝負時，城牆血量多的一方獲勝" % [run.floor+1,Catalog.FLOORS,B.lord_name(foe()),int(Catalog.TIME_LIMIT/60)])
 
 # Called every physics frame: settles the battle once it ends.
 func update(game) -> void:
@@ -420,7 +420,7 @@ func show(game) -> void:
 				var b: Button = game.title_button(Rect2(relic_rect(i).position+Vector2(20,relic_rect(i).size.y-50),Vector2(relic_rect(i).size.x-40,40)),("購買 %d 金" % Catalog.RELICS[relic].price) if why.is_empty() else why,func(): buy_relic(relic); show(game))
 				b.disabled = not why.is_empty()
 			var fix := repair_error()
-			var mend: Button = game.title_button(Rect2(340,795,370,44),("修城門 %d 金" % mini(run.gold,repair_cost())) if fix.is_empty() else fix,func(): repair_gates(); show(game))
+			var mend: Button = game.title_button(Rect2(340,795,370,44),("修城牆 %d 金" % mini(run.gold,repair_cost())) if fix.is_empty() else fix,func(): repair_gates(); show(game))
 			mend.disabled = not fix.is_empty()
 			var cure := heal_error()
 			var heal: Button = game.title_button(Rect2(730,795,370,44),("治療領主 %d 金" % mini(run.gold,heal_cost())) if cure.is_empty() else cure,func(): heal_lord(); show(game))
@@ -646,14 +646,14 @@ func paint_shop(g) -> void:
 		g.draw_string(g.font,r.position+Vector2(20,38),"%s　%d 金" % [relic.name,relic.price],HORIZONTAL_ALIGNMENT_LEFT,-1,24,g.INK)
 		g.draw_string(g.font,r.position+Vector2(20,74),B.passive_text(relic.mods),HORIZONTAL_ALIGNMENT_LEFT,r.size.x-40,18,Color("6f5a3e"))
 	if run.shop.is_empty(): g.label_at(Vector2(880,260),"這一站的遺物已經買完了",18)
-	g.label_at(Vector2(340,782),wounds_text()+" · 城門每 1 金修 %d 血、領主每 1 金治 %d 血" % [int(Catalog.GATE_HP_PER_GOLD),int(Catalog.LORD_HP_PER_GOLD)],16,g.RED)
+	g.label_at(Vector2(340,782),wounds_text()+" · 城牆每 1 金修 %d 血、領主每 1 金治 %d 血" % [int(Catalog.GATE_HP_PER_GOLD),int(Catalog.LORD_HP_PER_GOLD)],16,g.RED)
 	g.label_at(Vector2(880,760),"已有遺物："+("、".join(run.relics.map(func(k: String) -> String: return Catalog.RELICS[k].name)) if not run.relics.is_empty() else "無"),17)
 
 func wounds_text() -> String:
 	var standing: int = run.get("gates",[]).filter(func(hp: float) -> bool: return hp > 0).size()
 	var total := 0.0
 	for hp: float in run.get("gates",[]): total += hp
-	return "城門 %d/5 座 · 總血量 %d%% · 領主 %d/%d" % [standing,roundi(100.0*total/(5*B.GATE_HP)),int(run.get("lord_hp",0)),int(lord_max_hp())]
+	return "城牆 %d/5 座 · 總血量 %d%% · 領主 %d/%d" % [standing,roundi(100.0*total/(5*B.GATE_HP)),int(run.get("lord_hp",0)),int(lord_max_hp())]
 
 func paint_end(g) -> void:
 	paint_floors(g,250)
