@@ -166,7 +166,7 @@ const CARDS := {
 	# 魔物 (2026-11-06): seven monsters from late-medieval paintings. Special rules live in monster_cards.gd.
 	"eyewing_dragon":{"name":"眼翼龍","role":"吼叫·驅散","faction":"beast","series":"beast","type":"unit","cost":10,"cooldown":20.0,"count":1,"hp":900.0,"damage":95.0,"interval":1.4,"range":47.0,"speed":50.0,"radius":100.0,"roar_fear":2.0,"roar_period":5.0},
 	"belly_eye":{"name":"腹眼魔","role":"偵查·重裝","faction":"beast","series":"beast","type":"unit","cost":11,"cooldown":15.0,"count":1,"hp":1500.0,"damage":50.0,"interval":1.1,"range":47.0,"speed":36.0,"reveal_radius":150.0},
-	"pouch_beast":{"name":"囊腹獸","role":"厚血·前排","faction":"beast","series":"beast","type":"unit","cost":4,"cooldown":5.0,"count":1,"hp":350.0,"damage":26.0,"interval":1.4,"range":47.0,"speed":36.0,"attack_style":"ram"},
+	"pouch_beast":{"name":"囊腹獸","role":"厚血·前排","faction":"beast","series":"beast","type":"unit","cost":4,"cooldown":5.0,"count":1,"hp":560.0,"damage":26.0,"interval":1.4,"range":47.0,"speed":36.0,"attack_style":"ram"},
 	"fishbeak":{"name":"魚喙怪","role":"換路·追獵","faction":"beast","series":"beast","type":"unit","ai":["raid"],"hunt_nearest":true,"cost":7,"cooldown":10.0,"count":3,"hp":130.0,"damage":50.0,"interval":0.85,"range":47.0,"speed":65.0},
 	"bearded_imp":{"name":"鬍子魔","role":"偷金·搗亂","faction":"beast","series":"beast","type":"unit","ai":["raid"],"cost":6,"cooldown":10.0,"count":2,"hp":350.0,"damage":50.0,"interval":1.1,"range":47.0,"speed":65.0,"steal_gold":1.0},
 	"hooknose_flyer":{"name":"鉤鼻飛魔","role":"飛行·獵兵","faction":"beast","series":"beast","type":"unit","flying":true,"cost":9,"cooldown":15.0,"count":3,"hp":130.0,"damage":36.0,"interval":0.85,"range":47.0,"speed":120.0},
@@ -403,7 +403,7 @@ const DEFAULT_LORD := "lion"
 # Lord health follows role: SS defender, S frontline, A support.
 # Lord speeds (2026-11-03 ten tiers): lion/adventure C 65, mage/underworld/harvest D 50, iron E 36.
 const LORDS := {
-	"beast":{"name":"馴獸領主","role":"獸群型","faction":"beast","home_card":"glutton_nest","hp":1500.0,"damage":95.0,"speed":65.0,"skill":"獸群號角","skill_cost":30.0,"pack_count":1,"pack_kind":"pouch_beast","skill_desc":"每條開放路線從己方城牆各放出 %s 隻%s。"},
+	"beast":{"name":"馴獸領主","role":"獸群型","faction":"beast","home_card":"glutton_nest","hp":1500.0,"damage":95.0,"speed":65.0,"skill":"獸群號角","skill_cost":30.0,"pack_count":1,"pack_kind":"pouch_beast","skill_desc":"每條開放路線在己方領地最前端各放出 %s 隻%s。"},
 	"rune":{"name":"符文領主","role":"法陣型","faction":"magic","home_card":"crystal","hp":900.0,"damage":95.0,"speed":50.0,"skill":"符文前線","skill_cost":15.0,"skill_desc":"在每條開放路線領地最前方的空格，各召喚一個隨機陷阱法陣；不覆蓋建築。"},
 	"vampire":{"name":"吸血領主","role":"血契型","faction":"dark","home_card":"grave","hp":1500.0,"damage":95.0,"speed":50.0,"skill":"鮮血盟約","skill_cost":20.0,"blood_duration":20.0,"skill_desc":"所有友方部隊攻速、移速升一檔（最高 S），持續 %s 秒；造成實際傷害時等量增加自身目前及最大生命，已獲得生命保留。"},
 	"mage":{"name":"法師領主","role":"時空型","faction":"magic","home_card":"crystal","hp":900.0,"damage":95.0,"speed":50.0,"skill":"時空凝滯","skill_cost":20.0,"freeze_duration":10.0,"skill_desc":"空間波動後凍結時間 %s 秒，只有友方軍隊與施法領主可以行動；產金、冷卻、投射物與選單全部暫停。"},

@@ -701,14 +701,16 @@ func cast_skill(team: int) -> bool:
 				u.march = B.LION_KNIGHT_SPEED
 				if record_events: visual_targets.append(u.pos)
 		"beast":
-			# Summon the configured basic frontline beast from every wall we still hold.
+			# Summon at the foremost owned cell on each active lane, for either side.
 			for lane: int in active_lanes:
-				if territory_owner(Vector2i(0 if team == 0 else L.GRID_COLUMNS-1,lane)) != team: continue
+				var col := front_column(team,lane)
+				if col < 0: continue
+				var origin := L.cell_center(Vector2i(col,lane))
 				for i: int in range(B.LORDS.beast.pack_count):
-					var u := spawn_unit(team,lane,B.LORDS.beast.pack_kind,L.spawn_position(team,lane))
+					var u := spawn_unit(team,lane,B.LORDS.beast.pack_kind,origin)
 					u.card = "skill"
 					u.spawn_delay = i*0.12
-				if record_events: visual_targets.append(L.spawn_position(team,lane))
+				if record_events: visual_targets.append(origin)
 		"harvest":
 			# A farm in each lane (front-most free home cell), then every farm healed (no extra yield).
 			for lane: int in active_lanes:

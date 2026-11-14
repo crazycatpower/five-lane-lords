@@ -174,10 +174,12 @@ func run() -> void:
 		pack.ink[side] = B.MAX_INK
 		pack.units.clear()
 		pack.skill_cd[side] = 0.0
+		pack.add_building(side,Vector2i(4,2),"farm")
 		pack.cast_skill(side)
 		var beasts: Array = pack.units.filter(func(u: Dictionary) -> bool: return u.team == side and u.kind == "pouch_beast")
 		check(beasts.size() == pack.active_lanes.size() and pack.units.all(func(u: Dictionary) -> bool: return u.kind != "fishbeak"), "beast skill summons one pouch beast per lane, side %d" % side)
-		check(beasts.all(func(u: Dictionary) -> bool: return u.hp == 350.0 and u.max_hp == 350.0), "summoned pouch beasts have full heavy infantry health")
+		check(beasts.all(func(u: Dictionary) -> bool: return u.pos == Battle.L.cell_center(Vector2i(pack.front_column(side,u.lane),u.lane))), "beast skill summons at each lane territory front, side %d" % side)
+		check(beasts.all(func(u: Dictionary) -> bool: return u.hp == 560.0 and u.max_hp == 560.0), "summoned pouch beasts have full heavy infantry health")
 		pack.units.clear()
 		pack.buildings.clear()
 		var hatch := pack.add_building(side,Vector2i(2 if side == 0 else 6,2),"monster_hatchery")
