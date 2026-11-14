@@ -531,6 +531,7 @@ func paint_lords(g, domestic: bool) -> void:
 			g.panel(r,Color(0.85,0.80,0.70,0.5),Color("a89a80"))
 			g.draw_string(g.font,r.position+Vector2(0,r.size.y/2),"已是內政領主",HORIZONTAL_ALIGNMENT_CENTER,r.size.x,20,Color(g.INK,0.6))
 			continue
+		g.panel(Rect2(r.position,Vector2(r.size.x,r.size.y+54)),Color("ecddb9"),Color("8c6e43"))
 		g.draw_lord_card(lords[i],r,false)
 		var troops: Array = Catalog.STARTER_CORE[B.lord_faction(lords[i])]
 		var line: String = (B.passive_text(Catalog.passive(lords[i]))+" 遠程："+B.CARDS[troops[1]].name) if domestic else ("近戰："+B.CARDS[troops[0]].name+" · 戰鬥卡："+B.CARDS[Catalog.LORD_ROLES[lords[i]].combat.card].name+" · 常駐："+B.CARDS[B.home_card(lords[i])].name)
@@ -538,9 +539,10 @@ func paint_lords(g, domestic: bool) -> void:
 		caption.width = r.size.x-12
 		caption.alignment = HORIZONTAL_ALIGNMENT_CENTER
 		caption.break_flags = TextServer.BREAK_MANDATORY | TextServer.BREAK_WORD_BOUND | TextServer.BREAK_ADAPTIVE
-		g.draw_rect(Rect2(r.position+Vector2(0,r.size.y),Vector2(r.size.x,54)),Color("f4e7c9"))
-		caption.add_string(line,g.font,17)
-		caption.draw(g.get_canvas_item(),Vector2(r.position.x+6,r.end.y+4),g.INK)
+		g.draw_rect(Rect2(r.position+Vector2(5,r.size.y-4),Vector2(r.size.x-10,48)),Color("ecddb9"))
+		preload("res://interface_ornament.gd").rule(g,Vector2(r.position.x+22,r.end.y-1),Vector2(r.end.x-22,r.end.y-1),Color("a68a58"))
+		caption.add_string(line,g.font,16)
+		caption.draw(g.get_canvas_item(),Vector2(r.position.x+6,r.end.y+3),g.INK)
 
 func paint_confirm(g) -> void:
 	g.label_at(Vector2(150,150),"兩位領主組成的起始牌組",24)

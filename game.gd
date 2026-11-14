@@ -846,7 +846,7 @@ func draw_card(kind: String, rect: Rect2, slot: int = -1) -> void:
 	draw_card_art(kind,art_box,0,shade)
 	if blocked: draw_rect(rect.grow(-3),Color(0.40,0.40,0.40,0.50))
 	if cooling: curtain(art_box,clampf(model.slot_cd(me,slot)/maxf(0.1,data.cooldown),0,1))
-	draw_rect(Rect2(rect.position+Vector2(7,s.y*0.64),Vector2(s.x-14,s.y*0.23)),Color("f4e7c9"))
+	preload("res://interface_ornament.gd").card_caption(self,Rect2(rect.position+Vector2(10,s.y*0.645),Vector2(s.x-20,s.y*0.22)),preload("res://command_style.gd").card_tint(kind))
 	# Name and type sit above the frame's bottom corner flowers (they start ~83% down).
 	draw_string(font,rect.position+Vector2(0,s.y*0.74),data.name,HORIZONTAL_ALIGNMENT_CENTER,s.x,19,Color("2e2219") if blocked else INK)
 	draw_string(font,rect.position+Vector2(0,s.y*0.83),data.role,HORIZONTAL_ALIGNMENT_CENTER,s.x,15,Color("33261a") if blocked else Color("5a4630"))
@@ -2026,7 +2026,7 @@ func draw_check(at: Vector2) -> void:
 func draw_lord_card(kind: String, r: Rect2, chosen: bool) -> void:
 	var info: Dictionary = B.LORDS[kind]
 	var tint: Color = preload("res://command_style.gd").TINTS.get(B.lord_faction(kind),Color("efe3c8"))
-	panel(r,tint.lerp(Color.WHITE,0.55 if chosen else 0.25),RED if chosen else Color("8a6f4a"))
+	preload("res://interface_ornament.gd").portrait(self,r,tint,chosen)
 	draw_fitted(lord_art(kind),Rect2(r.position+Vector2(8,24),Vector2(r.size.x-16,r.size.y-86)),Color.WHITE,true)
 	draw_string(font,Vector2(r.position.x,r.end.y-44),info.name,HORIZONTAL_ALIGNMENT_CENTER,r.size.x,21,INK)
 	draw_string(font,Vector2(r.position.x,r.end.y-27),info.role,HORIZONTAL_ALIGNMENT_CENTER,r.size.x,16,Color("5a4a36"))
