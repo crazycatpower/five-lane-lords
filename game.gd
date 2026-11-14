@@ -149,7 +149,8 @@ static func prepare_art(progress: Callable = Callable()) -> void:
 	blue_art.castle_blue = blue_art.castle_red
 	# A card without its own picture yet borrows the one named in its "art" field (placeholder).
 	for kind: String in B.CARDS:
-		var borrow: String = B.CARDS[kind].get("art",[kind])[0]
+		var reference: Variant = B.CARDS[kind].get("art",[kind])
+		var borrow: String = reference if reference is String else reference[0]
 		if not textures.has(kind) and textures.has(borrow):
 			textures[kind] = textures[borrow]
 			if blue_art.has(borrow): blue_art[kind] = blue_art[borrow]
@@ -813,7 +814,10 @@ func draw_combat_actor(kind: String, actor: Dictionary, pos: Vector2, face: floa
 	tf()
 
 func card_art_kinds(kind: String) -> Array:
-	return B.CARDS[kind].get("art",[kind])
+	var reference: Variant = B.CARDS[kind].get("art",[kind])
+	if reference is String:
+		return [kind] if textures.has(kind) else [reference]
+	return reference
 
 func draw_card_art(kind: String, box: Rect2, team: int = 0, shade: Color = Color.WHITE) -> void:
 	var kinds := card_art_kinds(kind)

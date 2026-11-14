@@ -1,4 +1,10 @@
 {
+	"aether_hound": {
+		"revision": "team-material-v2",
+		"sha256": "110f9df637e33d03ef62f735ab204f7a5d30f07656ccec7fc817ed370752526c",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/aether_hound.png"
+	},
 	"arcane_archer": {
 		"revision": "team-material-v2",
 		"sha256": "b238c9faa6c28f66a867fdc93550592a8c45aa7cc2453816bf47e4f948667f5a",
@@ -137,6 +143,12 @@
 		"size": 384,
 		"source": "res://assets/manuscript-v1/borrowed_bones.png"
 	},
+	"bramble_wall": {
+		"revision": "team-material-v2",
+		"sha256": "7c02e6025803dc809ef4609bf28faad5748db0790b281fc1db7ed54485d7e196",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/bramble_wall.png"
+	},
 	"castle_red": {
 		"revision": "team-material-v2",
 		"sha256": "7eb5ca488585f478e47e0f1e91362f72342505323e23b57db3d6c1ea7c63f7e7",
@@ -214,6 +226,12 @@
 		"sha256": "11d9dd60d3ee0686dfd19a2bd0f1b01b283749788e5354e97af4b873b53e26d6",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/dark_wizard.png"
+	},
+	"dire_hydra": {
+		"revision": "team-material-v2",
+		"sha256": "e426cee822f868cb3bc5438a89cb735474afa96b0a547b070d67e4d690595b39",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/dire_hydra.png"
 	},
 	"disgraced_lancer": {
 		"revision": "team-material-v2",
@@ -329,6 +347,12 @@
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/knight.png"
 	},
+	"halberdier": {
+		"revision": "team-material-v2",
+		"sha256": "e9ecf3d224097facd58cccfd8a130014bf8bc8cef71d7f02828927c4801347c6",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/halberdier.png"
+	},
 	"healer": {
 		"revision": "team-material-v2",
 		"sha256": "25f38d2748ca89cd2c648d93d2a1f16f81b7bf5be6ab92ca806be344f58bdbd9",
@@ -358,6 +382,12 @@
 		"sha256": "70a9c97a93b6c3334a7c5c15053ec4ab95cd103fb6cb1e8a40b8f25c154c14e2",
 		"size": 384,
 		"source": "res://assets/manuscript-v1/imp_bomb_runner.png"
+	},
+	"imp_burrow": {
+		"revision": "team-material-v2",
+		"sha256": "c549e6846958c90686d5cae5bb560284b75ab629358735e2bdf8bdd0dad0ef2f",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/imp_burrow.png"
 	},
 	"knight": {
 		"revision": "team-material-v2",
@@ -407,6 +437,12 @@
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/blood_tower.png"
 	},
+	"lord_card_enemy_aether_hound": {
+		"revision": "team-material-v2",
+		"sha256": "110f9df637e33d03ef62f735ab204f7a5d30f07656ccec7fc817ed370752526c",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/aether_hound.png"
+	},
 	"lord_card_enemy_arcane_archer": {
 		"revision": "team-material-v2",
 		"sha256": "b238c9faa6c28f66a867fdc93550592a8c45aa7cc2453816bf47e4f948667f5a",
@@ -455,6 +491,12 @@
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/bonewall.png"
 	},
+	"lord_card_enemy_bramble_wall": {
+		"revision": "team-material-v2",
+		"sha256": "7c02e6025803dc809ef4609bf28faad5748db0790b281fc1db7ed54485d7e196",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/bramble_wall.png"
+	},
 	"lord_card_enemy_chain_lightning": {
 		"revision": "team-material-v2",
 		"sha256": "31ba617075bbd39825038bdd213b8f5301cbd8e72a7290f3e518946ba4b3fa09",
@@ -496,6 +538,12 @@
 		"sha256": "11d9dd60d3ee0686dfd19a2bd0f1b01b283749788e5354e97af4b873b53e26d6",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/dark_wizard.png"
+	},
+	"lord_card_enemy_dire_hydra": {
+		"revision": "team-material-v2",
+		"sha256": "e426cee822f868cb3bc5438a89cb735474afa96b0a547b070d67e4d690595b39",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/dire_hydra.png"
 	},
 	"lord_card_enemy_dread_howl": {
 		"revision": "team-material-v2",
@@ -545,6 +593,12 @@
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/knight.png"
 	},
+	"lord_card_enemy_halberdier": {
+		"revision": "team-material-v2",
+		"sha256": "e9ecf3d224097facd58cccfd8a130014bf8bc8cef71d7f02828927c4801347c6",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/halberdier.png"
+	},
 	"lord_card_enemy_harvest": {
 		"revision": "team-material-v2",
 		"sha256": "7c22665c1a980a3fd4d5b88fbd50a7f99feb8674436c360072b185a059fcdc01",
@@ -556,6 +610,12 @@
 		"sha256": "34aa6ac5e4d0104a34bb6ee396edbc8cabe55cee4b5b6db41f15cebcff2cddae",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/hooknose_flyer.png"
+	},
+	"lord_card_enemy_imp_burrow": {
+		"revision": "team-material-v2",
+		"sha256": "c549e6846958c90686d5cae5bb560284b75ab629358735e2bdf8bdd0dad0ef2f",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/imp_burrow.png"
 	},
 	"lord_card_enemy_levy": {
 		"revision": "team-material-v2",
@@ -599,6 +659,12 @@
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/plague.png"
 	},
+	"lord_card_enemy_prism_mage": {
+		"revision": "team-material-v2",
+		"sha256": "747d96171d28615b02f2fedd39c2accddf9e947882eb9bcc9c41b37753dff504",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/prism_mage.png"
+	},
 	"lord_card_enemy_rain": {
 		"revision": "team-material-v2",
 		"sha256": "355a51ce8ebf0e68f42aed8df2d733ae07ff667fa4576fb168003754e3875395",
@@ -616,6 +682,12 @@
 		"sha256": "a28ada209920767fa763aeb2199d9e2ced921c9e50bb73f2e8cb32c67d8fb043",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/rolling_boulder.png"
+	},
+	"lord_card_enemy_rune_sentinel": {
+		"revision": "team-material-v2",
+		"sha256": "19c038cdf276112ab6ce76004cdf912909b6bd2ff249a1d0422cc3b6c5cf512f",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/rune_sentinel.png"
 	},
 	"lord_card_enemy_sacrifice": {
 		"revision": "team-material-v2",
@@ -646,6 +718,12 @@
 		"sha256": "a1758c53c0703cd493fe1e0796d4696d0588f3668d4b9160827b39d917aa8349",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/teleport_trap.png"
+	},
+	"lord_card_enemy_thorn_hound": {
+		"revision": "team-material-v2",
+		"sha256": "10addad8e4e1eb37ea44f766a5bc7623328ff958938326fe7f47b59e245a5f65",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/thorn_hound.png"
 	},
 	"lord_card_enemy_time_field": {
 		"revision": "team-material-v2",
@@ -977,6 +1055,12 @@
 		"size": 384,
 		"source": "res://assets/manuscript-v1/powder_barrel.png"
 	},
+	"prism_mage": {
+		"revision": "team-material-v2",
+		"sha256": "747d96171d28615b02f2fedd39c2accddf9e947882eb9bcc9c41b37753dff504",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/prism_mage.png"
+	},
 	"ram": {
 		"revision": "team-material-v2",
 		"sha256": "e532d53758029867ebcb4f93f5d297195d38e7ea26adbe4eca3c825516a043be",
@@ -1012,6 +1096,12 @@
 		"sha256": "e24a8c0c810db2e7a8044196f5f678d7ece7e88287d4af580dfae307dc7f2db6",
 		"size": 384,
 		"source": "res://assets/manuscript-v1/runaway_thrall.png"
+	},
+	"rune_sentinel": {
+		"revision": "team-material-v2",
+		"sha256": "19c038cdf276112ab6ce76004cdf912909b6bd2ff249a1d0422cc3b6c5cf512f",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/rune_sentinel.png"
 	},
 	"rune_workshop": {
 		"revision": "team-material-v2",
@@ -1108,6 +1198,12 @@
 		"sha256": "b346a4ddf28d2317d067e775c9d327a240b58a1ac2f7ea7bdf3910d510b91205",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/thorn_dragon.png"
+	},
+	"thorn_hound": {
+		"revision": "team-material-v2",
+		"sha256": "10addad8e4e1eb37ea44f766a5bc7623328ff958938326fe7f47b59e245a5f65",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/thorn_hound.png"
 	},
 	"time_field": {
 		"revision": "team-material-v2",
