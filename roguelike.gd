@@ -538,8 +538,9 @@ func paint_lords(g, domestic: bool) -> void:
 		caption.width = r.size.x-12
 		caption.alignment = HORIZONTAL_ALIGNMENT_CENTER
 		caption.break_flags = TextServer.BREAK_MANDATORY | TextServer.BREAK_WORD_BOUND | TextServer.BREAK_ADAPTIVE
-		caption.add_string(line,g.font,14)
-		caption.draw(g.get_canvas_item(),Vector2(r.position.x+6,r.end.y+4),g.RED if domestic else g.INK)
+		g.draw_rect(Rect2(r.position+Vector2(0,r.size.y),Vector2(r.size.x,54)),Color("f4e7c9"))
+		caption.add_string(line,g.font,17)
+		caption.draw(g.get_canvas_item(),Vector2(r.position.x+6,r.end.y+4),g.INK)
 
 func paint_confirm(g) -> void:
 	g.label_at(Vector2(150,150),"兩位領主組成的起始牌組",24)

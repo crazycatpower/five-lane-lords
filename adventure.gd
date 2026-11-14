@@ -314,7 +314,7 @@ func paint_seal(g, i: int) -> void:
 	else:
 		var portrait: Texture2D = g.art("bandit",1) if d.enemy_camp else g.lord_art(d.enemy_lord,1)
 		g.draw_fitted(portrait,Rect2(p+Vector2(-27,-radius-46),Vector2(54,62)),Color(1,1,1,1.0 if open else 0.45),true)
-	g.draw_string(g.font,p+Vector2(-90,radius+24),d.name,HORIZONTAL_ALIGNMENT_CENTER,180,18,g.INK if open else Color(g.INK,0.5))
+	g.draw_string(g.font,p+Vector2(-90,radius+24),d.name,HORIZONTAL_ALIGNMENT_CENTER,180,18,g.INK if open else Color("665640"))
 
 func paint_side(g) -> void:
 	var d: Dictionary = STAGES[selected]
@@ -324,7 +324,7 @@ func paint_side(g) -> void:
 	g.panel(SIDE,Color("efe0bd"))
 	g.ink_frame(SIDE.grow(-8))
 	var chapter: Dictionary = CHAPTERS[d.chapter]
-	g.draw_string(g.font,Vector2(x,y+46),chapter.name+("首府" if d.capital else ""),HORIZONTAL_ALIGNMENT_CENTER,w,20,chapter.color)
+	g.draw_string(g.font,Vector2(x,y+46),chapter.name+("首府" if d.capital else "")+(" · 已是我方領地" if is_cleared(selected) else ""),HORIZONTAL_ALIGNMENT_CENTER,w,20,chapter.color)
 	g.draw_string(g.font,Vector2(x,y+94),d.name,HORIZONTAL_ALIGNMENT_CENTER,w,36,g.INK)
 	var portrait: Texture2D = g.art("bandit",1) if d.enemy_camp else g.lord_art(d.enemy_lord,1)
 	g.draw_fitted(portrait,Rect2(x+34,y+108,110,120),Color.WHITE,true)
@@ -341,17 +341,15 @@ func paint_side(g) -> void:
 	g.label_at(Vector2(x+30,y+466),"征服獎勵",18,g.RED)
 	if d.rewards.is_empty(): g.label_at(Vector2(x+124,y+466),"王座" if selected == STAGES.size()-1 else "無",18)
 	for i: int in range(d.rewards.size()):
-		var cell := Rect2(x+124+i*104,y+446,98,50)
+		var cell := Rect2(x+30+(i%2)*200,y+478+(i/2)*50,192,46)
 		g.panel(cell,Color("f6ead0") if not is_cleared(selected) else Color("e4d6b4"))
 		g.draw_fitted(g.art(B.CARDS[d.rewards[i]].get("art",[d.rewards[i]])[0]),Rect2(cell.position+Vector2(3,2),Vector2(42,46)),Color.WHITE,true)
 		var name: String = B.CARDS[d.rewards[i]].name
-		g.draw_string(g.font,cell.position+Vector2(46,31),name,HORIZONTAL_ALIGNMENT_CENTER,50,12 if name.length() > 3 else 15,g.INK)
+		g.draw_string(g.font,cell.position+Vector2(46,30),name,HORIZONTAL_ALIGNMENT_CENTER,140,17,g.INK)
 	var prize: String = Catalog.UNLOCK_LORDS.get(d.id,"")
-	if B.LORDS.has(prize): g.label_at(Vector2(x+30,y+498) if d.rewards.is_empty() else Vector2(x+124+d.rewards.size()*104+6,y+466),("可出戰：" if is_cleared(selected) else "解鎖領主：")+B.lord_name(prize),16,g.RED)
+	if B.LORDS.has(prize): g.label_at(Vector2(x+150,y+466),("可出戰：" if is_cleared(selected) else "解鎖領主：")+B.lord_name(prize),16,g.RED)
 	if not unlocked(selected):
 		var needs: Array = d.get("needs",[])
 		var held: int = needs.filter(func(id: String) -> bool: return cleared.has(id)).size()
 		var why: String = ("征服四座首府後開放（%d / %d）" % [held,needs.size()]) if not needs.is_empty() and held < needs.size() else "先征服相鄰的領地"
 		g.draw_string(g.font,Vector2(x,SIDE.end.y-44),why,HORIZONTAL_ALIGNMENT_CENTER,w,22,Color(g.INK,0.6))
-	elif is_cleared(selected):
-		g.draw_string(g.font,Vector2(x,y+548) if not d.deck is String else Vector2(x,y+508),"已是我方領地",HORIZONTAL_ALIGNMENT_CENTER,w,17,g.RED)

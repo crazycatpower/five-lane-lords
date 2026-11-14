@@ -44,7 +44,7 @@ static func adventure_progress(g, y: float) -> void:
 	var next: int = a.frontier()
 	var done: int = a.cleared_count()
 	var line := "地圖已一統！可以再打一次" if done == count else "領地 %d / %d · 下一塊：「%s」" % [done,count,a.STAGES[next].name]
-	g.draw_string(g.font,Vector2(955,y+106),line,HORIZONTAL_ALIGNMENT_CENTER,480,18,Color("f1dcb0"))
+	g.draw_string(g.font,Vector2(955,y+106),line,HORIZONTAL_ALIGNMENT_CENTER,480,18,Color("fff5df"))
 	for i: int in range(count):
 		var p := Vector2(1195+(i-(count-1)/2.0)*30,y+131)
 		if i == next and done < count: g.draw_circle(p,11,Color("f4d78c"))
@@ -56,7 +56,7 @@ static func book(g, x: float, caption: String) -> void:
 	polygon(g,PackedVector2Array([Vector2(x,681),Vector2(x+286,674),Vector2(x+302,793),Vector2(x+14,808)]),Color("714838") if x < 300 else Color("39565a"))
 	g.draw_line(Vector2(x+29,686),Vector2(x+43,800),Color("d4b36f"),3)
 	g.draw_fitted(g.ART.ornament(4),Rect2(x+72,775,160,20),Color(1,0.88,0.62,0.6))
-	g.draw_string(g.font,Vector2(x+42,714),caption,HORIZONTAL_ALIGNMENT_CENTER,225,16,Color("dec79b"))
+	g.draw_string(g.font,Vector2(x+42,714),caption,HORIZONTAL_ALIGNMENT_CENTER,225,16,Color("fff0ca"))
 static func paint(g) -> void:
 	g.draw_fitted(g.ART.ornament(4),Rect2(90,48,660,55))
 	g.draw_string(g.font,Vector2(85,184),"羊皮紙戰記",HORIZONTAL_ALIGNMENT_CENTER,680,78,g.INK)
@@ -85,7 +85,7 @@ static func paint(g) -> void:
 	adventure_progress(g,240)
 	banner(g,412,74,Color("3b5662"),"用你的牌組對戰 AI",14.0)
 	banner(g,494,74,Color("8a5a2b"),"八場連戰、邊打邊換牌，輸一場就結束",14.0)
-	banner(g,576,74,Color("696845"),"兩邊都交給 AI，看牌組怎麼打",14.0)
+	banner(g,576,74,Color("4c5032"),"兩邊都交給 AI，看牌組怎麼打",14.0)
 	banner(g,658,72,Color("6b3f5e"),"輸入 IP，和朋友對戰",14.0)
 	g.draw_string(g.font,Vector2(951,752),"出征領主 · "+g.B.LORDS[g.player_lord].name,HORIZONTAL_ALIGNMENT_CENTER,490,19,g.INK)
 	book(g,88,"軍備名冊")

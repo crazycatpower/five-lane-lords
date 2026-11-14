@@ -33,6 +33,8 @@ func text_box(rect: Rect2, text: String, size: int = 20) -> RichTextLabel:
 	label.position = rect.position
 	label.size = rect.size
 	label.text = text
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.add_theme_constant_override("line_separation",4)
 	label.add_theme_font_override("normal_font",game.font)
 	label.add_theme_font_size_override("normal_font_size",size)
 	label.add_theme_color_override("default_color",game.INK)
@@ -61,8 +63,8 @@ func show_catalog() -> void:
 	game.title_button(Rect2(670,802,140,46),"下一頁",func(): page += 1; show_catalog()).disabled = (page+1)*12 >= list.size()
 	var lord := selected.begins_with("lord_")
 	var rules: String = B.skill_text(selected.trim_prefix("lord_")) if lord else B.card_description(selected)
-	text_box(Rect2(955,429,535,178),rules,19)
-	text_box(Rect2(955,645,535,130),Lore.TEXT.get(selected,""),23)
+	text_box(Rect2(955,405,535,212),rules,22)
+	text_box(Rect2(955,657,535,118),Lore.TEXT.get(selected,""),19)
 	game.queue_redraw()
 
 func back() -> void:
@@ -92,9 +94,9 @@ func draw_catalog() -> void:
 	game.draw_string(game.font,Vector2(934,114),entry_name(selected),HORIZONTAL_ALIGNMENT_CENTER,584,34,game.INK)
 	if selected.begins_with("lord_"): game.draw_fitted(game.art(selected),Rect2(1050,137,350,233))
 	else: game.draw_card_art(selected,Rect2(1050,137,350,233))
-	game.label_at(Vector2(955,411),"卡牌說明",22)
-	game.ink_line(Vector2(955,611),Vector2(1490,611),3)
-	game.label_at(Vector2(955,637),"卡牌趣聞",22)
+	game.label_at(Vector2(955,390),"卡牌說明",22)
+	game.ink_line(Vector2(955,625),Vector2(1490,625),3)
+	game.label_at(Vector2(955,650),"卡牌趣聞",22)
 
 func show_battle_info(entering: bool = true) -> void:
 	if entering:

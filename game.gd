@@ -845,9 +845,11 @@ func draw_card(kind: String, rect: Rect2, slot: int = -1) -> void:
 	var shade := Color(0.45,0.45,0.45) if short else Color.WHITE
 	draw_card_art(kind,art_box,0,shade)
 	if blocked: draw_rect(rect.grow(-3),Color(0.40,0.40,0.40,0.50))
+	if cooling: curtain(art_box,clampf(model.slot_cd(me,slot)/maxf(0.1,data.cooldown),0,1))
+	draw_rect(Rect2(rect.position+Vector2(7,s.y*0.64),Vector2(s.x-14,s.y*0.23)),Color("f4e7c9"))
 	# Name and type sit above the frame's bottom corner flowers (they start ~83% down).
-	draw_string(font,rect.position+Vector2(0,s.y*0.74),data.name,HORIZONTAL_ALIGNMENT_CENTER,s.x,17,Color("2e2219") if blocked else INK)
-	draw_string(font,rect.position+Vector2(0,s.y*0.83),data.role,HORIZONTAL_ALIGNMENT_CENTER,s.x,13,Color("33261a") if blocked else Color("5a4630"))
+	draw_string(font,rect.position+Vector2(0,s.y*0.74),data.name,HORIZONTAL_ALIGNMENT_CENTER,s.x,19,Color("2e2219") if blocked else INK)
+	draw_string(font,rect.position+Vector2(0,s.y*0.83),data.role,HORIZONTAL_ALIGNMENT_CENTER,s.x,15,Color("33261a") if blocked else Color("5a4630"))
 	if screen == "battle" and model != null and me < model.card_upgrades.size():
 		var lv: int = preload("res://card_upgrades.gd").level(model.card_upgrades[me].get(kind,{}))
 		if lv > 0: # roguelike shop upgrade
@@ -862,12 +864,11 @@ func draw_card(kind: String, rect: Rect2, slot: int = -1) -> void:
 		var tag := Rect2(rect.position+Vector2(s.x*0.5-18,8),Vector2(36,17))
 		draw_rect(tag,preload("res://command_style.gd").tag_color(kind))
 		draw_string(font,tag.position+Vector2(0,13),B.FACTIONS[faction],HORIZONTAL_ALIGNMENT_CENTER,tag.size.x,12,Color("f3e6c4"))
-	if cooling: curtain(rect.grow(-3),clampf(model.slot_cd(me,slot)/maxf(0.1,data.cooldown),0,1))
 	# Ink cost badge, top right.
 	var badge := rect.position+Vector2(s.x-19,19)
 	draw_circle(badge,15,Color("2f3f5c"))
 	draw_arc(badge,15,0,TAU,24,Color("cfaa60"),2)
-	draw_string(font,badge+Vector2(-15,6),("-" if data.get("summon_only",false) else str(data.cost)),HORIZONTAL_ALIGNMENT_CENTER,30,16,Color("f3e6c4"))
+	draw_string(font,badge+Vector2(-15,6),("-" if data.get("summon_only",false) else str(data.cost)),HORIZONTAL_ALIGNMENT_CENTER,30,20,Color("fff6df"))
 	if slot >= 0:
 		var key := "F" if slot == Battle.FARM_SLOT else str(slot+1)
 		draw_rect(Rect2(rect.position+Vector2(7,7),Vector2(22,22)),Color("3f5a2c") if slot == Battle.FARM_SLOT else Color("725138"))
@@ -1675,12 +1676,12 @@ func draw_skill_button() -> void:
 	draw_rect(Rect2(SKILL_RECT.position+Vector2(8,10),Vector2(24,24)),Color("725138"))
 	draw_string(font,SKILL_RECT.position+Vector2(8,28),"Q",HORIZONTAL_ALIGNMENT_CENTER,24,15,Color("efdfb9"))
 	label_at(SKILL_RECT.position+Vector2(42,24),"領主技能：%s" % info.skill,17,RED if ready else INK)
-	# Ready: a slow golden glow. Cooling: the same parting curtain as the cards. Otherwise greyed.
+	# Keep the skill label legible in every state; cooldown occupies only the bottom edge.
 	if ready:
 		var glow := 0.5+0.5*sin(Time.get_ticks_msec()/260.0)
 		draw_rect(SKILL_RECT.grow(4+glow*2),Color(0.95,0.75,0.25,0.25+0.35*glow),false,3)
-	elif model.skill_cd[me] > 0: curtain(SKILL_RECT.grow(-2),clampf(model.skill_cd[me]/B.skill_cooldown(model.lords[me].lord),0,1))
-	else: draw_rect(SKILL_RECT.grow(-2),Color(0.40,0.40,0.40,0.35))
+	elif model.skill_cd[me] > 0: draw_rect(Rect2(SKILL_RECT.position+Vector2(4,SKILL_RECT.size.y-7),Vector2((SKILL_RECT.size.x-8)*clampf(model.skill_cd[me]/B.skill_cooldown(model.lords[me].lord),0,1),4)),RED)
+	else: draw_rect(SKILL_RECT.grow(-2),Color("8a6f4a"),false,2)
 
 # A lord row's skill state as a small mark, no words: a glowing gem when it can be cast, a dial
 # filling up while it cools, a dull coin when gold is short, an empty ring when the lord is down.
@@ -1782,6 +1783,7 @@ func draw_net() -> void:
 	label_at(Vector2(290,300),"開房",28)
 	panel(Rect2(780,250,560,180))
 	label_at(Vector2(810,300),"加入：輸入對方 IP",28)
+	panel(Rect2(100,457,1400,70),Color("efe0bd"))
 	label_at(Vector2(120,500),"我的牌組：%s · %s" % [B.LORDS[player_lord].name,"、".join(player_deck.map(func(k): return B.CARDS[k].name))],20)
 	var y := 560.0
 	if net != null and net.state == "hosting":
@@ -2026,9 +2028,9 @@ func draw_lord_card(kind: String, r: Rect2, chosen: bool) -> void:
 	var tint: Color = preload("res://command_style.gd").TINTS.get(B.lord_faction(kind),Color("efe3c8"))
 	panel(r,tint.lerp(Color.WHITE,0.55 if chosen else 0.25),RED if chosen else Color("8a6f4a"))
 	draw_fitted(lord_art(kind),Rect2(r.position+Vector2(8,24),Vector2(r.size.x-16,r.size.y-86)),Color.WHITE,true)
-	draw_string(font,Vector2(r.position.x,r.end.y-44),info.name,HORIZONTAL_ALIGNMENT_CENTER,r.size.x,17,INK)
-	draw_string(font,Vector2(r.position.x,r.end.y-27),info.role,HORIZONTAL_ALIGNMENT_CENTER,r.size.x,13,Color("5a4a36"))
-	draw_string(font,Vector2(r.position.x,r.end.y-10),"%s %d" % [info.skill,int(B.skill_cost(kind))],HORIZONTAL_ALIGNMENT_CENTER,r.size.x,12,RED)
+	draw_string(font,Vector2(r.position.x,r.end.y-44),info.name,HORIZONTAL_ALIGNMENT_CENTER,r.size.x,21,INK)
+	draw_string(font,Vector2(r.position.x,r.end.y-27),info.role,HORIZONTAL_ALIGNMENT_CENTER,r.size.x,16,Color("5a4a36"))
+	draw_string(font,Vector2(r.position.x,r.end.y-10),"%s %d" % [info.skill,int(B.skill_cost(kind))],HORIZONTAL_ALIGNMENT_CENTER,r.size.x,16,RED)
 	var faction: String = B.lord_faction(kind)
 	var tag := Rect2(r.position+Vector2(6,6),Vector2(36,17))
 	draw_rect(tag,preload("res://command_style.gd").TAGS.get(faction,Color("7d7466")))
@@ -2053,7 +2055,7 @@ func draw_deck() -> void:
 	label_at(Vector2(SLOT_X,80),title,30,INK if watch_edit < 0 else (RED if watch_edit == 0 else BLUE))
 	var tx: float = SLOT_X+font.get_string_size(title,HORIZONTAL_ALIGNMENT_LEFT,-1,30).x+18
 	label_at(Vector2(tx,78),"%d / 8 · 平均 %.1f 金幣" % [player_deck.size(),DeckStore.average(player_deck)],20,RED if player_deck.size() < 8 else muted)
-	label_at(Vector2(SLOT_X,104),B.skill_text(lord),14,muted)
+	label_at(Vector2(SLOT_X,104),B.skill_text(lord),17,INK)
 	# Home card (fixed) + eight slots.
 	var home := deck_slot_rect(0)
 	panel(home.grow(4),Color("cfdcae"),Color("3f5a2c"))
@@ -2256,7 +2258,7 @@ func show_help() -> void:
 		text.position = L.HELP_TEXT_RECTS[i].position
 		text.size = L.HELP_TEXT_RECTS[i].size
 		text.bbcode_enabled = true
-		text.text = columns[i]
+		text.text = columns[i].replace("[b]","[font_size=24][color=#763825]").replace("[/b]","[/color][/font_size]")
 		text.scroll_active = false
 		text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		text.mouse_filter = Control.MOUSE_FILTER_IGNORE
