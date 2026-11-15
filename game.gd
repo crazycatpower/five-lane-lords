@@ -906,6 +906,7 @@ func _draw() -> void:
 	elif screen == "recap":
 		panel(Rect2(100,70,1400,700))
 		label_at(Vector2(140,128),"戰局復盤",38)
+		review.draw_charts(self)
 	elif screen == "codex": library.draw_catalog()
 	elif screen == "battle_info": library.draw_battle_info()
 	elif screen == "deck": draw_deck()
