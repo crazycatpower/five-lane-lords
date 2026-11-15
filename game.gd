@@ -717,7 +717,6 @@ func draw_fitted(texture: Texture2D, box: Rect2, shade: Color = Color.WHITE, bot
 
 # Same as draw_fitted, mirrored left-right when face < 0. Unit art faces right (toward blue).
 func draw_fitted_facing(texture: Texture2D, box: Rect2, face: float, shade: Color = Color.WHITE) -> void:
-	if field_mirror: face = -face
 	var r := fitted_rect(texture.get_size(),box,false)
 	if face >= 0:
 		draw_texture_rect(texture,r,false,shade)
@@ -744,7 +743,7 @@ func actor_rect(kind: String) -> Rect2:
 	return fitted_rect(art(kind).get_size(),Rect2(-width/2,-63,width,80),true)
 
 func draw_actor(kind: String, team: int, pos: Vector2, face: float, shade: Color = Color.WHITE) -> void:
-	if field_mirror: face = -face # the mirror flips the art; flip it back so troops face their way
+	# tf() mirrors both position and facing for the guest; keep world-space facing here.
 	tf(pos,0,Vector2(face,1))
 	draw_texture_rect(art(kind,team),actor_rect(kind),false,shade)
 	tf()
