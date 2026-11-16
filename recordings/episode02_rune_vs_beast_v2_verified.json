@@ -1,0 +1,1006 @@
+{
+	"events": [
+		{
+			"card": "crystal",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 36,
+			"lane": -1,
+			"seconds": 0.6,
+			"team": 0
+		},
+		{
+			"card": "pouch_beast",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 36,
+			"lane": -1,
+			"seconds": 0.6,
+			"team": 1
+		},
+		{
+			"card": "belly_eye",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 103,
+			"lane": -1,
+			"seconds": 1.71666666666667,
+			"team": 1
+		},
+		{
+			"card": "bearded_imp",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 170,
+			"lane": -1,
+			"seconds": 2.83333333333333,
+			"team": 1
+		},
+		{
+			"card": "arcane_archer",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 537,
+			"lane": -1,
+			"seconds": 8.95,
+			"team": 0
+		},
+		{
+			"card": "summon_trap",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 604,
+			"lane": -1,
+			"seconds": 10.0666666666667,
+			"team": 0
+		},
+		{
+			"card": "artificer",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 671,
+			"lane": -1,
+			"seconds": 11.1833333333333,
+			"team": 0
+		},
+		{
+			"card": "crystal",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 986,
+			"lane": -1,
+			"seconds": 16.4333333333333,
+			"team": 0
+		},
+		{
+			"card": "blink_blade",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 1611,
+			"lane": -1,
+			"seconds": 26.85,
+			"team": 0
+		},
+		{
+			"card": "crystal",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 1926,
+			"lane": -1,
+			"seconds": 32.1,
+			"team": 0
+		},
+		{
+			"card": "hooknose_flyer",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 2314,
+			"lane": -1,
+			"seconds": 38.5666666666667,
+			"team": 1
+		},
+		{
+			"card": "phase_rider",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 2613,
+			"lane": -1,
+			"seconds": 43.55,
+			"team": 0
+		},
+		{
+			"card": "teleport_trap",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 2742,
+			"lane": -1,
+			"seconds": 45.7,
+			"team": 0
+		},
+		{
+			"card": "fishbeak",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 2970,
+			"lane": -1,
+			"seconds": 49.5,
+			"team": 1
+		},
+		{
+			"card": "crystal",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 3181,
+			"lane": -1,
+			"seconds": 53.0166666666667,
+			"team": 0
+		},
+		{
+			"card": "glutton_nest",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 3223,
+			"lane": -1,
+			"seconds": 53.7166666666667,
+			"team": 1
+		},
+		{
+			"card": "summon_trap",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 3403,
+			"lane": -1,
+			"seconds": 56.7166666666667,
+			"team": 0
+		},
+		{
+			"card": "arcane_archer",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 3873,
+			"lane": -1,
+			"seconds": 64.55,
+			"team": 0
+		},
+		{
+			"card": "pouch_beast",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 4716,
+			"lane": -1,
+			"seconds": 78.6,
+			"team": 1
+		},
+		{
+			"card": "",
+			"event": "skill",
+			"film_seconds": 0.0,
+			"frame": 5643,
+			"lane": -1,
+			"seconds": 94.05,
+			"team": 0
+		},
+		{
+			"card": "belly_eye",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 5806,
+			"lane": -1,
+			"seconds": 96.7666666666667,
+			"team": 1
+		},
+		{
+			"card": "artificer",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 5869,
+			"lane": -1,
+			"seconds": 97.8166666666667,
+			"team": 0
+		},
+		{
+			"card": "long_dragon",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 5873,
+			"lane": -1,
+			"seconds": 97.8833333333333,
+			"team": 1
+		},
+		{
+			"card": "crystal",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 6277,
+			"lane": -1,
+			"seconds": 104.616666666667,
+			"team": 0
+		},
+		{
+			"card": "phase_rider",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 6902,
+			"lane": -1,
+			"seconds": 115.033333333333,
+			"team": 0
+		},
+		{
+			"card": "chronomancer",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 7961,
+			"lane": -1,
+			"seconds": 132.683333333333,
+			"team": 0
+		},
+		{
+			"card": "hooknose_flyer",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 8017,
+			"lane": -1,
+			"seconds": 133.616666666667,
+			"team": 1
+		},
+		{
+			"card": "blink_blade",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 8028,
+			"lane": -1,
+			"seconds": 133.8,
+			"team": 0
+		},
+		{
+			"card": "bearded_imp",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 8084,
+			"lane": -1,
+			"seconds": 134.733333333333,
+			"team": 1
+		},
+		{
+			"card": "arcane_golem",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 8219,
+			"lane": -1,
+			"seconds": 136.983333333333,
+			"team": 0
+		},
+		{
+			"card": "teleport_trap",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 8472,
+			"lane": -1,
+			"seconds": 141.2,
+			"team": 0
+		},
+		{
+			"card": "pouch_beast",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 8802,
+			"lane": -1,
+			"seconds": 146.7,
+			"team": 1
+		},
+		{
+			"card": "summon_trap",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 8880,
+			"lane": -1,
+			"seconds": 148.0,
+			"team": 0
+		},
+		{
+			"card": "artificer",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 9009,
+			"lane": -1,
+			"seconds": 150.15,
+			"team": 0
+		},
+		{
+			"card": "fishbeak",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 9303,
+			"lane": -1,
+			"seconds": 155.05,
+			"team": 1
+		},
+		{
+			"card": "crystal",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 9417,
+			"lane": -1,
+			"seconds": 156.95,
+			"team": 0
+		},
+		{
+			"card": "belly_eye",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 9742,
+			"lane": -1,
+			"seconds": 162.366666666667,
+			"team": 1
+		},
+		{
+			"card": "crystal",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 10383,
+			"lane": -1,
+			"seconds": 173.05,
+			"team": 0
+		},
+		{
+			"card": "arcane_archer",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 10605,
+			"lane": -1,
+			"seconds": 176.75,
+			"team": 0
+		},
+		{
+			"card": "blink_blade",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 10796,
+			"lane": -1,
+			"seconds": 179.933333333333,
+			"team": 0
+		},
+		{
+			"card": "hooknose_flyer",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 11173,
+			"lane": -1,
+			"seconds": 186.216666666667,
+			"team": 1
+		},
+		{
+			"card": "teleport_trap",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 11235,
+			"lane": -1,
+			"seconds": 187.25,
+			"team": 0
+		},
+		{
+			"card": "chronomancer",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 11674,
+			"lane": -1,
+			"seconds": 194.566666666667,
+			"team": 0
+		},
+		{
+			"card": "phase_rider",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 11741,
+			"lane": -1,
+			"seconds": 195.683333333333,
+			"team": 0
+		},
+		{
+			"card": "summon_trap",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 11808,
+			"lane": -1,
+			"seconds": 196.8,
+			"team": 0
+		},
+		{
+			"card": "glutton_nest",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 12077,
+			"lane": -1,
+			"seconds": 201.283333333333,
+			"team": 1
+		},
+		{
+			"card": "artificer",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 12123,
+			"lane": -1,
+			"seconds": 202.05,
+			"team": 0
+		},
+		{
+			"card": "long_dragon",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 12175,
+			"lane": -1,
+			"seconds": 202.916666666667,
+			"team": 1
+		},
+		{
+			"card": "arcane_archer",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 12810,
+			"lane": -1,
+			"seconds": 213.5,
+			"team": 0
+		},
+		{
+			"card": "pouch_beast",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 12862,
+			"lane": -1,
+			"seconds": 214.366666666667,
+			"team": 1
+		},
+		{
+			"card": "blink_blade",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 12877,
+			"lane": -1,
+			"seconds": 214.616666666667,
+			"team": 0
+		},
+		{
+			"card": "chronomancer",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 13068,
+			"lane": -1,
+			"seconds": 217.8,
+			"team": 0
+		},
+		{
+			"card": "teleport_trap",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 13228,
+			"lane": -1,
+			"seconds": 220.466666666667,
+			"team": 0
+		},
+		{
+			"card": "fishbeak",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 13301,
+			"lane": -1,
+			"seconds": 221.683333333333,
+			"team": 1
+		},
+		{
+			"card": "artificer",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 13667,
+			"lane": -1,
+			"seconds": 227.783333333333,
+			"team": 0
+		},
+		{
+			"card": "belly_eye",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 13957,
+			"lane": -1,
+			"seconds": 232.616666666667,
+			"team": 1
+		},
+		{
+			"card": "phase_rider",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 14013,
+			"lane": -1,
+			"seconds": 233.55,
+			"team": 0
+		},
+		{
+			"card": "arcane_golem",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 14235,
+			"lane": -1,
+			"seconds": 237.25,
+			"team": 0
+		},
+		{
+			"card": "glutton_nest",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 14520,
+			"lane": -1,
+			"seconds": 242.0,
+			"team": 1
+		},
+		{
+			"card": "hooknose_flyer",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 14742,
+			"lane": -1,
+			"seconds": 245.7,
+			"team": 1
+		},
+		{
+			"card": "summon_trap",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 14798,
+			"lane": -1,
+			"seconds": 246.633333333333,
+			"team": 0
+		},
+		{
+			"card": "arcane_archer",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 14865,
+			"lane": -1,
+			"seconds": 247.75,
+			"team": 0
+		},
+		{
+			"card": "artificer",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 15304,
+			"lane": -1,
+			"seconds": 255.066666666667,
+			"team": 0
+		},
+		{
+			"card": "bearded_imp",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 15522,
+			"lane": -1,
+			"seconds": 258.7,
+			"team": 1
+		},
+		{
+			"card": "teleport_trap",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 15526,
+			"lane": -1,
+			"seconds": 258.766666666667,
+			"team": 0
+		},
+		{
+			"card": "blink_blade",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 15593,
+			"lane": -1,
+			"seconds": 259.883333333333,
+			"team": 0
+		},
+		{
+			"card": "pouch_beast",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 15775,
+			"lane": -1,
+			"seconds": 262.916666666667,
+			"team": 1
+		},
+		{
+			"card": "crystal",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 15908,
+			"lane": -1,
+			"seconds": 265.133333333333,
+			"team": 0
+		},
+		{
+			"card": "summon_trap",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 16037,
+			"lane": -1,
+			"seconds": 267.283333333333,
+			"team": 0
+		},
+		{
+			"card": "long_dragon",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 16059,
+			"lane": -1,
+			"seconds": 267.65,
+			"team": 1
+		},
+		{
+			"card": "",
+			"event": "breach",
+			"film_seconds": 0.0,
+			"frame": 16458,
+			"lane": 1,
+			"seconds": 274.3,
+			"team": 1
+		},
+		{
+			"card": "phase_rider",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 16538,
+			"lane": -1,
+			"seconds": 275.633333333333,
+			"team": 0
+		},
+		{
+			"card": "belly_eye",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 16684,
+			"lane": -1,
+			"seconds": 278.066666666667,
+			"team": 1
+		},
+		{
+			"card": "arcane_archer",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 16760,
+			"lane": -1,
+			"seconds": 279.333333333333,
+			"team": 0
+		},
+		{
+			"card": "artificer",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 16889,
+			"lane": -1,
+			"seconds": 281.483333333333,
+			"team": 0
+		},
+		{
+			"card": "crystal",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 17049,
+			"lane": -1,
+			"seconds": 284.15,
+			"team": 0
+		},
+		{
+			"card": "fishbeak",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 17247,
+			"lane": -1,
+			"seconds": 287.45,
+			"team": 1
+		},
+		{
+			"card": "chronomancer",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 17705,
+			"lane": -1,
+			"seconds": 295.083333333333,
+			"team": 0
+		},
+		{
+			"card": "blink_blade",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 17772,
+			"lane": -1,
+			"seconds": 296.2,
+			"team": 0
+		},
+		{
+			"card": "teleport_trap",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 17901,
+			"lane": -1,
+			"seconds": 298.35,
+			"team": 0
+		},
+		{
+			"card": "hooknose_flyer",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 18027,
+			"lane": -1,
+			"seconds": 300.45,
+			"team": 1
+		},
+		{
+			"card": "summon_trap",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 18123,
+			"lane": -1,
+			"seconds": 302.05,
+			"team": 0
+		},
+		{
+			"card": "glutton_nest",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 18280,
+			"lane": -1,
+			"seconds": 304.666666666667,
+			"team": 1
+		},
+		{
+			"card": "phase_rider",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 18345,
+			"lane": -1,
+			"seconds": 305.75,
+			"team": 0
+		},
+		{
+			"card": "pouch_beast",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 18440,
+			"lane": -1,
+			"seconds": 307.333333333333,
+			"team": 1
+		},
+		{
+			"card": "artificer",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 18474,
+			"lane": -1,
+			"seconds": 307.9,
+			"team": 0
+		},
+		{
+			"card": "crystal",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 18727,
+			"lane": -1,
+			"seconds": 312.116666666667,
+			"team": 0
+		},
+		{
+			"card": "bearded_imp",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 18755,
+			"lane": -1,
+			"seconds": 312.583333333333,
+			"team": 1
+		},
+		{
+			"card": "belly_eye",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 19256,
+			"lane": -1,
+			"seconds": 320.933333333333,
+			"team": 1
+		},
+		{
+			"card": "chronomancer",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 19507,
+			"lane": -1,
+			"seconds": 325.116666666667,
+			"team": 0
+		},
+		{
+			"card": "arcane_archer",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 19574,
+			"lane": -1,
+			"seconds": 326.233333333333,
+			"team": 0
+		},
+		{
+			"card": "blink_blade",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 19641,
+			"lane": -1,
+			"seconds": 327.35,
+			"team": 0
+		},
+		{
+			"card": "glutton_nest",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 19819,
+			"lane": -1,
+			"seconds": 330.316666666667,
+			"team": 1
+		},
+		{
+			"card": "teleport_trap",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 19863,
+			"lane": -1,
+			"seconds": 331.05,
+			"team": 0
+		},
+		{
+			"card": "fishbeak",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 19917,
+			"lane": -1,
+			"seconds": 331.95,
+			"team": 1
+		},
+		{
+			"card": "long_dragon",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 20015,
+			"lane": -1,
+			"seconds": 333.583333333333,
+			"team": 1
+		},
+		{
+			"card": "crystal",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 20023,
+			"lane": -1,
+			"seconds": 333.716666666667,
+			"team": 0
+		},
+		{
+			"card": "",
+			"event": "breach",
+			"film_seconds": 0.0,
+			"frame": 20089,
+			"lane": 3,
+			"seconds": 334.816666666667,
+			"team": 0
+		},
+		{
+			"card": "pouch_beast",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 20206,
+			"lane": -1,
+			"seconds": 336.766666666667,
+			"team": 1
+		},
+		{
+			"card": "artificer",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 20214,
+			"lane": -1,
+			"seconds": 336.9,
+			"team": 0
+		},
+		{
+			"card": "chronomancer",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 20839,
+			"lane": -1,
+			"seconds": 347.316666666667,
+			"team": 0
+		},
+		{
+			"card": "hooknose_flyer",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 20893,
+			"lane": -1,
+			"seconds": 348.216666666667,
+			"team": 1
+		},
+		{
+			"card": "phase_rider",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 20906,
+			"lane": -1,
+			"seconds": 348.433333333333,
+			"team": 0
+		},
+		{
+			"card": "summon_trap",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 21004,
+			"lane": -1,
+			"seconds": 350.066666666667,
+			"team": 0
+		},
+		{
+			"card": "",
+			"event": "breach",
+			"film_seconds": 0.0,
+			"frame": 21209,
+			"lane": 1,
+			"seconds": 353.483333333333,
+			"team": 0
+		},
+		{
+			"card": "teleport_trap",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 21350,
+			"lane": -1,
+			"seconds": 355.833333333333,
+			"team": 0
+		},
+		{
+			"card": "glutton_nest",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 21363,
+			"lane": -1,
+			"seconds": 356.05,
+			"team": 1
+		},
+		{
+			"card": "blink_blade",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 21448,
+			"lane": -1,
+			"seconds": 357.466666666667,
+			"team": 0
+		},
+		{
+			"card": "belly_eye",
+			"event": "play",
+			"film_seconds": 0.0,
+			"frame": 21461,
+			"lane": -1,
+			"seconds": 357.683333333333,
+			"team": 1
+		},
+		{
+			"card": "",
+			"event": "invaded",
+			"film_seconds": 0.0,
+			"frame": 21511,
+			"lane": 1,
+			"seconds": 358.516666666667,
+			"team": 0
+		},
+		{
+			"card": "",
+			"event": "finish",
+			"film_seconds": 0.0,
+			"frame": 21511,
+			"lane": -1,
+			"seconds": 358.516666666667,
+			"team": 0
+		}
+	],
+	"frames": 21512,
+	"seed": 23,
+	"winner": 0
+}
