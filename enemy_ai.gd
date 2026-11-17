@@ -4,6 +4,7 @@ const Frontier = preload("res://frontier_cards.gd")
 const Faction = preload("res://faction_cards.gd")
 const GluttonNest = preload("res://glutton_nest.gd")
 const ExpansionMore = preload("res://expansion_more.gd")
+const GoldMonster = preload("res://gold_monster.gd")
 const L = preload("res://layout.gd")
 
 # Pure decision: snapshot in, legal play out. No model mutation or random globals.
@@ -152,6 +153,7 @@ static func decide(s: Dictionary) -> Dictionary:
 						eaten_on_spawn = true
 						break
 				if eaten_on_spawn: continue
+			if GoldMonster.ai_wait(c.kind,s.ink,defend >= 0 and lane == defend): continue # 金幣怪物 waits for a real purse
 			if data.type == "building":
 				var here: Dictionary = own_building(s.buildings,team,c.cell)
 				if not here.is_empty():

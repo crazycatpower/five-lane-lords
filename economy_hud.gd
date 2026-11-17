@@ -7,7 +7,7 @@ static func draw(g) -> void:
 	g.panel(PLATE,Color(0.92,0.86,0.72,0.92),Color("8a6f4a"))
 	# No help or notice text here any more (producer 2026-11-03): the panel is the purse.
 	var focus: int = g.selected if g.selected >= 0 else g.hover_slot
-	var need: float = B.CARDS[m.kind_at(g.me,focus)].cost if focus >= 0 and not g.spectating else 0.0
+	var need: float = preload("res://gold_monster.gd").need(m.kind_at(g.me,focus),m.ink[g.me]) if focus >= 0 and not g.spectating else 0.0
 	if not g.spectating and focus < 0 and g.SKILL_RECT.has_point(g.get_global_mouse_position()): need = B.skill_cost(m.lords[g.me].lord)
 	if g.purse_alarm > 0: need = maxf(need,g.purse_need) # a refused play shows what it wanted
 	draw_purse(g,m.ink[g.me],need,m.get_instance_id(),g.purse_alarm,m.ink[g.me] >= B.MAX_INK-0.01)

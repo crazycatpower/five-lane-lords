@@ -868,7 +868,7 @@ func draw_card(kind: String, rect: Rect2, slot: int = -1) -> void:
 	var badge := rect.position+Vector2(s.x-19,19)
 	draw_circle(badge,15,Color("2f3f5c"))
 	draw_arc(badge,15,0,TAU,24,Color("cfaa60"),2)
-	draw_string(font,badge+Vector2(-15,6),("-" if data.get("summon_only",false) else str(data.cost)),HORIZONTAL_ALIGNMENT_CENTER,30,20,Color("fff6df"))
+	draw_string(font,badge+Vector2(-15,6),("-" if data.get("summon_only",false) else preload("res://gold_monster.gd").cost_text(kind,data)),HORIZONTAL_ALIGNMENT_CENTER,30,20,Color("fff6df"))
 	if slot >= 0:
 		var key := "F" if slot == Battle.FARM_SLOT else str(slot+1)
 		draw_rect(Rect2(rect.position+Vector2(7,7),Vector2(22,22)),Color("3f5a2c") if slot == Battle.FARM_SLOT else Color("725138"))

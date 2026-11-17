@@ -371,6 +371,12 @@
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/glutton_nest_closed.png"
 	},
+	"gold_monster": {
+		"revision": "team-material-v2",
+		"sha256": "f1f8ef3c0b364ebddadce9b4d5ac687f5ed0325aaa704030ce5e7812d7ec9f09",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/gold_monster.png"
+	},
 	"granary": {
 		"revision": "team-material-v2",
 		"sha256": "4c0ae16c9f0feac81d63dca9d7888b947855f615ed287a0877ef640730b694e1",
@@ -790,6 +796,12 @@
 		"sha256": "9e6525e4f2d9db52b28ff2f4793d68cf2a8c3a021472285de03e045f274e8de3",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/glutton_nest.png"
+	},
+	"lord_card_enemy_gold_monster": {
+		"revision": "team-material-v2",
+		"sha256": "f1f8ef3c0b364ebddadce9b4d5ac687f5ed0325aaa704030ce5e7812d7ec9f09",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/gold_monster.png"
 	},
 	"lord_card_enemy_granary": {
 		"revision": "team-material-v2",

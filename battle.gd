@@ -6,6 +6,7 @@ const GluttonNest = preload("res://glutton_nest.gd")
 const Expansion = preload("res://expansion_cards.gd")
 const ExpansionMore = preload("res://expansion_more.gd")
 const Monster = preload("res://monster_cards.gd")
+const GoldMonster = preload("res://gold_monster.gd")
 const Upgrades = preload("res://card_upgrades.gd")
 const DarkSorcery = preload("res://dark_sorcery.gd")
 const LordExpansion = preload("res://lord_expansion.gd")
@@ -348,7 +349,8 @@ func play(team: int, slot: int, pos: Vector2) -> bool:
 	if not can_play(team,slot,pos): return false
 	var kind: String = kind_at(team,slot)
 	var card: Dictionary = B.CARDS[kind]
-	ink[team] -= card.cost
+	var paid: float = GoldMonster.cost(self,team,kind) # card.cost, or the whole purse for 金幣怪物
+	ink[team] -= paid
 	if slot == FARM_SLOT: farm_cd[team] = card.cooldown # the farmland slot never rotates
 	else:
 		# Replace only the played slot; the other three cards and cooldowns stay put.
@@ -358,13 +360,13 @@ func play(team: int, slot: int, pos: Vector2) -> bool:
 		hand_cd[team][slot] = B.CARDS[decks[team][slot]].cooldown
 	stats[team].plays += 1
 	stats[team].used[kind] = stats[team].used.get(kind,0)+1
-	stats[team].spent[kind] = stats[team].spent.get(kind,0.0)+card.cost
+	stats[team].spent[kind] = stats[team].spent.get(kind,0.0)+paid
 	var cell := cell_at(pos)
 	if card.type == "building":
 		var here := building_at(cell)
 		if here.is_empty(): add_building(team,cell,kind)
 		else: refresh_building(here)
-	elif card.type == "unit": deploy(team,kind,cell)
+	elif card.type == "unit": deploy(team,kind,cell,int(paid) if GoldMonster.pays_all(kind) else 0)
 	else: spells.append({"kind":kind,"team":team,"pos":pos,"delay":B.SPELL_DELAY})
 	memory[1-team] = {"card":kind,"lane":cell.y if cell.y in active_lanes else clampi(int((pos.y-L.GRID_ORIGIN.y)/L.CELL_SIZE.y),0,4)}
 	if card.type == "unit":
@@ -409,9 +411,10 @@ func deployment_column(team: int, lane: int, requested: int) -> int:
 		col += direction
 	return front_column(team,lane)
 
-func deploy(team: int, kind: String, cell: Vector2i) -> void:
+func deploy(team: int, kind: String, cell: Vector2i, gold: int = 0) -> void:
 	var card: Dictionary = B.CARDS[kind]
 	var groups: Array = card.get("members",[[kind,card.get("count",1),0.0]]).duplicate(true)
+	if gold > 0: GoldMonster.shape(groups,gold) # 金幣怪物: bodies depend on the gold paid
 	var swarm: Dictionary = lord_mod(team,"swarm",{})
 	for group: Array in groups: group[1] += int(swarm.get(group[0],swarm.get("*",0)))
 	var front_offset := 0.0
@@ -441,7 +444,8 @@ func deploy(team: int, kind: String, cell: Vector2i) -> void:
 				var u := spawn_unit(team,lane,group[0],spawn_pos)
 				u.spawn_delay = n*0.12
 				u.card = kind
-				if card_upgrades[team].has(kind): Upgrades.apply_unit(u,kind,card_upgrades[team][kind])
+				if gold > 0: GoldMonster.apply(u,gold,card_upgrades[team].get(kind,{}))
+				elif card_upgrades[team].has(kind): Upgrades.apply_unit(u,kind,card_upgrades[team][kind])
 				if march < INF: u.march = march
 				n += 1
 

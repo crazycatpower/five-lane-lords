@@ -3,6 +3,7 @@ extends RefCounted
 const TEXT := {
 	"mule_cart":"騾子不懂利息，但牠知道回家的路比去的路好走。",
 	"hook_collector":"欠債可以分期，欠命一次結清。",
+	"gold_monster":"你給牠多少，牠就長多大；你錢包剩多少，牠一枚也不留。",
 	"twin_gambler":"他每一刀都押上全部，只是賠率從來沒人算過。",
 	"gatebreaker":"他不會開鎖，他只會讓門不再需要鎖。",
 	"disgraced_lancer":"獅子徽章割掉了，衝鋒的習慣還在。",

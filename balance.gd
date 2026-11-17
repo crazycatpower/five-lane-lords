@@ -1,6 +1,20 @@
 extends RefCounted
 const START_INK := 25.0 # producer 2026-10-29 (was 10)
 const MAX_INK := 50.0
+# 金幣怪物 stages: [min gold, bodies, hp, damage, interval, speed], all on TIERS. Each row is the tier
+# combination whose cost-model value (docs/數值檔次.md) is closest to 85% of the gold paid; one more coin
+# never lowers a stat except when it adds a body. 100% was measured too strong (63.5% paired win rate, 480
+# AI matches 2026-11-17), so the purse buys 0.85 of its face value.
+const GOLD_MONSTER_STAGES := [
+	[1,1,130.0,36.0,1.9,36.0],[3,1,210.0,36.0,1.9,36.0],[4,1,350.0,36.0,1.9,36.0],[5,1,350.0,50.0,1.9,36.0],
+	[6,1,560.0,50.0,1.9,36.0],[7,1,560.0,50.0,1.9,50.0],[8,1,560.0,50.0,1.9,65.0],[9,1,560.0,50.0,1.9,90.0],
+	[10,1,560.0,50.0,1.4,90.0],[11,1,560.0,50.0,1.1,90.0],[12,1,560.0,50.0,0.85,90.0],[13,1,560.0,50.0,0.65,90.0],
+	[15,1,560.0,70.0,0.65,90.0],[17,1,560.0,95.0,0.65,90.0],
+	[19,2,900.0,70.0,1.4,36.0],[20,2,900.0,70.0,1.1,36.0],[22,2,900.0,70.0,0.85,36.0],[25,2,900.0,95.0,0.85,36.0],
+	[28,2,900.0,95.0,0.85,50.0],[32,2,900.0,95.0,0.85,65.0],[35,2,900.0,95.0,0.65,65.0],
+	[38,3,900.0,130.0,1.4,50.0],[41,3,900.0,130.0,1.4,65.0],[45,3,900.0,130.0,1.1,65.0],
+	[48,4,900.0,130.0,1.4,50.0],[50,5,900.0,70.0,1.9,90.0],
+]
 const BASE_INTERVAL := 2.0 # +1 ink every 2 s = 0.5 ink per second
 const FARM_INTERVAL := 20.0
 const FARM_START := 3.0
@@ -56,6 +70,9 @@ const LORD_HYSTERESIS := 1.5
 const CARDS := {
 	"mule_cart":{"name":"騾馬貨車","role":"運貨·經濟","type":"unit","cost":6,"cooldown":10.0,"count":1,"hp":350.0,"damage":20.0,"interval":1.9,"range":47.0,"speed":36.0,"expansion":true,"shuttle":true,"shuttle_income":6.0,"shuttle_loot":3.0,"ai":["no_defend"]},
 	"hook_collector":{"name":"鉤鐮收債人","role":"收債·近戰","type":"unit","cost":9,"cooldown":15.0,"count":2,"hp":210.0,"damage":70.0,"interval":1.1,"range":60.0,"speed":50.0,"expansion":true,"kill_income":1.0,"attack_style":"heavy"},
+	# 金幣怪物 (2026-11-17): "pay_all" spends the whole purse; the stats below are the 1-coin stage,
+	# GOLD_MONSTER_STAGES gives every other amount (gold_monster.gd).
+	"gold_monster":{"name":"金幣怪物","role":"傾囊·成長","type":"unit","cost":1,"cooldown":15.0,"count":1,"hp":130.0,"damage":36.0,"interval":1.9,"range":47.0,"speed":36.0,"pay_all":true},
 	"twin_gambler":{"name":"雙刃賭徒","role":"賭命·騷擾","type":"unit","cost":7,"cooldown":10.0,"count":2,"hp":130.0,"damage":36.0,"interval":0.65,"range":47.0,"speed":65.0,"expansion":true,"damage_roll":["E","A"]},
 	"gatebreaker":{"name":"破門錘手","role":"破門·攻城","type":"unit","cost":10,"cooldown":15.0,"count":1,"hp":560.0,"damage":70.0,"interval":1.4,"range":47.0,"speed":36.0,"expansion":true,"structure_mult":3.0,"attack_style":"heavy"},
 	"disgraced_lancer":{"name":"叛逃槍騎","faction":"normal","role":"衝刺·近戰","type":"unit","cost":8,"cooldown":15.0,"count":2,"hp":350.0,"damage":50.0,"interval":1.1,"range":60.0,"speed":65.0,"expansion":true,"charge_damage":130.0,"charge_stun":0.5},
@@ -493,6 +510,7 @@ const MINION_LORDS := {
 	"dragon_lord":{"name":"骨刺龍王","card":"thorn_dragon","role":"魔物型","hp":1500.0,"damage":95.0,"speed":50.0,"toughen":["thorn_dragon"]},
 	"card_enemy_mule_cart":{"name":"騾馬貨車首領","card":"mule_cart","role":"運貨型","hp":900.0,"damage":70.0,"speed":50.0,"cycle_speed":{"mule_cart":1.5}},
 	"card_enemy_hook_collector":{"name":"鉤鐮收債人首領","card":"hook_collector","role":"收債型","hp":900.0,"damage":70.0,"speed":50.0,"cycle_speed":{"hook_collector":1.5}},
+	"card_enemy_gold_monster":{"name":"金幣怪物首領","card":"gold_monster","role":"傾囊型","hp":900.0,"damage":70.0,"speed":50.0,"cycle_speed":{"gold_monster":1.5}},
 	"card_enemy_twin_gambler":{"name":"雙刃賭徒首領","card":"twin_gambler","role":"賭命型","hp":900.0,"damage":70.0,"speed":50.0,"cycle_speed":{"twin_gambler":1.5}},
 	"card_enemy_gatebreaker":{"name":"破門錘手首領","card":"gatebreaker","role":"破門型","hp":900.0,"damage":70.0,"speed":50.0,"cycle_speed":{"gatebreaker":1.5}},
 	"card_enemy_disgraced_lancer":{"name":"叛逃槍騎首領","card":"disgraced_lancer","role":"衝刺型","hp":900.0,"damage":70.0,"speed":50.0,"cycle_speed":{"disgraced_lancer":1.5}},
@@ -788,6 +806,7 @@ static func card_description(kind: String, cards: Dictionary = CARDS) -> String:
 		lines.append("範圍半徑 %s；落下時間 %s 秒。" % [number(d.radius),number(SPELL_DELAY)])
 		if d.has("damage"): lines.append("部隊傷害 %s、建築傷害 %s、城牆傷害 %s。" % [number(d.damage),number(d.building_damage),number(d.gate_damage)])
 	lines.append_array(expansion_description(d))
+	if d.get("pay_all",false): lines = preload("res://gold_monster.gd").describe()
 	match kind:
 		"glutton_nest": lines.append("不會定時產金；隱藏時免傷，地面部隊進入 %s 範圍會顯形並張嘴 %s 秒，之後一次吞噬周圍 %s 內所有敵我部隊（不含領主、飛行與相位）。當前總血量換金：首枚 %s 血，其後每枚多 %s 血，不足不計。消化時間為 %s 秒加上本次每枚金幣 %s 秒；閉嘴時可被攻擊；吞到部隊後每 %s 秒咀嚼恢復 %s 生命，不超過最大生命，消化後再隱藏。" % [number(d.trigger_radius),number(d.windup),number(d.radius),number(d.gold_first),number(d.gold_step),number(d.digest_time),number(d.digest_per_gold),number(d.chew_period),number(d.chew_heal)])
 		"manor_retainer": lines.append("在本路己方領地巡邏，邊緣折返、遇敵作戰。失去領地便返回最近己方格；整路失守則原地防守。")

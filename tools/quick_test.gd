@@ -75,6 +75,41 @@ func run() -> void:
 	gn_model.damage(nest, 100.0, 1, "fire")
 	check(nest.hp < nest.max_hp, "digesting glutton_nest can take damage")
 
+	# 金幣怪物: whole purse, bodies and tiers from B.GOLD_MONSTER_STAGES (closest value, never a lower stat for one more coin unless a body is added).
+	var GM = preload("res://gold_monster.gd")
+	var gm_rows: Array = B.GOLD_MONSTER_STAGES
+	var gm_ok := int(gm_rows[0][0]) == 1 and int(gm_rows[-1][0]) <= int(B.MAX_INK)
+	for i: int in range(gm_rows.size()):
+		var r: Array = gm_rows[i]
+		gm_ok = gm_ok and B.TIERS.hp.has(float(r[2])) and B.TIERS.damage.has(float(r[3])) and B.TIERS.interval.has(float(r[4])) and B.TIERS.speed.has(float(r[5])) and int(r[1]) >= 1 and int(r[1]) <= 5
+		if i > 0:
+			var p: Array = gm_rows[i-1]
+			gm_ok = gm_ok and int(r[0]) > int(p[0]) and int(r[1]) >= int(p[1])
+			if int(r[1]) == int(p[1]): gm_ok = gm_ok and r[2] >= p[2] and r[3] >= p[3] and r[4] <= p[4] and r[5] >= p[5]
+	check(gm_ok, "gold_monster stages: tier values, 1..MAX_INK, bodies 1-5, no stat drops unless a body is added")
+	var gm_bat := Battle.new(15, [], [], "lion", "lion")
+	gm_bat.ai_enabled = [false, false]
+	gm_bat.lord_active = [false, false]
+	var gm_pos: Vector2 = preload("res://layout.gd").cell_center(Vector2i(1, 2))
+	for gm_case: Array in [[37.6, 2, 900.0, 95.0, 0.65, 65.0], [50.0, 5, 900.0, 70.0, 1.9, 90.0], [1.2, 1, 130.0, 36.0, 1.9, 36.0]]:
+		gm_bat.units.clear()
+		gm_bat.decks[0][0] = "gold_monster"
+		gm_bat.hand_cd[0][0] = 0.0
+		gm_bat.ink[0] = gm_case[0]
+		var spent_before: float = gm_bat.stats[0].spent.get("gold_monster", 0.0)
+		var played: bool = gm_bat.play(0, 0, gm_pos)
+		var bodies: Array = gm_bat.units.filter(func(u: Dictionary) -> bool: return u.kind == "gold_monster")
+		var paid := floorf(gm_case[0])
+		var shape_ok := bodies.size() == int(gm_case[1]) and bodies.all(func(u: Dictionary) -> bool: return u.max_hp == gm_case[2] and u.hp == gm_case[2] and u.damage == gm_case[3] and u.interval == gm_case[4] and u.speed == gm_case[5])
+		check(played and is_equal_approx(gm_bat.ink[0], gm_case[0]-paid) and is_equal_approx(gm_bat.stats[0].spent.gold_monster-spent_before, paid) and shape_ok, "gold_monster with %s gold pays %d and fields %d x hp %s" % [str(gm_case[0]), int(paid), int(gm_case[1]), str(gm_case[2])])
+	gm_bat.decks[0][0] = "gold_monster"
+	gm_bat.hand_cd[0][0] = 0.0
+	gm_bat.ink[0] = 0.5
+	check(gm_bat.play_check(0, 0, gm_pos) == Battle.Refusal.GOLD, "gold_monster needs at least one whole coin")
+	check(GM.cost_text("gold_monster", B.CARDS.gold_monster) == "全" and GM.cost_text("militia", B.CARDS.militia) == str(B.CARDS.militia.cost), "hand medallion reads 全 only for gold_monster")
+	check(GM.ai_wait("gold_monster", 20.0, false) and not GM.ai_wait("gold_monster", 30.0, false) and not GM.ai_wait("gold_monster", 9.0, true) and not GM.ai_wait("militia", 0.0, false), "AI saves up for gold_monster, settles for less when defending")
+	check(B.card_description("gold_monster").contains("花光全部金幣"), "gold_monster card text describes the whole-purse cost")
+
 	var gn_ai := Battle.new(14, ["fishbeak", "bearded_imp", "belly_eye", "hooknose_flyer", "long_dragon", "thorn_dragon", "eyewing_dragon", "tusk_boar"], [], "beast", "lion")
 	gn_ai.ai_enabled = [false, false]
 	gn_ai.lords[0].hp = 0

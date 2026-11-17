@@ -158,6 +158,7 @@ const MINIONS := {
 	"dragon_lord":{"tier":1,"deck":["thorn_dragon","thorn_dragon","eyewing_dragon","eyewing_dragon","belly_eye","belly_eye","long_dragon","long_dragon"]},
 	"card_enemy_mule_cart":{"tier":3,"deck":["mule_cart","mule_cart","militia","hunter","shieldguard","spearbow","rain","bandit"]},
 	"card_enemy_hook_collector":{"tier":2,"deck":["hook_collector","hook_collector","militia","hunter","shieldguard","spearbow","rain","bandit"]},
+	"card_enemy_gold_monster":{"tier":2,"deck":["gold_monster","gold_monster","farmer","shieldguard","hunter","harvest","rain","drummer"]},
 	"card_enemy_twin_gambler":{"tier":2,"deck":["twin_gambler","twin_gambler","militia","hunter","shieldguard","spearbow","rain","bandit"]},
 	"card_enemy_gatebreaker":{"tier":1,"deck":["gatebreaker","gatebreaker","militia","hunter","shieldguard","spearbow","rain","bandit"]},
 	"card_enemy_disgraced_lancer":{"tier":3,"deck":["disgraced_lancer","disgraced_lancer","militia","hunter","shieldguard","spearbow","rain","bandit"]},
