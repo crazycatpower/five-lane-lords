@@ -70,6 +70,7 @@ const WATCH_SOURCES := ["隨機","我的牌組"] # recommended presets removed f
 var start_button: Button
 var effects: Array[Dictionary] = []
 const FactionVisuals = preload("res://faction_visuals.gd")
+const FxPolish = preload("res://fx_polish.gd")
 const DayCycle = preload("res://day_cycle.gd")
 const Ceremony = preload("res://battle_ceremony.gd")
 var levy_visuals := {} # last visible positions; scoped to this model
@@ -369,7 +370,7 @@ func consume_events() -> void:
 		if e.kind == "breach" and shake_enabled: shake_left = 0.25
 		if fx_enabled:
 			var copy := e.duplicate()
-			copy.life = {"nightfall":2.6 if e.get("first",false) else 1.2,"breach":2.0,"ramp":1.4,"burn":5.0,"death":0.35,"play":0.45,"ink":0.6,"skill":1.0,"link":0.6,"slash":0.35,"drum":0.6,"stone_impact":0.5,"catapult_fire":0.4,"curse_rise":0.5}.get(e.kind,0.7)
+			copy.life = {"nightfall":2.6 if e.get("first",false) else 1.2,"breach":2.0,"ramp":1.4,"burn":5.0,"death":0.35,"play":0.45,"ink":0.6,"skill":1.0,"link":0.6,"slash":0.35,"drum":0.6,"stone_impact":0.6,"catapult_fire":0.4,"curse_rise":0.5,"spell":1.0,"trap_blast":0.8,"boneburst":0.7}.get(e.kind,0.7)
 			if e.kind == "link" and e.style == "lightning":
 				copy.hop = hop
 				hop += 1
@@ -1465,8 +1466,7 @@ func draw_effects() -> void:
 					draw_line(e.pos,e.pos+Vector2.from_angle(progress*TAU)*e.radius*.6,clock_color,2)
 				draw_line(e.from,e.pos,Color(0.55,0.55,0.9,1-progress),3,true)
 				draw_arc(e.pos,e.radius*progress,0,TAU,32,Color(0.6,0.5,0.9,1-progress),3,true)
-			"trap_blast":
-				draw_arc(e.pos,e.radius*progress,0,TAU,32,Color(0.85,0.35,0.12,1-progress),4,true)
+			"trap_blast": FxPolish.explosion(self,e,progress)
 			"rune_summon":
 				draw_arc(e.pos,20+progress*35,0,TAU,24,Color(0.65,0.45,0.9,1-progress),3)
 				for i in range(6):
@@ -1480,11 +1480,8 @@ func draw_effects() -> void:
 					draw_circle(mote,3,Color(0.95,0.85,1.0,1-progress))
 				draw_arc(e.to,10+progress*24,0,TAU,24,Color(0.7,0.4,0.9,1-progress),3,true)
 			"blood_transfer": preload("res://blood_tower_fx.gd").transfer(self,e,progress)
-			"blood_gain":
-				draw_circle(e.pos+Vector2(0,-20-progress*25),3,Color(0.65,0.05,0.15,1-progress))
-			"repair":
-				draw_line(e.pos+Vector2(-6,-20-progress*15),e.pos+Vector2(6,-20-progress*15),Color(0.8,0.7,0.3,1-progress),3,true)
-				draw_line(e.pos+Vector2(0,-26-progress*15),e.pos+Vector2(0,-14-progress*15),Color(0.8,0.7,0.3,1-progress),3,true)
+			"blood_gain": FxPolish.blood_gain(self,e,progress)
+			"repair": FxPolish.repair(self,e,progress)
 			"roar":
 				for i: int in range(3):
 					var rr: float = e.radius*clampf(progress*1.2-i*0.15,0,1)
@@ -1496,13 +1493,8 @@ func draw_effects() -> void:
 				for i in range(8):
 					var ang: float = i*TAU/8.0+progress*0.5
 					draw_line(e.pos+Vector2(cos(ang),sin(ang))*(r*0.75),e.pos+Vector2(cos(ang),sin(ang))*(r*1.05),Color(1.0,0.85,0.3,(1-progress)*0.7),2.0,true)
-			"catapult_fire":
-				draw_arc(e.pos,12+progress*24,0,TAU,20,Color(0.65,0.55,0.40,1-progress),2.0,true)
-				for i in range(5):
-					draw_circle(e.pos+Vector2((i-2)*6,-sin(progress*PI)*18-i*2),2.5*(1-progress),Color(0.5,0.4,0.3,1-progress))
-			"curse_rise":
-				draw_arc(e.pos,10+progress*36,0,TAU,24,Color("926c9d",1-progress),2.5,true)
-				draw_circle(e.pos-Vector2(0,progress*28),5*(1-progress),Color("c89fe0",1-progress))
+			"catapult_fire": FxPolish.catapult_fire(self,e,progress)
+			"curse_rise": FxPolish.curse_rise(self,e,progress)
 			"witch_curse":
 				var wr: float = e.get("radius",75.0)*(0.3+progress*0.7)
 				draw_circle(e.pos,wr,Color("5c7548",(1-progress)*0.18))
@@ -1510,12 +1502,9 @@ func draw_effects() -> void:
 				for i: int in range(6):
 					var wa: float = i*TAU/6.0+progress*0.6
 					draw_circle(e.pos+Vector2(cos(wa)*wr*0.68,sin(wa)*wr*0.28-progress*14),2.6*(1-progress),Color("a37fb8",1-progress))
-			"stone_impact":
-				draw_arc(e.pos,e.radius*progress,0,TAU,28,Color(0.40,0.30,0.18,1-progress),3,true)
-				for i in range(8):
-					var a: float = i*TAU/8.0
-					draw_circle(e.pos+Vector2(cos(a),sin(a))*(progress*e.radius*0.8),3*(1-progress),Color(0.45,0.35,0.22,1-progress))
-			"summoned", "boneburst": draw_arc(e.pos,12+progress*36,0,TAU,24,Color(0.55,0.38,0.60,1-progress),2,true)
+			"stone_impact": FxPolish.stone_impact(self,e,progress)
+			"summoned": FxPolish.summon(self,e,progress,(RED if e.team == 0 else BLUE).lightened(0.35))
+			"boneburst": FxPolish.boneburst(self,e,progress)
 			"skill": draw_skill_effect(e,progress)
 			"levy_summon": FactionVisuals.summon(self,e.pos,progress)
 			"levy_dust": FactionVisuals.dust(self,e.pos,progress)
@@ -1525,9 +1514,8 @@ func draw_effects() -> void:
 			"slash": draw_slash(e.pos.x,e.lane,progress,e.team)
 			"ink": draw_circle(e.pos.lerp(to_model(Vector2(80,765) if e.team == me else Vector2(1322,35)),progress),7,Color("d9a62e"))
 			"spell":
-				if not FactionVisuals.spell(self,e,progress): draw_circle(e.pos,e.get("radius",50.0)*progress,Color(0.7,0.3,0.1,e.life*0.4))
-			"cultivate", "hoe":
-				for i: int in range(6): draw_circle(e.pos+Vector2((i-3)*8*progress,-sin(progress*PI)*28),3,Color("8a642c"))
+				if not FactionVisuals.spell(self,e,progress) and not FxPolish.spell(self,e,progress): draw_circle(e.pos,e.get("radius",50.0)*progress,Color(0.7,0.3,0.1,e.life*0.4))
+			"cultivate", "hoe": FxPolish.cultivate(self,e,progress)
 			"play":
 				var source := to_model(card_rect(e.get("slot",0)).get_center() if e.team == me else Vector2(1240,40))
 				if progress < 0.6: draw_card_art(e.card,Rect2(source.lerp(e.pos,progress/0.6)-Vector2(35,30),Vector2(70,60)),e.team,Color(1,1,1,0.75))
@@ -1542,10 +1530,7 @@ func draw_effects() -> void:
 					draw_fitted_facing(adventure.opening.BANDIT,Rect2(death_pos-Vector2(43,73),Vector2(86,104)),-1.0,Color(1,1,1,1-progress))
 				else: draw_actor(kind,e.team,death_pos,face,Color(1,1,1,1-progress))
 				for i: int in range(5): draw_circle(e.pos+Vector2(cos(i*2),sin(i*2))*progress*24,3*(1-progress),INK)
-			"burn":
-				draw_circle(e.pos,35,Color(0.15,0.07,0.02,0.35*(1-progress)))
-				if progress < 0.3:
-					for i: int in range(5): draw_circle(e.pos+Vector2((i-2)*10,-15-10*sin(e.life*12+i)),8,Color(0.9,0.4,0.05,0.6))
+			"burn": FxPolish.burn(self,e,progress)
 			"breach":
 				for i: int in range(8): draw_line(e.pos+Vector2(cos(i),sin(i))*progress*55,e.pos+Vector2(cos(i),sin(i))*progress*65,Color("6e4825"),3)
 				# The whole lane flashes: red when it is our gate, gold when we broke theirs.
@@ -1559,7 +1544,7 @@ func draw_effects() -> void:
 				var dial := L.CLOCK_FRAME.get_center()
 				for k: int in range(3): draw_arc(dial,40+fmod(progress*1.5+k/3.0,1.0)*70,0,TAU,40,Color(0.88,0.69,0.17,(1-progress)*0.7),3)
 			"nightfall": DayCycle.toll(self,e,progress)
-			"heal": label_at(e.pos+Vector2(-10,-30-progress*20),"+",20,Color(0.2,0.5,0.25,1-progress))
+			"heal": FxPolish.heal(self,e,progress)
 			"fail":
 				var c := Color(0.75,0.12,0.1,1-progress)
 				draw_line(e.pos+Vector2(-14,-14),e.pos+Vector2(14,14),c,4)

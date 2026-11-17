@@ -82,7 +82,7 @@ static func blast(m, u: Dictionary, point: Vector2, data: Dictionary) -> void:
 		if t.team != u.team and t.hp > 0 and t.pos.distance_to(point) <= data.radius: m.damage(t,data.area_damage,u.team,u.get("card",u.kind),u)
 	for lane: int in m.active_lanes:
 		if Vector2(L.gate_stop(1-u.team),L.cell_center(Vector2i(0,lane)).y).distance_to(point) <= data.radius: m.hit_gate(1-u.team,lane,data.area_damage,u.get("card",u.kind),u)
-	m.event("stone_impact",point,u.team,{"radius":data.radius})
+	m.event("trap_blast",point,u.team,{"radius":data.radius})
 	m.damage(u,u.hp,u.team,"suicide_blast",{},true)
 
 # ---------------- damage ----------------
