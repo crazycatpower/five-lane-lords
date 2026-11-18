@@ -7,6 +7,7 @@ const Expansion = preload("res://expansion_cards.gd")
 const ExpansionMore = preload("res://expansion_more.gd")
 const Monster = preload("res://monster_cards.gd")
 const GoldMonster = preload("res://gold_monster.gd")
+const SealAltar = preload("res://seal_altar.gd")
 const Upgrades = preload("res://card_upgrades.gd")
 const DarkSorcery = preload("res://dark_sorcery.gd")
 const LordExpansion = preload("res://lord_expansion.gd")
@@ -124,6 +125,7 @@ func _init(seed_value: int = 1, deck_a: Array = [], deck_b: Array = [], lord_a: 
 			var swap = deck[i]
 			deck[i] = deck[j]
 			deck[j] = swap
+		SealAltar.keep_out_of_opening(deck) # 封印祭壇 never starts in hand (no extra rng draw)
 		var lord_kind: String = lord_a if team == 0 else lord_b
 		if lord_kind.is_empty(): lord_kind = "lion" # neutral default when no lord is chosen
 		lords.append(Lord.create(team,lord_kind))
@@ -294,7 +296,7 @@ func slot_cd(team: int, slot: int) -> float:
 # Placement rules live in one place: play_check() says why a card cannot go here (Refusal.OK = it
 # can). can_play() is the cheap yes/no the AI asks hundreds of times per decision; play_error()
 # turns the reason into the sentence the player sees.
-enum Refusal {OK, ENDED, PAUSED, NO_CARD, COOLDOWN, GOLD, OFF_GRID, NOT_OURS, OCCUPIED}
+enum Refusal {OK, ENDED, PAUSED, NO_CARD, COOLDOWN, GOLD, OFF_GRID, NOT_OURS, OCCUPIED, UNIQUE}
 
 func play_check(team: int, slot: int, pos: Vector2) -> Refusal:
 	if time_stopped(): return Refusal.PAUSED
@@ -325,6 +327,7 @@ func play_check(team: int, slot: int, pos: Vector2) -> Refusal:
 	if card.type == "building":
 		var here := building_at(cell)
 		if not here.is_empty() and (here.team != team or here.kind != kind): return Refusal.OCCUPIED
+		if SealAltar.is_duplicate(self,team,kind,cell): return Refusal.UNIQUE # one 封印祭壇 per side
 	return Refusal.OK
 
 func can_play(team: int, slot: int, pos: Vector2) -> bool:
@@ -341,6 +344,7 @@ func play_error(team: int, slot: int, pos: Vector2) -> String:
 		Refusal.OFF_GRID: return "要放在戰場的格子上。"
 		Refusal.NOT_OURS: return "只能部署在我方領地；建築與城牆周圍八格可擴張，先佔先得。"
 		Refusal.OCCUPIED: return "這格已經有別的建築；只有同一種建築可以覆蓋回血。"
+		Refusal.UNIQUE: return "%s每方只能有一座；疊在原本那座上可以補滿生命。" % B.CARDS[kind_at(team,slot)].name
 	var card: Dictionary = B.CARDS[kind_at(team,slot)]
 	if why == Refusal.COOLDOWN: return "%s 還要冷卻 %.1f 秒。" % [card.name,slot_cd(team,slot)]
 	return "金幣不足：%s 要 %d，還差 %d。" % [card.name,card.cost,ceili(card.cost-ink[team])]
@@ -614,6 +618,7 @@ func resolve_deaths() -> void:
 		Faction.on_death(self,dead)
 		Expansion.on_death(self,dead)
 		ExpansionMore.on_death(self,dead)
+		SealAltar.on_death(self,dead)
 		for b: Dictionary in buildings:
 			if b.hp > 0 and b.kind == "grave" and b.cell.y == dead.lane:
 				link(dead.pos,b.pos,b.team,"soul")
@@ -888,6 +893,7 @@ func step(dt: float) -> void:
 	update_zones(dt)
 	Faction.update(self,dt)
 	Monster.update(self,dt)
+	SealAltar.update(self,dt)
 	Expansion.update(self,dt)
 	ExpansionMore.update(self,dt)
 	update_projectiles(dt)

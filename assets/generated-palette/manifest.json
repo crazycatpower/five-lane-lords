@@ -335,6 +335,12 @@
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/funeral_grenadier.png"
 	},
+	"funeral_monk": {
+		"revision": "team-material-v2",
+		"sha256": "bcea91ca9cdd2ecb0925d03a29f08c36fb926f4dda387f088df12ed57d47c594",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/funeral_monk.png"
+	},
 	"gate": {
 		"revision": "team-material-v2",
 		"sha256": "a86e87ab44e0a823c9d8a2c7d4044cbb5cabf7b53c7f79cd589e8988451fdd8b",
@@ -785,6 +791,12 @@
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/funeral_grenadier.png"
 	},
+	"lord_card_enemy_funeral_monk": {
+		"revision": "team-material-v2",
+		"sha256": "bcea91ca9cdd2ecb0925d03a29f08c36fb926f4dda387f088df12ed57d47c594",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/funeral_monk.png"
+	},
 	"lord_card_enemy_gatebreaker": {
 		"revision": "team-material-v2",
 		"sha256": "133399d7ec132b51870b5a40ebdf5f1a60fb4b3b85e1f1963f8fe40ca53c496b",
@@ -1037,6 +1049,12 @@
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/plague.png"
 	},
+	"lord_card_enemy_plague_bishop": {
+		"revision": "team-material-v2",
+		"sha256": "f0a9a3fdff552b26571e8df771ad0cf99efa499ad5f3a7a6c2c97be935fe7a18",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/plague_bishop.png"
+	},
 	"lord_card_enemy_pouch_beast": {
 		"revision": "team-material-v2",
 		"sha256": "32dbfae190d96b6802598f93d478f1c885cdb6311888290f22508b86290d95de",
@@ -1108,6 +1126,12 @@
 		"sha256": "f411343e3f3950241393e34f527f608ae9d66a0a635828bd04b0edf72ddd13cc",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/scarecrow.png"
+	},
+	"lord_card_enemy_seal_altar": {
+		"revision": "team-material-v2",
+		"sha256": "dcad1a1a44740257bfde744d342ffe1a406f326eab1e6ff42c625b1e8c756b00",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/seal_altar.png"
 	},
 	"lord_card_enemy_seal_bearer": {
 		"revision": "team-material-v2",
@@ -1613,6 +1637,12 @@
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/plague.png"
 	},
+	"plague_bishop": {
+		"revision": "team-material-v2",
+		"sha256": "f0a9a3fdff552b26571e8df771ad0cf99efa499ad5f3a7a6c2c97be935fe7a18",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/plague_bishop.png"
+	},
 	"pouch_beast": {
 		"revision": "team-material-v2",
 		"sha256": "32dbfae190d96b6802598f93d478f1c885cdb6311888290f22508b86290d95de",
@@ -1690,6 +1720,12 @@
 		"sha256": "f411343e3f3950241393e34f527f608ae9d66a0a635828bd04b0edf72ddd13cc",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/scarecrow.png"
+	},
+	"seal_altar": {
+		"revision": "team-material-v2",
+		"sha256": "dcad1a1a44740257bfde744d342ffe1a406f326eab1e6ff42c625b1e8c756b00",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/seal_altar.png"
 	},
 	"seal_bearer": {
 		"revision": "team-material-v2",

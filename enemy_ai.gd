@@ -5,6 +5,7 @@ const Faction = preload("res://faction_cards.gd")
 const GluttonNest = preload("res://glutton_nest.gd")
 const ExpansionMore = preload("res://expansion_more.gd")
 const GoldMonster = preload("res://gold_monster.gd")
+const SealAltar = preload("res://seal_altar.gd")
 const L = preload("res://layout.gd")
 
 # Pure decision: snapshot in, legal play out. No model mutation or random globals.
@@ -154,6 +155,12 @@ static func decide(s: Dictionary) -> Dictionary:
 						break
 				if eaten_on_spawn: continue
 			if GoldMonster.ai_wait(c.kind,s.ink,defend >= 0 and lane == defend): continue # 金幣怪物 waits for a real purse
+			if c.kind == "seal_altar": # 封印祭壇: back of the busiest lane, never while defending
+				var altar_score: float = SealAltar.ai_score(c,s,team,col)
+				if defend < 0 and altar_score > best_score:
+					best_score = altar_score
+					best = c.duplicate()
+				continue
 			if data.type == "building":
 				var here: Dictionary = own_building(s.buildings,team,c.cell)
 				if not here.is_empty():

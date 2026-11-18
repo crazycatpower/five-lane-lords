@@ -110,6 +110,46 @@ func run() -> void:
 	check(GM.ai_wait("gold_monster", 20.0, false) and not GM.ai_wait("gold_monster", 30.0, false) and not GM.ai_wait("gold_monster", 9.0, true) and not GM.ai_wait("militia", 0.0, false), "AI saves up for gold_monster, settles for less when defending")
 	check(B.card_description("gold_monster").contains("花光全部金幣"), "gold_monster card text describes the whole-purse cost")
 
+	# 封印祭壇: one per side, souls from deaths (own lane counts double), seals scare, last seal releases 瘟疫主教 + monks.
+	var sa := Battle.new(16, [], [], "underworld", "lion")
+	sa.ai_enabled = [false, false]
+	sa.lord_active = [false, false]
+	var SLayout = preload("res://layout.gd")
+	sa.decks[0][0] = "seal_altar"
+	sa.hand_cd[0][0] = 0.0
+	sa.ink[0] = 50.0
+	check(sa.play(0, 0, SLayout.cell_center(Vector2i(1, 2))), "seal_altar can be built")
+	var sa_altar: Dictionary = sa.building_at(Vector2i(1, 2))
+	sa.decks[0][0] = "seal_altar"
+	sa.hand_cd[0][0] = 0.0
+	check(sa.play_check(0, 0, SLayout.cell_center(Vector2i(1, 1))) == Battle.Refusal.UNIQUE and sa.play_check(0, 0, SLayout.cell_center(Vector2i(1, 2))) == Battle.Refusal.OK, "only one seal_altar per side; topping up the same one is allowed")
+	var sa_kill := func(lane: int, x_col: int) -> void:
+		var v: Dictionary = sa.spawn_unit(1, lane, "militia", SLayout.cell_center(Vector2i(x_col, lane)))
+		v.spawn_delay = 0.0
+		sa.damage(v, 9999.0, 0, "fire")
+		sa.resolve_deaths()
+	sa_kill.call(2, 6)
+	sa_kill.call(0, 6)
+	check(is_equal_approx(sa_altar.get("souls", 0.0), 3.0), "seal_altar: a death in its lane gives 2 souls, elsewhere 1")
+	var sa_scared: Dictionary = sa.spawn_unit(1, 2, "militia", sa_altar.pos + Vector2(60, 0))
+	sa_scared.spawn_delay = 0.0
+	sa_altar.souls = 19.0
+	sa_kill.call(0, 6)
+	check(sa_scared.get("fear_left", 0.0) > 0.0 and sa_altar.hp > 0, "breaking a seal makes nearby foes flee")
+	sa_altar.souls = 59.0
+	sa_kill.call(0, 6)
+	var sa_proc: Array = sa.units.filter(func(u: Dictionary) -> bool: return u.team == 0 and u.hp > 0)
+	check(sa_altar.hp <= 0 and sa_proc.filter(func(u: Dictionary) -> bool: return u.kind == "plague_bishop").size() == 1 and sa_proc.filter(func(u: Dictionary) -> bool: return u.kind == "funeral_monk").size() == 4, "the last seal shatters the sa_altar and releases the bishop with four monks")
+	var sa_zones0: int = sa.zones.filter(func(z: Dictionary) -> bool: return z.team == 0).size()
+	for i: int in range(150): sa.step(1.0 / 60.0)
+	check(sa.zones.filter(func(z: Dictionary) -> bool: return z.team == 0).size() > sa_zones0, "the plague bishop leaves rotting ground behind him")
+	var sa_open_ok := true
+	for sa_seed: int in range(40):
+		var sa_b := Battle.new(900+sa_seed, ["seal_altar","skeleton","ghoul","necromancer","plague","bellbearer","raven","reaper"], [], "underworld", "lion")
+		sa_open_ok = sa_open_ok and not ("seal_altar" in sa_b.decks[0].slice(0,4)) and sa_b.decks[0].size() == 8 and "seal_altar" in sa_b.decks[0]
+	check(sa_open_ok, "seal_altar never starts in the opening hand (40 shuffles)")
+	check(B.card_description("seal_altar").contains("每方只能有一座") and B.card_description("plague_bishop").contains("土地腐敗"), "seal_altar and plague_bishop texts come from their data")
+
 	var gn_ai := Battle.new(14, ["fishbeak", "bearded_imp", "belly_eye", "hooknose_flyer", "long_dragon", "thorn_dragon", "eyewing_dragon", "tusk_boar"], [], "beast", "lion")
 	gn_ai.ai_enabled = [false, false]
 	gn_ai.lords[0].hp = 0

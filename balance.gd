@@ -164,6 +164,11 @@ const CARDS := {
 	"dread_howl":{"name":"恐懼嚎叫","role":"恐懼·驅散","faction":"dark","series":"dark","type":"spell","cost":2,"cooldown":10.0,"radius":100.0,"duration":5.0},
 	"mass_grave":{"name":"亂葬坑","role":"死亡·產兵","faction":"dark","series":"dark","type":"building","cost":9,"cooldown":30.0,"hp":350.0,"expires":-1.0,"period":40.0,"spawn_count":3,"death_advance":5.0},
 	"blood_tower":{"name":"鮮血塔","role":"儲血·治療","faction":"dark","series":"dark","type":"building","cost":5,"cooldown":30.0,"hp":350.0,"expires":-1.0,"blood_rate":5.0,"blood_per_death":50.0,"heal_rate":50.0,"restart_at":50.0,"blood_max":500.0},
+	# 封印祭壇 (2026-11-18): one per side, souls from every troop death, three seals; the last one
+	# releases 瘟疫主教 and his 送葬修士 (seal_altar.gd).
+	"seal_altar":{"name":"封印祭壇","role":"收魂·封印","faction":"dark","series":"dark","type":"building","cost":0,"cooldown":50.0,"hp":900.0,"expires":-1.0,"unique":true,"no_opening":true,"radius":150.0,"soul_lane":2.0,"soul_other":1.0,"seals":[20,40,60],"seal_fear":2.0,"summon":"plague_bishop","escort":["funeral_monk",4]},
+	"plague_bishop":{"name":"瘟疫主教","role":"鐘聲·腐土","faction":"dark","series":"dark","type":"unit","summon_only":true,"cost":1,"cooldown":0.0,"count":1,"hp":3000.0,"damage":130.0,"interval":1.4,"range":47.0,"speed":27.0,"body_radius":28.0,"attack_style":"heavy","expansion":true,"support":"slow","radius":150.0,"period":3.0,"duration":3.0,"roar_fear":2.0,"rot_period":2.0,"rot_radius":75.0,"rot_duration":8.0},
+	"funeral_monk":{"name":"送葬修士","role":"隨行·治療","faction":"dark","series":"dark","type":"unit","summon_only":true,"cost":1,"cooldown":0.0,"count":1,"hp":210.0,"damage":26.0,"interval":1.9,"range":100.0,"speed":27.0,"expansion":true,"projectile":true,"support":"heal","support_amount":26.0,"radius":100.0,"period":2.4,"attack_style":"cast"},
 	"manor_retainer":{"name":"莊園扈從","role":"領地·巡邏","faction":"normal","type":"unit","patrol":true,"cost":5,"cooldown":10.0,"count":2,"hp":560.0,"damage":70.0,"interval":1.1,"range":47.0,"speed":36.0},
 	"axe_thrower":{"name":"投斧手","role":"遠程·破甲","type":"unit","projectile":true,"ignore_armor":true,"cost":7,"cooldown":15.0,"count":1,"hp":350.0,"damage":180.0,"interval":1.9,"range":100.0,"speed":36.0},
 	"rolling_boulder":{"name":"巨石滾滾","role":"直線·敵我傷害","type":"spell","rolling":true,"cost":7,"cooldown":15.0,"radius":37.0,"damage":230.0,"building_damage":230.0,"gate_damage":230.0,"roll_speed":240.0},
@@ -321,7 +326,8 @@ static func validate() -> Array[String]:
 		if not type in CARD_TYPES:
 			problems.append("%s: type must be one of %s" % [kind,str(CARD_TYPES)])
 			continue
-		if c.get("cost",0) < 1 or c.get("cost",0) > 30: problems.append("%s: cost must be 1-30" % kind)
+		# One-per-side cards (封印祭壇) may be free: the long cooldown is their price.
+		if c.get("cost",0) < (0 if c.get("unique",false) else 1) or c.get("cost",0) > 30: problems.append("%s: cost must be 1-30 (0 allowed for unique cards)" % kind)
 		if c.get("cooldown",0.0) < 0 or c.get("cooldown",0.0) > 60: problems.append("%s: cooldown must be 0-60 s" % kind)
 		if c.has("members"):
 			for group: Array in c.members:
@@ -542,6 +548,9 @@ const MINION_LORDS := {
 	"card_enemy_macebreaker":{"name":"釘錘破甲兵首領","card":"macebreaker","role":"破甲型","hp":900.0,"damage":70.0,"speed":50.0,"cycle_speed":{"macebreaker":1.5}},
 	"card_enemy_beekeeper":{"name":"養蜂人首領","card":"beekeeper","role":"蜂群型","hp":900.0,"damage":70.0,"speed":50.0,"cycle_speed":{"beekeeper":1.5}},
 	"card_enemy_bellbearer":{"name":"送葬鐘使首領","card":"bellbearer","role":"療傷型","hp":900.0,"damage":70.0,"speed":50.0,"home_card":"grave","cycle_speed":{"bellbearer":1.5}},
+	"card_enemy_seal_altar":{"name":"封印祭壇主人","card":"seal_altar","role":"封印型","hp":900.0,"damage":70.0,"speed":50.0,"home_card":"grave","cycle_speed":{"seal_altar":1.5}},
+	"card_enemy_plague_bishop":{"name":"腐土主教","card":"plague_bishop","role":"腐土型","hp":1500.0,"damage":95.0,"speed":50.0,"home_card":"grave","toughen":["funeral_monk"]},
+	"card_enemy_funeral_monk":{"name":"送葬修士長","card":"funeral_monk","role":"隨行型","hp":900.0,"damage":70.0,"speed":50.0,"home_card":"grave"},
 	"card_enemy_shroud_arbalist":{"name":"裹屍弩手首領","card":"shroud_arbalist","role":"重弩型","hp":900.0,"damage":70.0,"speed":50.0,"home_card":"grave","cycle_speed":{"shroud_arbalist":1.5}},
 	"card_enemy_sigil_weaver":{"name":"符印織師首領","card":"sigil_weaver","role":"護盾型","hp":900.0,"damage":70.0,"speed":50.0,"home_card":"crystal","cycle_speed":{"sigil_weaver":1.5}},
 	"card_enemy_astrolabe_surveyor":{"name":"星盤測繪師首領","card":"astrolabe_surveyor","role":"偵察型","hp":900.0,"damage":70.0,"speed":50.0,"home_card":"crystal","cycle_speed":{"astrolabe_surveyor":1.5}},
@@ -807,6 +816,7 @@ static func card_description(kind: String, cards: Dictionary = CARDS) -> String:
 		if d.has("damage"): lines.append("部隊傷害 %s、建築傷害 %s、城牆傷害 %s。" % [number(d.damage),number(d.building_damage),number(d.gate_damage)])
 	lines.append_array(expansion_description(d))
 	if d.get("pay_all",false): lines = preload("res://gold_monster.gd").describe()
+	lines.append_array(preload("res://seal_altar.gd").describe(kind))
 	match kind:
 		"glutton_nest": lines.append("不會定時產金；隱藏時免傷，地面部隊進入 %s 範圍會顯形並張嘴 %s 秒，之後一次吞噬周圍 %s 內所有敵我部隊（不含領主、飛行與相位）。當前總血量換金：首枚 %s 血，其後每枚多 %s 血，不足不計。消化時間為 %s 秒加上本次每枚金幣 %s 秒；閉嘴時可被攻擊；吞到部隊後每 %s 秒咀嚼恢復 %s 生命，不超過最大生命，消化後再隱藏。" % [number(d.trigger_radius),number(d.windup),number(d.radius),number(d.gold_first),number(d.gold_step),number(d.digest_time),number(d.digest_per_gold),number(d.chew_period),number(d.chew_heal)])
 		"manor_retainer": lines.append("在本路己方領地巡邏，邊緣折返、遇敵作戰。失去領地便返回最近己方格；整路失守則原地防守。")

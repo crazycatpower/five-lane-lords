@@ -737,6 +737,7 @@ func actor_rect(kind: String) -> Rect2:
 		return fitted_rect(art(kind).get_size(),box,true)
 	if kind == "arcane_tower": return fitted_rect(art(kind).get_size(),Rect2(-40,-65,80,100),true)
 	if kind == "corpse_giant": return fitted_rect(art(kind).get_size(),Rect2(-52,-85,104,104),true)
+	if kind == "plague_bishop": return fitted_rect(art(kind).get_size(),Rect2(-70,-132,140,150),true) # 封印祭壇's boss: towers over his monks
 	if kind == "lord_adventure": return fitted_rect(get_adventure_frame(0,0).get_size(),Rect2(-57,-75,114,102),true)
 	if kind.begins_with("lord_"): return fitted_rect(art(kind).get_size(),Rect2(-47,-67,94,94),true)
 	if kind in ["catapult"] or B.CARDS.get(kind,{}).get("type","") == "building": return fitted_rect(art(kind).get_size(),Rect2(-45,-39,90,78),true)
@@ -775,10 +776,9 @@ func draw_combat_actor(kind: String, actor: Dictionary, pos: Vector2, face: floa
 	var center := rect.get_center()
 	var angle: float = pose.angle*face
 	var scale: Vector2 = pose.scale
-	# Pivot around the sprite centre; keep large actors inside the battlefield's top edge.
+	# Pivot around the sprite centre. Tall actors in the top lane keep their lane and full size; their head
+	# may run under the top frame (producer 2026-11-18: no shrinking or pushing down, lords included).
 	var pivot := pos+Vector2(center.x*face,center.y)+offset
-	var extent: float = absf(sin(angle))*rect.size.x*scale.x/2+absf(cos(angle))*rect.size.y*scale.y/2
-	pivot.y = maxf(pivot.y,L.GRID_ORIGIN.y+6+extent)
 	tf(pivot,angle,Vector2(face,1)*scale)
 	var tex := art(kind,actor.team)
 	if kind == "lord_adventure" and pose.has("frame"):
@@ -1093,6 +1093,7 @@ func draw_battle() -> void:
 		elif b.kind == "crystal":
 			bar(Rect2(b.pos+Vector2(-30,36),Vector2(60,5)),b.production,Arcane.crystal_period(b),Color("4fc3f7"))
 		preload("res://faction_cards.gd").draw_bar(self,b)
+		preload("res://seal_altar.gd").draw_bar(self,b)
 		if fx_enabled and b.kind == "blood_tower": preload("res://blood_tower_fx.gd").tower(self,b)
 		if b.boost_until > model.elapsed:
 			tf(b.pos+Vector2(0,22),0,Vector2(1,0.38))
@@ -1257,7 +1258,7 @@ func draw_unit(u: Dictionary) -> void:
 	var is_cursed: bool = u.get("cursed",false) or u.get("cursed_until",0.0) > model.elapsed
 	if is_cursed: top = minf(top,-78)
 	if u.hp < u.max_hp: top = minf(top,-69)
-	pos.y = maxf(pos.y,L.GRID_ORIGIN.y-top+6)
+	# No push-down for tall troops (producer 2026-11-18): they stay in their lane; the top frame may cover them.
 	if u.get("stealthed",false):
 		draw_arc(pos+Vector2(0,16),27,0,PI,16,Color("a8b5c7"),2)
 	team_base(pos+Vector2(0,16),24,RED if u.team == 0 else BLUE)

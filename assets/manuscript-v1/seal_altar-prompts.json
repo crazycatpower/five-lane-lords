@@ -1,0 +1,90 @@
+﻿[
+    {
+        "kind":  "plague_bishop",
+        "prompt":  "Production game illustration matching medieval illuminated manuscript bestiary art. Fine dark sepia ink contour and hatching, gloomy palette of deep plum, aubergine violet and charcoal black with corpse-pale grey skin and only thin tarnished gold trim, vermilion team-color accents, flat hand-painted tempera, macabre but charming marginalia. A single giant boss: a tall gaunt heretic bishop executed by the church, full body walking toward the RIGHT in right-facing profile. Corpse-pale grey skin, a subtle charcoal rope strangulation scar on his neck. A tall cracked scorched BLACK bishop mitre. Ragged robes predominantly deep PLUM and CHARCOAL BLACK, rotting hem with a few tiny black-green stains/drips. Both hands cradle one enormous DARK IRON blood chalice shaped like an inverted church bell, its wide opening facing UP, bowl tapering down, engraved skull motifs. Dark wine-brown blood spills over the rim, desaturated and dark, never bright red. Team vermilion only on his shoulder stole cloth bands. No red on mitre or skin. Full feet visible. Complete centered subject with generous transparent padding at least 8 percent on every side. Readable at 80px. True transparent alpha background, including gaps. No paper, scenery, ground shadow, glow, background halo, text, border or watermark. Single asset, not a sheet. Red accents will be recolored blue; keep the blood dark wine-brown rather than bright red. Team red HSV H 0.00-0.025 S\u003e=0.62; plum H 0.88-0.93, never near red. Match the four supplied dark-faction references (necromancer, reaper, ossuary, pallbearer) in clean sepia contour thickness, flat color fields, subtle tempera grain and simplified readable details. Do not use dense scratchy engraving. Reference images are style references ONLY. Square canvas.",
+        "source":  "C:\\Users\\q1q2q\\.codex\\generated_images\\01a1ee5c-71c2-72c0-ba34-8452dc4fac1a\\exec-983d37ec-6f86-4ce0-be5f-f6e4448e0370.png",
+        "generator":  "built-in image_gen",
+        "postprocess":  {
+                            "tool":  "PowerShell + System.Drawing C#",
+                            "framing":  "Preserve source alpha, fit full canvas within 1176x1176, centered on 1400x1400 transparent RGBA; no background extraction.",
+                            "team_mask":  "Semantic source-normalized region intersected with red pigment H\u003c0.075 or H\u003e0.965, S\u003e=0.40,V\u003e=0.25,alpha\u003e0. Counts pigment only; excludes ink and neutral highlights.",
+                            "team_regions":  "x .34..64 y .20..79",
+                            "team_correction":  "H=0.012,S=max(original,0.65),V unchanged to 8-bit rounding; applied after resizing.",
+                            "nonteam_correction":  "Outside pigment mask, recolor-gate pixels have S reduced to 0.50; H,V and alpha preserved.",
+                            "nonteam_adjusted_pixels":  2770,
+                            "validation":  {
+                                               "alpha_rule":  "Every alpha\u003e0 pixel, including antialiasing",
+                                               "team_pigment_pixels":  47476,
+                                               "team_matching_before":  29035,
+                                               "team_matching_after":  47476,
+                                               "team_match_percent":  100,
+                                               "nonteam_false_positive_pixels":  0,
+                                               "transparent_pixels":  1459084,
+                                               "size":  [
+                                                            1400,
+                                                            1400
+                                                        ],
+                                               "mode":  "RGBA"
+                                           }
+                        }
+    },
+    {
+        "kind":  "funeral_monk",
+        "prompt":  "Production game illustration matching medieval illuminated manuscript bestiary art. Fine dark sepia ink contour and hatching, gloomy palette of deep plum, aubergine violet and charcoal black with corpse-pale grey skin and only thin tarnished gold trim, vermilion team-color accents, flat hand-painted tempera, macabre but charming marginalia. A single small infantry funeral monk, hunched and walking toward the RIGHT in clear right-facing profile. Charcoal BLACK hooded robe with deep PLUM shadows. Inside hood only darkness and a tiny pale glimmer; no visible face. Thin corpse-grey skeletal hands. One hand carries a small DARK IRON funeral handbell, other hand carries a DARK IRON censer hanging on short chains with a few narrow grey smoke strokes. Team vermilion only on the thick rope belt at waist and its knot and dangling ends. Full walking feet visible. Simple compact silhouette. Complete centered subject with generous transparent padding at least 8 percent on every side. Readable at 80px. True transparent alpha background, including gaps. No paper, scenery, ground shadow, glow, background halo, text, border or watermark. Single asset, not a sheet. Red accents will be recolored blue; keep the blood dark wine-brown rather than bright red. Team red HSV H 0.00-0.025 S\u003e=0.62; plum H 0.88-0.93, never near red. Match the four supplied dark-faction references (necromancer, reaper, ossuary, pallbearer) in clean sepia contour thickness, flat color fields, subtle tempera grain and simplified readable details. Do not use dense scratchy engraving. Reference images are style references ONLY. Square canvas.",
+        "source":  "C:\\Users\\q1q2q\\.codex\\generated_images\\01a1ee5c-71c2-72c0-ba34-8452dc4fac1a\\exec-a55e5fda-bb6a-49c1-9f45-54fbb834d18d.png",
+        "generator":  "built-in image_gen",
+        "postprocess":  {
+                            "tool":  "PowerShell + System.Drawing C#",
+                            "framing":  "Preserve source alpha, fit full canvas within 1176x1176, centered on 1400x1400 transparent RGBA; no background extraction.",
+                            "team_mask":  "Semantic source-normalized region intersected with red pigment H\u003c0.075 or H\u003e0.965, S\u003e=0.40,V\u003e=0.25,alpha\u003e0. Counts pigment only; excludes ink and neutral highlights.",
+                            "team_regions":  "x .36..52 y .44..81",
+                            "team_correction":  "H=0.012,S=max(original,0.65),V unchanged to 8-bit rounding; applied after resizing.",
+                            "nonteam_correction":  "Outside pigment mask, recolor-gate pixels have S reduced to 0.50; H,V and alpha preserved.",
+                            "nonteam_adjusted_pixels":  1513,
+                            "validation":  {
+                                               "alpha_rule":  "Every alpha\u003e0 pixel, including antialiasing",
+                                               "team_pigment_pixels":  18653,
+                                               "team_matching_before":  18446,
+                                               "team_matching_after":  18653,
+                                               "team_match_percent":  100,
+                                               "nonteam_false_positive_pixels":  0,
+                                               "transparent_pixels":  1511268,
+                                               "size":  [
+                                                            1400,
+                                                            1400
+                                                        ],
+                                               "mode":  "RGBA"
+                                           }
+                        }
+    },
+    {
+        "kind":  "seal_altar",
+        "prompt":  "Production game illustration matching medieval illuminated manuscript bestiary art. Fine dark sepia ink contour and hatching, gloomy palette of deep plum, aubergine violet and charcoal black with corpse-pale grey skin and only thin tarnished gold trim, vermilion team-color accents, flat hand-painted tempera, macabre but charming marginalia. A heretical altar building, squat dark grey almost BLACK stone plinth, tiny moss in cracks, skulls inset at the four corners (visible corners readable). Torn deep PLUM cloth lies across the top, with an actual inverted scorched BLACK bishop mitre standing upside-down upon the cloth, not an engraving. Exactly THREE dark iron chains cross and bind the plinth, visibly intersecting diagonally. Each chain carries exactly ONE large RED wax seal, three clearly separate seals readable across the front: left, center, right, no extra red. A few narrow grey-white soul threads are being sucked into the altar from above, ink-like strokes with no haze. Far darker than the ossuary reference. No broad gold areas. Complete centered subject with generous transparent padding at least 8 percent on every side. Readable at 80px. True transparent alpha background, including gaps. No paper, scenery, ground shadow, glow, background halo, text, border or watermark. Single asset, not a sheet. Red accents will be recolored blue; keep the blood dark wine-brown rather than bright red. Team red HSV H 0.00-0.025 S\u003e=0.62; plum H 0.88-0.93, never near red. Match the four supplied dark-faction references (necromancer, reaper, ossuary, pallbearer) in clean sepia contour thickness, flat color fields, subtle tempera grain and simplified readable details. Do not use dense scratchy engraving. Reference images are style references ONLY. Square canvas.",
+        "source":  "C:\\Users\\q1q2q\\.codex\\generated_images\\01a1ee5c-71c2-72c0-ba34-8452dc4fac1a\\exec-b977773d-9b87-49c8-8e6b-c8aee50c00a6.png",
+        "generator":  "built-in image_gen",
+        "correction":  "Edit only the chain construction of this altar: there are currently TWO diagonal iron chains making an X. Add a THIRD dark iron chain running VERTICALLY down the center of the stone plinth, from below the purple cloth to the bottom stone ledge, passing behind the central red wax seal. Keep exactly THREE red wax seals total: left seal on left diagonal chain, right seal on right diagonal chain, center seal on new vertical chain. Preserve dark palette, four corner skulls, inverted black mitre and narrow soul threads. Keep all background truly transparent with no glow or haze. Add generous transparent margins on all sides; entire subject fully visible.",
+        "postprocess":  {
+                            "tool":  "PowerShell + System.Drawing C#",
+                            "framing":  "Preserve source alpha, fit full canvas within 1176x1176, centered on 1400x1400 transparent RGBA; no background extraction.",
+                            "team_mask":  "Semantic source-normalized region intersected with red pigment H\u003c0.075 or H\u003e0.965, S\u003e=0.40,V\u003e=0.25,alpha\u003e0. Counts pigment only; excludes ink and neutral highlights.",
+                            "team_regions":  "left x .25..345 y .65..81; center x .46..56 y .72..88; right x .67..76 y .65..82",
+                            "team_correction":  "H=0.012,S=max(original,0.65),V unchanged to 8-bit rounding; applied after resizing.",
+                            "nonteam_correction":  "Outside pigment mask, recolor-gate pixels have S reduced to 0.50; H,V and alpha preserved.",
+                            "nonteam_adjusted_pixels":  1332,
+                            "validation":  {
+                                               "alpha_rule":  "Every alpha\u003e0 pixel, including antialiasing",
+                                               "team_pigment_pixels":  20988,
+                                               "team_matching_before":  20294,
+                                               "team_matching_after":  20988,
+                                               "team_match_percent":  100,
+                                               "nonteam_false_positive_pixels":  0,
+                                               "transparent_pixels":  1535166,
+                                               "size":  [
+                                                            1400,
+                                                            1400
+                                                        ],
+                                               "mode":  "RGBA"
+                                           }
+                        }
+    }
+]
