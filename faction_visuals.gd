@@ -4,6 +4,18 @@ extends RefCounted
 # Shared expansion feedback. Call before the legacy event switch; no actor state is changed.
 static func event(g, e: Dictionary, progress: float) -> bool:
 	if not g.fx_enabled: return false
+	if e.kind == "charge_ready":
+		var center: Vector2 = e.pos+Vector2(0,-16)
+		var face: float = e.get("face",1.0)
+		var alpha := 1.0-progress
+		g.draw_arc(center,14+progress*16,0,TAU,20,Color("eb6b34",alpha*0.85),2.4,true)
+		var tip := center+Vector2(face*(10+progress*14),-10)
+		g.draw_polyline(PackedVector2Array([tip-Vector2(face*7,5),tip+Vector2(face*3,0),tip-Vector2(face*7,-5)]),Color("fff0b2",alpha),2.5,true)
+		return true
+	if e.kind == "stealth_ready":
+		var alpha := 1.0-progress
+		g.draw_arc(e.pos+Vector2(0,12),16+progress*12,0,PI,16,Color("7494b3",alpha*0.85),2.2,true)
+		return true
 	if e.kind == "charge_impact":
 		var center: Vector2 = e.pos+Vector2(0,-18)
 		var face: float = e.get("face",1.0)
@@ -17,7 +29,7 @@ static func event(g, e: Dictionary, progress: float) -> bool:
 		return true
 	if e.kind == "support_pulse":
 		var style: String = e.get("style","")
-		var color: Color = {"heal":Color("6eab69"),"repair":Color("c4a75f"),"shield":Color("7ac7e0"),"armor":Color("aaa7a0"),"haste":Color("e2b23a"),"range":Color("a497df"),"cleanse":Color("dbd5ac")}.get(style,Color("b9a3d6"))
+		var color: Color = {"heal":Color("5ce675"),"repair":Color("c4a75f"),"shield":Color("7ac7e0"),"armor":Color("aaa7a0"),"haste":Color("e2b23a"),"range":Color("a497df"),"cleanse":Color("dbd5ac")}.get(style,Color("b9a3d6"))
 		var radius: float = minf(e.get("radius",60.0),85.0)*(0.2+progress*0.8)
 		var points := PackedVector2Array()
 		for i: int in range(33):
@@ -71,6 +83,10 @@ static func summon(g, pos: Vector2, progress: float) -> void:
 
 static func spell(g, e: Dictionary, progress: float) -> bool:
 	var kind: String = e.get("card","")
+	var srect: Rect2 = e.get("rect",Rect2())
+	if srect.size != Vector2.ZERO:
+		g.draw_rect(srect,Color(0.85,0.68,0.35,(1.0-progress)*0.16))
+		g.draw_rect(srect,Color(0.95,0.78,0.38,(1.0-progress)*0.75),false,2.2)
 	if kind == "sacrifice":
 		var r: float = e.get("radius",70.0)*(0.85+progress*0.15)
 		var red := Color(0.65,0.07,0.13,(1-progress)*0.8)

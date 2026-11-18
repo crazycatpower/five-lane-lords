@@ -18,7 +18,7 @@ const DEFEND_REACH := 4.5
 const SPEND_AT := 35.0 # columns from our gate at which an approaching enemy counts as a threat
 
 # 困難 plays with these weights: round 1 of tools/evolve_ai.py, 66.5% against the hand-written AI
-# over 200 mirror matches (docs/AI演化報告.md). They must equal tools/evolved_ai.json (tested).
+# over 200 mirror matches (report: tools/evolve_runs/report.md, not committed). They must equal tools/evolved_ai.json (tested).
 const EVOLVED := {"hoard":0.9521,"skill_after":65.7997,"harvest_max_farms":8.9992,"iron_gate_share":0.6,"iron_hoard":0.8958,"spend_at":33.8974,"wave_at":23.1776,"wave_time":6.0537,"defend_reach":4.5,"farm_goal":6.0,"farm_score":769.8742,"farmer_score":798.5413,"raid_score":700.0,"raid_min_farms":3.0,"guard_score":699.5859,"guard_after":9.7386,"ram_score":707.1471,"ram_reserve":11.3229,"ram_escort":281.8677,"healer_score":664.9564,"wave_score":643.607,"mill_score":636.083,"mill_min_farms":4.0,"harvest_score":647.8686,"harvest_min":2.0,"repair_below":0.6728,"atk_gate":0.4517,"atk_foes":0.8,"atk_recent":184.4357}
 
 # Weights for a snapshot: explicit params win; otherwise 困難 uses EVOLVED and the other levels the
@@ -40,17 +40,30 @@ static func skill_plan(k: Dictionary) -> Dictionary:
 	var hoard: bool = pr.get("hoard",1.0) >= 0.5
 	match k.lord:
 		"rune": wanted = k.get("rune_lanes",0) > 0 and k.elapsed >= 30
-		"vampire": wanted = k.get("troops",0) >= 4
+		"vampire": wanted = k.get("troops",0) >= 2
 		"mage": wanted = k.get("troops",0) >= pr.get("mage_min_troops",10)
 		"underworld": wanted = k.get("graves",0) >= 2
-		"adventure": wanted = k.get("slash_targets",0) > 0
+		"adventure": wanted = k.get("slash_targets",0) >= 2
 		"lion", "beast": wanted = k.elapsed >= pr.get("skill_after",45.0)
 		"harvest": wanted = k.elapsed >= pr.get("skill_after",45.0) and k.farms <= pr.get("harvest_max_farms",7.0)
 		"iron":
-			wanted = k.broken > 0 or k.gate_share < pr.get("iron_gate_share",0.6)
-			hoard = pr.get("iron_hoard",1.0) >= 0.5
+			wanted = k.broken > 0 or k.gate_share < pr.get("iron_gate_share",0.92)
+			hoard = false
+		_:
+			if B.is_minion(k.lord):
+				var ms: Dictionary = B.minion_skill(k.lord)
+				match ms.skill_kind:
+					"unit": wanted = k.get("enemy_troops",0) >= 1 or k.elapsed >= 25.0
+					"building": wanted = k.get("minion_open_cell",false) or k.get("minion_damaged_buildings",0) > 0
+					"spell":
+						if ms.skill_card == "harvest": wanted = k.farms > 0
+						elif ms.skill_card in B.FRIENDLY_SPELLS: wanted = k.get("troops",0) >= 2
+						else: wanted = k.get("enemy_troops",0) >= 2 or k.broken > 0 or k.elapsed >= 45.0
 	# Hoard only once the purse is fairly full, so the AI keeps attacking while it saves up.
-	return {"cast":wanted and k.ink >= B.skill_cost(k.lord),"save":wanted and hoard and k.ink >= minf(pr.get("save_from",30.0), B.skill_cost(k.lord) - 5.0)}
+	var cost: float = B.skill_cost(k.lord)
+	var default_save := 18.0 if k.lord == "beast" else 30.0
+	var save_at: float = maxf(18.0, minf(pr.get("save_from",default_save), cost - 5.0))
+	return {"cast":wanted and k.ink >= cost,"save":wanted and hoard and cost > 20.0 and k.ink >= save_at}
 
 static func decide(s: Dictionary) -> Dictionary:
 	var pr: Dictionary = weights(s)
@@ -72,9 +85,13 @@ static func decide(s: Dictionary) -> Dictionary:
 	var my_graves := [0,0,0,0,0]
 	var grave_total := 0
 	var own_buildings := 0
+	var has_own_nest := false
 	var my_troops := [0.0,0.0,0.0,0.0,0.0] # hp of our troops per lane (buildings excluded)
 	var my_guard := [0,0,0,0,0] # our towers and scarecrows per lane
 	var my_troop_x: Array = [[],[],[],[],[]] # x of our troops per lane, for the healer
+	var nest_plan := GluttonNest.safe_coverage(s)
+	var nest_covered: Dictionary = nest_plan.covered
+	var nest_bait: Array = nest_plan.bait_lanes
 	for u: Dictionary in s.units:
 		if u.hp <= 0: continue
 		if u.team == team:
@@ -83,6 +100,7 @@ static func decide(s: Dictionary) -> Dictionary:
 			my_troop_x[u.lane].append(u.pos.x)
 			continue
 		foes[u.lane] += u.hp
+		if nest_covered.has(u.get("id",-1)): continue
 		var distance := absf(u.pos.x-home_x)
 		var closeness := clampf(1.0-distance/(6.0*L.CELL_SIZE.x),0,1)
 		urgency[u.lane] += u.hp*(0.3+1.7*closeness)
@@ -93,6 +111,7 @@ static func decide(s: Dictionary) -> Dictionary:
 		if b.hp <= 0: continue
 		if b.team == team:
 			own_buildings += 1
+			if b.kind == "glutton_nest": has_own_nest = true
 			if b.kind == "farm":
 				my_farms[b.cell.y] += 1
 				farm_total += 1
@@ -147,12 +166,16 @@ static func decide(s: Dictionary) -> Dictionary:
 			var score := -INF
 			var lane: int = c.cell.y
 			var col: int = c.cell.x if team == 0 else 8-c.cell.x
-			if data.type == "unit" and not data.get("flying",false):
+			if has_own_nest and data.type == "unit" and not data.get("flying",false):
 				var eaten_on_spawn := false
 				for b: Dictionary in s.buildings:
-					if b.hp > 0 and b.team == team and b.cell.y == lane and GluttonNest.hidden(b) and (b.pos.x-c.pos.x)*forward >= -B.CARDS.glutton_nest.trigger_radius:
-						eaten_on_spawn = true
-						break
+					if b.hp > 0 and b.team == team and b.cell.y == lane:
+						if GluttonNest.hidden(b) and (b.pos.x-c.pos.x)*forward >= -B.CARDS.glutton_nest.trigger_radius:
+							eaten_on_spawn = true
+							break
+						if b.get("nest_windup",0.0) > 0.0 and B.point_edge_distance(b.pos,{"pos":c.pos,"kind":c.kind}) <= B.CARDS.glutton_nest.radius:
+							eaten_on_spawn = true
+							break
 				if eaten_on_spawn: continue
 			if GoldMonster.ai_wait(c.kind,s.ink,defend >= 0 and lane == defend): continue # 金幣怪物 waits for a real purse
 			if c.kind == "seal_altar": # 封印祭壇: back of the quietest lane, never while defending
@@ -183,6 +206,7 @@ static func decide(s: Dictionary) -> Dictionary:
 				var value := 0.0
 				for actor: Dictionary in s.units+s.buildings+s.get("lords",[]):
 					if actor.hp <= 0 or absf(actor.pos.y-c.pos.y) > data.radius or (actor.pos.x-Frontier.start_x(team))*forward < -data.radius: continue # the rock rolls the whole lane from start_x
+					if not actor.has("cell") and actor.team != team and nest_covered.has(actor.get("id",-1)): continue
 					value += minf(actor.hp,data.damage)*(1.0 if actor.team != team else -2.0)
 				if value > 0 and (defend < 0 or lane == defend):
 					score = 720+minf(value,1000)*0.15
@@ -190,30 +214,32 @@ static func decide(s: Dictionary) -> Dictionary:
 						best_score = score
 						best = c.duplicate()
 				continue
-			var faction_score: float = maxf(Faction.ai_score(c,s),ExpansionMore.ai_score(c,s))
-			if defend >= 0 and lane == defend and c.kind in Faction.DEFENSIVE: faction_score += 400.0 # beats the plain defend plays (<= 1000)
-			if faction_score > best_score and (defend < 0 or lane == defend):
-				best_score = faction_score
-				best = c.duplicate()
-			if c.kind in Faction.SPELLS or c.kind in ExpansionMore.SPELLS: continue
-			var placement: float = ExpansionMore.placement_score(c,s,pr)
-			if placement > best_score and (defend < 0 or lane == defend):
-				best_score = placement
-				best = c.duplicate()
+			if defend < 0 or lane == defend:
+				var faction_score: float = maxf(Faction.ai_score(c,s,nest_covered),ExpansionMore.ai_score(c,s,nest_covered))
+				if defend >= 0 and c.kind in Faction.DEFENSIVE: faction_score += 400.0 # beats the plain defend plays (<= 1000)
+				if faction_score > best_score:
+					best_score = faction_score
+					best = c.duplicate()
+			if c.kind in Faction.SPELLS or c.kind in ExpansionMore.SPELLS or data.get("expansion_spell",false): continue
+			if defend < 0 or lane == defend:
+				var placement: float = ExpansionMore.placement_score(c,s,pr,nest_covered)
+				if placement > best_score:
+					best_score = placement
+					best = c.duplicate()
 			if ExpansionMore.conditional_building(data): continue
 			if c.kind == "glutton_nest":
-				var nest_score := GluttonNest.ai_score(c,s,target_lane,defend)
+				var nest_score := GluttonNest.ai_score(c,s,target_lane,defend,nest_covered)
 				if nest_score > best_score:
 					best_score = nest_score
 					best = c.duplicate()
 				continue
-			var dark_score := dark_card_score(c,s,ours,foes,my_troop_x)
+			var dark_score := dark_card_score(c,s,ours,foes,my_troop_x,nest_covered)
 			if dark_score > best_score:
 				best_score = dark_score
 				best = c.duplicate()
 			if defend >= 0:
 				if data.type == "spell" and B.has_tag(c.kind,"defend_spell"):
-					var hit: Dictionary = area_value(c,s,data,defend)
+					var hit: Dictionary = area_value(c,s,data,defend,nest_covered)
 					if hit.reaches and hit.value > 0: score = 1000+minf(hit.value,2000)*0.1
 					if score > best_score:
 						best_score = score
@@ -250,12 +276,13 @@ static func decide(s: Dictionary) -> Dictionary:
 				elif enemy_farm_total >= pr.get("raid_min_farms",4.0) and B.has_tag(c.kind,"raid") and their_farms[lane] == their_farms.max():
 					score = pr.get("raid_score",700.0)
 					if c.kind == "fire":
+						var frect: Rect2 = B.spell_rect(c.pos,data)
 						for b: Dictionary in s.buildings:
-							if b.team != team and b.kind == "farm" and b.pos.distance_to(c.pos) <= data.radius: score += 100
-				elif s.difficulty == 2 and s.enemy_ink >= 35 and B.has_tag(c.kind,"guard"):
+							if b.team != team and b.kind == "farm" and B.rect_hits_actor(frect,b): score += 100
+				elif not nest_bait[lane] and s.difficulty == 2 and s.enemy_ink >= 35 and B.has_tag(c.kind,"guard"):
 					var expected := int(s.memory.get("lane",target_lane))
 					if lane == expected and ours[lane] < 400: score = 780
-				elif B.has_tag(c.kind,"guard") and my_farms[lane] > 0 and my_guard[lane] == 0 and s.elapsed >= pr.get("guard_after",20.0):
+				elif not nest_bait[lane] and B.has_tag(c.kind,"guard") and my_farms[lane] > 0 and my_guard[lane] == 0 and s.elapsed >= pr.get("guard_after",20.0):
 					# Guard farm lanes before raiders arrive: one tower or scarecrow just in front of the farms.
 					score = pr.get("guard_score",690.0)-(0.0 if c.kind == "tower" else 10.0)+my_farms[lane]*10-absf(col-2)*8
 				elif c.kind == "ram":
@@ -267,20 +294,21 @@ static func decide(s: Dictionary) -> Dictionary:
 					for x: float in my_troop_x[lane]:
 						var ahead: float = (x-c.pos.x)*forward
 						if ahead >= 0 and ahead <= B.HEAL_RADIUS and my_troops[lane] >= 200: score = maxf(score,pr.get("healer_score",690.0)-ahead*0.5)
-				elif wave and data.type == "unit" and c.kind != "farmer":
+				elif wave and data.type == "unit" and c.kind != "farmer" and not nest_bait[lane]:
 					# Front-most legal cell of the chosen lane; other lanes only as a weaker fallback.
 					score = pr.get("wave_score",600.0)+col*4-data.cost-(0 if lane == target_lane else 60+(attack[target_lane]-attack[lane])*0.05)
 				elif wave and B.has_tag(c.kind,"wave_spell"):
-					var hit: Dictionary = area_value(c,s,data)
+					var hit: Dictionary = area_value(c,s,data,-1,nest_covered)
 					if hit.value >= data.cost*pr.get("spell_value_per_gold",20.0): score = 600.0+minf(hit.value,2000)*0.1
 				elif c.kind == "mill" and farm_total >= pr.get("mill_min_farms",3.0): score = pr.get("mill_score",650.0)+my_farms[lane]*10
 				elif c.kind == "harvest":
 					var count := 0
+					var hrect: Rect2 = B.spell_rect(c.pos,data)
 					for b: Dictionary in s.buildings:
-						if b.team == team and b.kind == "farm" and b.pos.distance_to(c.pos) <= data.radius: count += 1
+						if b.team == team and b.kind == "farm" and B.rect_hits_actor(hrect,b): count += 1
 					if count >= pr.get("harvest_min",2.0): score = pr.get("harvest_score",670.0)+count
 			if defend < 0 and score == -INF and s.ink >= pr.get("spend_at",SPEND_AT):
-				score = spend_score(c,s,team,lane,col,target_lane,foes,urgency,my_farms,s.get("owned_cells",15)-own_buildings)
+				score = spend_score(c,s,team,lane,col,target_lane,foes,urgency,my_farms,s.get("owned_cells",15)-own_buildings,nest_covered,nest_bait[lane])
 			if night and B.is_home_card(c.kind,s.get("lord","lion")): score -= pr.get("night_economy_penalty",0.0)
 			if score > best_score:
 				best_score = score
@@ -292,18 +320,19 @@ static func decide(s: Dictionary) -> Dictionary:
 
 # What an area spell at c.pos is worth: the enemy hp it would really remove (capped at each target's hp),
 # plus enemy buildings for spells that hit them. Also reports whether it reaches the lane being defended.
-static func area_value(c: Dictionary, s: Dictionary, data: Dictionary, defend: int = -1) -> Dictionary:
+static func area_value(c: Dictionary, s: Dictionary, data: Dictionary, defend: int = -1, covered: Dictionary = {}) -> Dictionary:
 	var dmg: float = data.get("damage",0.0)
 	if dmg <= 0 and data.has("tick_damage"): dmg = data.tick_damage*data.get("duration",1.0)/data.get("tick_interval",1.0)
 	var value := 0.0
 	var reaches := defend < 0
+	var rect: Rect2 = B.spell_rect(c.pos,data)
 	for u: Dictionary in s.units:
-		if u.hp <= 0 or u.team == s.team or u.pos.distance_to(c.pos) > data.radius: continue
+		if u.hp <= 0 or u.team == s.team or covered.has(u.get("id",-1)) or not B.rect_hits_actor(rect,u): continue
 		value += minf(u.hp,dmg) if dmg > 0 else u.hp*0.5 # curse-like spells: worth part of the troop
 		if u.lane == defend: reaches = true
 	if data.get("building_damage",0.0) > 0:
 		for b: Dictionary in s.buildings:
-			if b.hp > 0 and b.team != s.team and b.pos.distance_to(c.pos) <= data.radius: value += minf(b.hp,data.building_damage)*0.5
+			if b.hp > 0 and b.team != s.team and B.rect_hits_actor(rect,b): value += minf(b.hp,data.building_damage)*0.5
 	return {"value":value,"reaches":reaches}
 
 # Deterministic per-lane tie-breaker that changes every 8 seconds (0..80).
@@ -313,10 +342,11 @@ static func jitter(lane: int, elapsed: float) -> float:
 
 # Fallback value of a card when the AI has ink to burn (see SPEND_AT). All scores stay below the
 # deliberate plays (>= 600), so this only decides between otherwise unwanted cards.
-static func spend_score(c: Dictionary, s: Dictionary, team: int, lane: int, col: int, target_lane: int, foes: Array, urgency: Array, my_farms: Array, free_cells: int) -> float:
+static func spend_score(c: Dictionary, s: Dictionary, team: int, lane: int, col: int, target_lane: int, foes: Array, urgency: Array, my_farms: Array, free_cells: int, covered: Dictionary = {}, baiting_lane: bool = false) -> float:
 	var data: Dictionary = B.CARDS[c.kind]
 	# Keep a few cells open, or every building card in the deck ends up stuck in hand.
 	if data.type == "building" and free_cells <= 3: return -INF
+	if baiting_lane and s.ink < 45.0 and data.type in ["unit","building"] and not c.kind in ["farm","crystal","mill"]: return -INF
 	match c.kind:
 		"tower": return 520.0+urgency[lane]*0.05+my_farms[lane]*10-absf(col-1)*6
 		"scarecrow": return 500.0+urgency[lane]*0.04+my_farms[lane]*10-absf(col-2)*6
@@ -324,10 +354,11 @@ static func spend_score(c: Dictionary, s: Dictionary, team: int, lane: int, col:
 		"farm": return 505.0-my_farms[lane]*20-col*5
 		"harvest", "rain", "fire":
 			var value := 0.0
+			var srect: Rect2 = B.spell_rect(c.pos,data)
 			for u: Dictionary in s.units:
-				if u.team != team and u.hp > 0 and u.pos.distance_to(c.pos) <= data.radius: value += 60.0
+				if u.team != team and u.hp > 0 and not covered.has(u.get("id",-1)) and B.rect_hits_actor(srect,u): value += 60.0
 			for b: Dictionary in s.buildings:
-				if b.hp <= 0 or b.pos.distance_to(c.pos) > data.radius: continue
+				if b.hp <= 0 or not B.rect_hits_actor(srect,b): continue
 				if c.kind == "harvest" and b.team == team and b.kind == "farm": value += 40.0
 				if c.kind == "fire" and b.team != team: value += 80.0
 			return 490.0+value if value > 0 else 300.0-data.cost
@@ -340,8 +371,9 @@ static func spend_score(c: Dictionary, s: Dictionary, team: int, lane: int, col:
 	if data.type == "building": return 495.0+my_farms[lane]*5-col*4
 	if data.type == "spell":
 		var hits := 0
+		var drect: Rect2 = B.spell_rect(c.pos,data)
 		for u: Dictionary in s.units:
-			if u.team != team and u.hp > 0 and u.pos.distance_to(c.pos) <= data.radius: hits += 1
+			if u.team != team and u.hp > 0 and not covered.has(u.get("id",-1)) and B.rect_hits_actor(drect,u): hits += 1
 		return 490.0+hits*60.0 if hits > 0 else 300.0-data.cost
 	return -INF
 
@@ -350,7 +382,7 @@ static func own_building(buildings: Array, team: int, cell: Vector2i) -> Diction
 		if b.hp > 0 and b.team == team and b.cell == cell: return b
 	return {}
 
-static func dark_card_score(c: Dictionary, s: Dictionary, ours: Array, foes: Array, troop_x: Array) -> float:
+static func dark_card_score(c: Dictionary, s: Dictionary, ours: Array, foes: Array, troop_x: Array, covered: Dictionary = {}) -> float:
 	var lane: int = c.cell.y
 	var forward := 1.0 if s.team == 0 else -1.0
 	match c.kind:
@@ -358,7 +390,7 @@ static func dark_card_score(c: Dictionary, s: Dictionary, ours: Array, foes: Arr
 			var data: Dictionary = B.CARDS[c.kind]
 			var targets := 0
 			for u: Dictionary in s.units:
-				if u.hp <= 0 or u.team == s.team or u.lane != lane: continue
+				if u.hp <= 0 or u.team == s.team or u.lane != lane or covered.has(u.get("id",-1)): continue
 				var distance: float = c.pos.distance_to(u.pos)
 				if distance < data.min_range: return -INF
 				if distance <= data.range: targets += 1
@@ -375,8 +407,9 @@ static func dark_card_score(c: Dictionary, s: Dictionary, ours: Array, foes: Arr
 			if count >= 2: return 700.0+count*12
 		"curse":
 			var count := 0
+			var crect: Rect2 = B.spell_rect(c.pos,B.CARDS.curse)
 			for u: Dictionary in s.units:
-				if u.hp > 0 and u.team != s.team and u.pos.distance_to(c.pos) <= B.CARDS.curse.radius and not u.get("cursed",false) and u.get("cursed_until",0.0) <= s.elapsed: count += 1
+				if u.hp > 0 and u.team != s.team and not covered.has(u.get("id",-1)) and B.rect_hits_actor(crect,u) and not u.get("cursed",false) and u.get("cursed_until",0.0) <= s.elapsed: count += 1
 			if count >= 2: return 670.0+count*25
 		"grave":
 			var col: int = c.cell.x if s.team == 0 else 8-c.cell.x
@@ -410,14 +443,15 @@ static func dark_card_score(c: Dictionary, s: Dictionary, ours: Array, foes: Arr
 			# Its slash covers three lanes: worth it where enemies crowd this lane and its neighbours.
 			var crowd := 0
 			for u: Dictionary in s.units:
-				if u.hp > 0 and u.team != s.team and absi(u.lane-lane) <= 1 and (u.pos.x-c.pos.x)*forward >= 0: crowd += 1
+				if u.hp > 0 and u.team != s.team and not covered.has(u.get("id",-1)) and absi(u.lane-lane) <= 1 and (u.pos.x-c.pos.x)*forward >= 0: crowd += 1
 			if crowd >= 3: return 700.0+crowd*10.0
 		"raven":
 			for b: Dictionary in s.buildings:
 				if b.hp > 0 and b.team != s.team and b.kind == "farm" and b.cell.y == lane: return 720.0-absf(b.pos.x-c.pos.x)*0.1
 		"plague":
 			var count := 0
+			var prect: Rect2 = B.spell_rect(c.pos,B.CARDS.plague)
 			for u: Dictionary in s.units:
-				if u.hp > 0 and u.team != s.team and u.pos.distance_to(c.pos) <= B.CARDS.plague.radius: count += 1
+				if u.hp > 0 and u.team != s.team and not covered.has(u.get("id",-1)) and B.rect_hits_actor(prect,u): count += 1
 			if count > 0: return 650.0+count*60
 	return -INF

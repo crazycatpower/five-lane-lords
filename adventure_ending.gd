@@ -1,7 +1,5 @@
 extends RefCounted
 # First victory recruitment scene. Decisions are saved before leaving the scene.
-const BANDIT = preload("res://assets/manuscript-v1/bandit.png")
-const KNIGHT = preload("res://assets/manuscript-v1/knight.png")
 var step := 0
 var error := ""
 
@@ -66,8 +64,8 @@ func paint(g) -> void:
 	g.draw_rect(Rect2(28,28,1544,844),Color(0.18,0.15,0.10,0.18))
 	g.label_at(Vector2(80,85),"邊境 · 戰後抉擇",36)
 	g.label_at(Vector2(80,123),"抓到了俘虜，還有個路過的騎士。",22)
-	portrait(g,BANDIT,Rect2(125,150,600,430),step == 1 or (step == 3 and g.adventure.recruit == "knight"),false) # left side, art already faces right
+	portrait(g,g.art("bandit"),Rect2(125,150,600,430),step == 1 or (step == 3 and g.adventure.recruit == "knight"),false) # left side, art already faces right
 	if step >= 1:
-		portrait(g,KNIGHT,Rect2(875,135,600,445),step == 0 or (step == 3 and g.adventure.recruit == "bandit"))
+		portrait(g,g.art("knight"),Rect2(875,135,600,445),step == 0 or (step == 3 and g.adventure.recruit == "bandit"))
 	g.panel(Rect2(80,590,1440,270),Color("eddfbc"))
 	g.draw_line(Vector2(110,655),Vector2(1490,655),Color("ad8b50"),2)

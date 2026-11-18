@@ -1,17 +1,5 @@
 extends RefCounted
-const LORD = preload("res://assets/manuscript-v1/adventure-lord.png")
-const MOB = preload("res://assets/manuscript-v1/mob.png")
-const GUARD = preload("res://assets/manuscript-v1/militia-red.png")
-const BANDIT = preload("res://assets/manuscript-v1/bandit.png")
-const KNIGHT = preload("res://assets/manuscript-v1/knight.png")
-const HUNTER = preload("res://assets/manuscript-v1/hunter.png")
-const LION = preload("res://assets/manuscript-v1/lord-lion.png")
-
-const HARVEST = preload("res://assets/manuscript-v1/lord-harvest.png")
-const IRON = preload("res://assets/manuscript-v1/lord-iron.png")
-const UNDERWORLD = preload("res://assets/manuscript-v1/lord-underworld.png")
-const SKELETON = preload("res://assets/manuscript-v1/skeleton.png")
-const NECROMANCER = preload("res://assets/manuscript-v1/necromancer.png")
+var lord_portrait: Texture2D
 
 var lines: Array = []
 var step := 0
@@ -38,7 +26,7 @@ func setup_stage_story(idx: int, recruit: String, won: bool) -> void:
 	foe = stage.enemy_lord
 	camp = stage.enemy_camp
 	heading = stage.name
-	opening_caption = "%s · 守將 %s" % [catalog.CHAPTERS[stage.chapter].name,cards.lord_name(foe)]
+	opening_caption = "%s · 守將 %s" % [catalog.CHAPTERS[stage.chapter].name,"強盜" if camp else cards.lord_name(foe)]
 	victory_caption = "征服 · "+catalog.CHAPTERS[stage.chapter].name
 	next_caption = "返回征服地圖"
 	lines = preload("res://campaign_story_data.gd").dialogue(stage.id,recruit,won)
@@ -70,8 +58,12 @@ func show(g) -> void:
 # A portrait by its key: the ruler ("foe", in blue), one of the fixed cast, or any card's art.
 func texture(g, kind: String) -> Texture2D:
 	if kind == "foe": return g.art("bandit",1) if camp else g.lord_art(foe,1)
-	var cast := {"mob":MOB,"guard":GUARD,"lord":LORD,"bandit":BANDIT,"knight":KNIGHT,"hunter":HUNTER,"lion":LION,"harvest":HARVEST,"iron":IRON,"underworld":UNDERWORLD,"skeleton":SKELETON,"necromancer":NECROMANCER}
-	return cast[kind] if cast.has(kind) else g.art(kind)
+	if kind == "lord": return g.lord_art(g.adventure.lord,0)
+	if kind == "guard": return g.art("militia")
+	if g.B.LORDS.has(kind): return g.lord_art(kind,0)
+	if g.B.CARDS.has(kind): return g.art(kind)
+	if lord_portrait == null: lord_portrait = load("res://assets/manuscript-v1/adventure-lord.png")
+	return lord_portrait
 
 func paint(g) -> void:
 	g.draw_rect(Rect2(28,28,1544,844),Color(0.18,0.15,0.10,0.18))

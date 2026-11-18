@@ -6,6 +6,7 @@ const DeckStore = preload("res://deck_store.gd")
 const Battle = preload("res://battle.gd")
 const Arcane = preload("res://arcane_mechanics.gd")
 const ART = preload("res://manuscript_art.gd")
+const Keywords = preload("res://card_keywords.gd")
 const AttackAnimation = preload("res://attack_animation.gd")
 var attack_animation := AttackAnimation.new()
 var library = preload("res://card_library.gd").new(self)
@@ -30,6 +31,8 @@ var blue_art: Dictionary = {}
 static var recolor_cache: Dictionary = {}
 static var prepared_art: Dictionary = {}
 static var palette_manifest: Dictionary = {}
+static var art_sources: Dictionary = {}
+static var art_aliases: Dictionary = {}
 # Bump only when team_material or palette conversion changes, not for UI/gameplay edits.
 const PALETTE_REVISION := "team-material-v2"
 const ROMAN := ["I","II","III","IV","V"]
@@ -42,6 +45,9 @@ var purse_need := 0.0 # gold the refused card or skill wanted
 var card_shake := {} # hand slot -> seconds left of a "still cooling" shake
 var place_flash := 0.0 # valid cells pulse after a placement on a wrong cell
 var skill_shake := 0.0
+var cursor_hint_text := ""
+var cursor_hint_left := 0.0
+var cursor_hint_color := RED
 var screen := "title"
 var player_deck: Array = []
 var player_lord := "adventure"
@@ -55,17 +61,30 @@ var me := 0
 var mirror_view := false
 var field_mirror := false
 var net_ip := "192.168."
+var net_room_code := ""
+var net_server_url := NetMatch.default_url()
+var net_auto_ai := true
+var vs_ai_matched_name := ""
 var watch_edit := -1 # >= 0: the deck screen is editing this spectate side (nothing is saved to disk)
 var watch_stash := {} # the player's own deck and lord while a spectate side is being edited
 var deck_tab := "all"
 var deck_page := 0
 var difficulty := 1
+var enemy_mode := 0 # 0: 經典冥府領主對手，1: 依難度選擇預設對手
+var practice_lord := "random" # "random" or a key in B.LORDS
+var practice_ratio_id := "balanced" # "random" or an id in DeckStore.PRACTICE_RATIOS
+var practice_foe_lord := ""
+var practice_foe_ratio_id := "balanced"
+var practice_foe_deck: Array = []
 var spectating := false
 var menu_notice := ""
 # Spectate setup: each side's deck, lord and where the deck came from (WATCH_SOURCES index, -1 = edited by hand).
 var watch_decks: Array = [[],[]]
 var watch_lords: Array = ["lion","lion"]
 var watch_source: Array = [0,0]
+var watch_lord_decks: Array = [{},{}] # per side: lord_kind -> saved 8-card deck
+var watch_lord_sources: Array = [{},{}] # per side: lord_kind -> WATCH_SOURCES index or -1
+var watch_path := "user://watch_decks.json"
 const WATCH_SOURCES := ["隨機","我的牌組"] # recommended presets removed from the menus (producer 2026-11-05)
 var start_button: Button
 var effects: Array[Dictionary] = []
@@ -73,24 +92,40 @@ const FactionVisuals = preload("res://faction_visuals.gd")
 const FxPolish = preload("res://fx_polish.gd")
 const DayCycle = preload("res://day_cycle.gd")
 const Ceremony = preload("res://battle_ceremony.gd")
+const Cinematic = preload("res://cinematic_director.gd")
+const Details = preload("res://battle_details.gd")
+const Recorder = preload("res://match_recorder.gd")
+var cinematic := Cinematic.new()
+var recorder := Recorder.new()
+var recording_presenter := preload("res://recording_mode.gd").new()
+var lord_cast_left := [0.0, 0.0]
+var lord_cast_duration := [0.42, 0.42]
+var lord_cast_spell := ["", ""]
+var skill_flash_left := 0.0
 var levy_visuals := {} # last visible positions; scoped to this model
 var levy_visual_model: RefCounted
-var adventure_attack_frames: Array[Texture2D] = [
-	preload("res://assets/manuscript-v1/adventure-lord-attack/frame-0.png"),
-	preload("res://assets/manuscript-v1/adventure-lord-attack/frame-1.png"),
-	preload("res://assets/manuscript-v1/adventure-lord-attack/frame-2.png"),
-	preload("res://assets/manuscript-v1/adventure-lord-attack/frame-3.png"),
-	preload("res://assets/manuscript-v1/adventure-lord-attack/frame-4.png"),
-	preload("res://assets/manuscript-v1/adventure-lord-attack/frame-5.png"),
+const ADVENTURE_FRAME_PATHS := [
+	"res://assets/manuscript-v1/adventure-lord-attack/frame-0.png",
+	"res://assets/manuscript-v1/adventure-lord-attack/frame-1.png",
+	"res://assets/manuscript-v1/adventure-lord-attack/frame-2.png",
+	"res://assets/manuscript-v1/adventure-lord-attack/frame-3.png",
+	"res://assets/manuscript-v1/adventure-lord-attack/frame-4.png",
+	"res://assets/manuscript-v1/adventure-lord-attack/frame-5.png",
 ]
-var adventure_attack_frames_blue: Array[Texture2D] = []
+var adventure_attack_frames: Array = [null,null,null,null,null,null]
+var adventure_attack_frames_blue: Array = [null,null,null,null,null,null]
 
 func get_adventure_frame(f: int, team: int = 0) -> Texture2D:
-	var idx := clampi(f, 0, adventure_attack_frames.size() - 1)
+	var idx := clampi(f, 0, ADVENTURE_FRAME_PATHS.size() - 1)
+	if adventure_attack_frames[idx] == null:
+		var path: String = ADVENTURE_FRAME_PATHS[idx]
+		if ResourceLoader.load_threaded_get_status(path) == ResourceLoader.THREAD_LOAD_LOADED:
+			adventure_attack_frames[idx] = ResourceLoader.load_threaded_get(path)
+		else:
+			adventure_attack_frames[idx] = load(path)
 	if team == 1:
-		if adventure_attack_frames_blue.is_empty():
-			for tex: Texture2D in adventure_attack_frames:
-				adventure_attack_frames_blue.append(recolor_blue(tex, 384, "lord_adventure"))
+		if adventure_attack_frames_blue[idx] == null:
+			adventure_attack_frames_blue[idx] = recolor_blue(adventure_attack_frames[idx], 384, "lord_adventure")
 		return adventure_attack_frames_blue[idx]
 	return adventure_attack_frames[idx]
 var seed_value := 1
@@ -106,6 +141,7 @@ var music: Node
 var music_volume := 0.7 # 0..1, settings
 var sfx_volume := 0.8
 var fullscreen := false
+var replay_enabled := false
 var clock := 0.0 # seconds of real time since launch: drives menu and overlay animation
 var veil: ColorRect # parchment wash that fades out after every screen change
 var veil_left := 0.0
@@ -127,40 +163,155 @@ const NEXT_RECT := Rect2(1102,748,96,128)
 const SKILL_RECT := Rect2(1212,734,350,54)
 const LORD_PLATE := Rect2(1206,726,360,152)
 
-# Shared by the asset preflight and the game; prepared palettes load directly at launch.
-static func prepare_art(progress: Callable = Callable()) -> void:
-	if not prepared_art.is_empty(): return
-	var textures: Dictionary = {}
-	var blue_art: Dictionary = {}
-	for pair: Array in [["militia","manuscript-v1/militia-red.png"],["farmer","farmer.png"],["farm","farmland.png"],["castle_red","manuscript-v1/castle-red.png"],["castle_blue","manuscript-v1/castle-red.png"]]:
-		textures[pair[0]] = load("res://assets/"+pair[1])
+const TITLE_ART_KEYS := ["militia","farm","hunter","grave","skeleton","ghoul","reaper"]
+const PRIORITY_BATTLE_KEYS := ["castle_red","castle_blue","castle_wall","gate","gate_broken","crest","farmer"]
+var prewarm_keys: Array[String] = []
+var prewarm_inflight: Array[Dictionary] = []
+
+static func load_manifest() -> void:
+	if palette_manifest.is_empty() and FileAccess.file_exists("res://assets/generated-palette/manifest.json"):
+		var parsed = JSON.parse_string(FileAccess.get_file_as_string("res://assets/generated-palette/manifest.json"))
+		if parsed is Dictionary: palette_manifest = parsed
+
+static func blue_max_size(kind: String) -> int:
+	return 0 if kind in ["castle_red","castle_wall","gate","gate_broken"] else 384
+
+static func generated_blue_path(source_path: String, max_size: int, kind: String) -> String:
+	if kind in ["farm","farmer","harvest","rain","fire"]: return ""
+	load_manifest()
+	var entry: Dictionary = palette_manifest.get(kind,{})
+	var generated := "res://assets/generated-palette/"+kind+".png"
+	if entry.get("revision","") == PALETTE_REVISION and entry.get("source","") == source_path and int(entry.get("size",-1)) == max_size and ResourceLoader.exists(generated):
+		return generated
+	return ""
+
+static func build_art_index() -> void:
+	if not art_sources.is_empty(): return
+	for pair: Array in [["militia","manuscript-v1/militia-red.png"],["farmer","farmer.png"],["farm","farmland.png"],["castle_red","manuscript-v1/castle-red.png"]]:
+		art_sources[pair[0]] = "res://assets/"+pair[1]
+	art_aliases["castle_blue"] = "castle_red"
 	for kind: String in B.CARDS:
 		var file := "res://assets/manuscript-v1/"+kind+".png"
-		if ResourceLoader.exists(file): textures[kind] = load(file)
+		if ResourceLoader.exists(file): art_sources[kind] = file
 	for pair: Array in [["glutton_nest_closed","glutton_nest_closed"],["gate","lane-wall"],["gate_broken","lane-wall-broken"],["crest","crown"],["castle_wall","castle-wall"]]:
-		textures[pair[0]] = load("res://assets/manuscript-v1/"+pair[1]+".png")
+		art_sources[pair[0]] = "res://assets/manuscript-v1/"+pair[1]+".png"
 	for lord_kind: String in B.LORDS:
-		textures["lord_"+lord_kind] = load("res://assets/manuscript-v1/lord-"+lord_kind+".png")
-	var done := 0
-	for kind: String in textures:
-		if kind != "castle_blue": blue_art[kind] = recolor_blue(textures[kind],0 if kind in ["castle_red","castle_wall","gate","gate_broken"] else 384,kind)
-		done += 1
-		if progress.is_valid(): progress.call(done,textures.size())
-	textures.castle_blue = textures.castle_red
-	blue_art.castle_blue = blue_art.castle_red
-	# A card without its own picture yet borrows the one named in its "art" field (placeholder).
+		art_sources["lord_"+lord_kind] = "res://assets/manuscript-v1/lord-"+lord_kind+".png"
 	for kind: String in B.CARDS:
 		var reference: Variant = B.CARDS[kind].get("art",[kind])
 		var borrow: String = reference if reference is String else reference[0]
-		if not textures.has(kind) and textures.has(borrow):
-			textures[kind] = textures[borrow]
-			if blue_art.has(borrow): blue_art[kind] = blue_art[borrow]
-	# 小怪領主 (roguelike) use the picture of the card they are named after.
+		if not art_sources.has(kind) and art_sources.has(borrow): art_aliases[kind] = borrow
 	for lord_kind: String in B.MINION_LORDS:
 		var card: String = B.MINION_LORDS[lord_kind].card
-		if textures.has(card): textures["lord_"+lord_kind] = textures[card]
-		if blue_art.has(card): blue_art["lord_"+lord_kind] = blue_art[card]
-	prepared_art = {"textures":textures,"blue":blue_art}
+		if art_sources.has(card) or art_aliases.has(card): art_aliases["lord_"+lord_kind] = art_aliases.get(card,card)
+
+static func take_texture(path: String) -> Texture2D:
+	if ResourceLoader.load_threaded_get_status(path) == ResourceLoader.THREAD_LOAD_LOADED:
+		var loaded = ResourceLoader.load_threaded_get(path)
+		if loaded is Texture2D: return loaded
+	return load(path)
+
+static func ensure_static_art(kind: String, need_blue: bool = false) -> Texture2D:
+	build_art_index()
+	if prepared_art.is_empty(): prepared_art = {"textures":{},"blue":{}}
+	var tex_map: Dictionary = prepared_art.textures
+	var blue_map: Dictionary = prepared_art.blue
+	var canonical: String = art_aliases.get(kind,kind)
+	if not art_sources.has(canonical): canonical = "militia"
+	if not tex_map.has(canonical):
+		tex_map[canonical] = take_texture(art_sources[canonical])
+	if kind != canonical and not tex_map.has(kind):
+		tex_map[kind] = tex_map[canonical]
+	if need_blue:
+		if not blue_map.has(canonical):
+			blue_map[canonical] = recolor_blue(tex_map[canonical],blue_max_size(canonical),canonical)
+		if kind != canonical and not blue_map.has(kind):
+			blue_map[kind] = blue_map[canonical]
+		return blue_map.get(kind,tex_map[kind])
+	return tex_map.get(kind,tex_map.militia)
+
+# Shared by the asset preflight and the game; prepared palettes load all art on demand or via prepare_art.
+static func prepare_art(progress: Callable = Callable()) -> void:
+	build_art_index()
+	var total := art_sources.size()
+	var done := 0
+	for kind: String in art_sources:
+		ensure_static_art(kind,true)
+		done += 1
+		if progress.is_valid(): progress.call(done,total)
+	for alias: String in art_aliases:
+		ensure_static_art(alias,true)
+
+func sync_art_entry(kind: String) -> void:
+	var canonical: String = art_aliases.get(kind,kind)
+	if not art_sources.has(canonical): canonical = "militia"
+	if prepared_art.textures.has(canonical):
+		textures[canonical] = prepared_art.textures[canonical]
+		if kind != canonical: textures[kind] = prepared_art.textures[canonical]
+	if prepared_art.blue.has(canonical):
+		blue_art[canonical] = prepared_art.blue[canonical]
+		if kind != canonical: blue_art[kind] = prepared_art.blue[canonical]
+
+func ensure_art(kind: String, need_blue: bool = false) -> Texture2D:
+	var result := ensure_static_art(kind,need_blue)
+	sync_art_entry(kind)
+	return result
+
+func load_all_art() -> void:
+	prepare_art()
+	textures = prepared_art.textures.duplicate()
+	blue_art = prepared_art.blue.duplicate()
+	prewarm_keys.clear()
+	prewarm_inflight.clear()
+
+func queue_art_prewarm() -> void:
+	prewarm_keys.clear()
+	var seen := {}
+	for k: String in PRIORITY_BATTLE_KEYS:
+		var ck := str(art_aliases.get(k,k))
+		if art_sources.has(ck) and not seen.has(ck) and not blue_art.has(ck):
+			seen[ck] = true
+			prewarm_keys.append(ck)
+	for deck_card: Variant in player_deck:
+		var ck := str(art_aliases.get(str(deck_card),str(deck_card)))
+		if art_sources.has(ck) and not seen.has(ck) and not blue_art.has(ck):
+			seen[ck] = true
+			prewarm_keys.append(ck)
+	for kind: String in art_sources:
+		if not seen.has(kind) and not blue_art.has(kind):
+			seen[kind] = true
+			prewarm_keys.append(kind)
+	for path: String in ADVENTURE_FRAME_PATHS:
+		if ResourceLoader.load_threaded_get_status(path) == ResourceLoader.THREAD_LOAD_INVALID_RESOURCE:
+			ResourceLoader.load_threaded_request(path)
+
+static func thread_done(path: String) -> bool:
+	if path.is_empty(): return true
+	var status := ResourceLoader.load_threaded_get_status(path)
+	return status != ResourceLoader.THREAD_LOAD_IN_PROGRESS
+
+func step_art_prewarm(budget_ms: int = 3) -> void:
+	if DisplayServer.get_name() == "headless": return
+	if prewarm_keys.is_empty() and prewarm_inflight.is_empty(): return
+	var deadline := Time.get_ticks_msec()+budget_ms
+	var still_inflight: Array[Dictionary] = []
+	for item: Dictionary in prewarm_inflight:
+		if thread_done(item.src) and thread_done(item.gen):
+			if Time.get_ticks_msec() <= deadline:
+				ensure_art(item.kind,true)
+			else:
+				still_inflight.append(item)
+		else:
+			still_inflight.append(item)
+	prewarm_inflight = still_inflight
+	while prewarm_inflight.size() < 4 and not prewarm_keys.is_empty():
+		var kind: String = prewarm_keys.pop_front()
+		if blue_art.has(kind): continue
+		var src: String = art_sources[kind]
+		ResourceLoader.load_threaded_request(src)
+		var gen := generated_blue_path(src,blue_max_size(kind),kind)
+		if not gen.is_empty(): ResourceLoader.load_threaded_request(gen)
+		prewarm_inflight.append({"kind":kind,"src":src,"gen":gen})
 
 func _ready() -> void:
 	var sf := SystemFont.new()
@@ -172,9 +323,18 @@ func _ready() -> void:
 		font = bundled
 	else: font = sf
 	for problem: String in B.validate(): push_error("balance.gd: "+problem) # see docs/新增卡牌指南.md
-	if prepared_art.is_empty(): prepare_art()
-	textures = prepared_art.textures.duplicate()
-	blue_art = prepared_art.blue.duplicate()
+	var saved: Dictionary = DeckStore.load_full(deck_path)
+	player_deck = saved.cards
+	player_lord = saved.lord
+	build_art_index()
+	if not prepared_art.is_empty():
+		textures = prepared_art.textures.duplicate()
+		blue_art = prepared_art.blue.duplicate()
+	for kind: String in TITLE_ART_KEYS:
+		ensure_art(kind,true)
+	if player_lord == "adventure": get_adventure_frame(0,0)
+	else: ensure_art("lord_"+player_lord,true)
+	if DisplayServer.get_name() != "headless": queue_art_prewarm()
 	# Darkened field edges pull the eye to the middle of the battle.
 	var shade := Gradient.new()
 	shade.set_color(0,Color(0.2,0.12,0.04,0.0))
@@ -187,11 +347,11 @@ func _ready() -> void:
 	vignette.fill_to = Vector2(1.0,1.0)
 	vignette.width = 256
 	vignette.height = 256
-	blue_art.castle_blue = blue_art.castle_red
 	seed_value = int(Time.get_unix_time_from_system())
 	for arg: String in OS.get_cmdline_user_args():
 		if arg.begins_with("--seed="): seed_value = int(arg.substr(7))
 	load_settings()
+	load_watch()
 	Music.ensure_buses()
 	sound = preload("res://sound_bank.gd").new()
 	add_child(sound)
@@ -209,13 +369,11 @@ func _ready() -> void:
 	layer.add_child(veil)
 	apply_audio_settings()
 	fit_window()
-	var saved: Dictionary = DeckStore.load_full(deck_path)
-	player_deck = saved.cards
-	player_lord = saved.lord
 	model = Battle.new(seed_value,player_deck,[],player_lord)
 	show_title()
 
 func start_battle() -> void:
+	vs_ai_matched_name = ""
 	adventure.index = -1
 	rogue.in_battle = false
 	if spectating:
@@ -228,7 +386,8 @@ func start_battle() -> void:
 			show_deck()
 			return
 		DeckStore.save_deck(player_deck,deck_path,player_lord)
-		model = Battle.new(seed_value,player_deck,B.PRESETS[difficulty],player_lord,B.PRESET_LORDS[difficulty])
+		ensure_practice_opponent()
+		model = Battle.new(seed_value,player_deck,practice_foe_deck.duplicate(),player_lord,practice_foe_lord)
 	model.difficulty = difficulty
 	model.ai_enabled = [spectating,true]
 	enter_battle("觀戰中：AI 操控雙方。1–4 或 + / − 調整速度，空白鍵暫停。" if spectating else "拖曳卡牌到戰場，或按 1–4／F 選牌再點格子 · 右鍵取消 · 空白鍵暫停")
@@ -236,13 +395,22 @@ func start_battle() -> void:
 func restart() -> void:
 	if net != null or rogue.in_battle: return # a roguelike battle cannot be replayed
 	if adventure.index >= 0: adventure.start(self,adventure.index)
-	else: start_battle()
+	else:
+		if not spectating: roll_practice_opponent()
+		start_battle()
 
 func enter_battle(message: String) -> void:
 	review.clear()
 	attack_animation.clear()
+	cinematic.reset()
+	recording_presenter = preload("res://recording_mode.gd").new()
+	recorder.start(self, model)
+	lord_cast_left = [0.0, 0.0]
+	lord_cast_spell = ["", ""]
 	selected = -1
 	dragging = false
+	cursor_hint_text = ""
+	cursor_hint_left = 0.0
 	speed = 1
 	position = Vector2.ZERO
 	notice = message
@@ -261,11 +429,11 @@ func view_mirror() -> Transform2D:
 
 func tf(pos: Vector2 = Vector2.ZERO, rot: float = 0.0, scl: Vector2 = Vector2.ONE) -> void:
 	var t := Transform2D(rot,scl,0.0,pos)
-	draw_set_transform_matrix(view_mirror()*t if field_mirror else t)
+	draw_set_transform_matrix(cinematic.field_transform(self)*t)
 
 # Screen point -> battle point (and back: the mirror is its own inverse).
 func to_model(p: Vector2) -> Vector2:
-	return Vector2(L.VIEWPORT_SIZE.x-p.x,p.y) if mirror_view else p
+	return cinematic.screen_to_field(self,p)
 
 func field_mouse() -> Vector2:
 	return to_model(get_global_mouse_position())
@@ -276,8 +444,10 @@ func field_text(pos: Vector2, text: String, align: HorizontalAlignment, width: f
 		draw_string(font,pos,text,align,width,size,color)
 		return
 	var w: float = width if width > 0 else font.get_string_size(text,HORIZONTAL_ALIGNMENT_LEFT,-1,size).x
-	draw_set_transform_matrix(Transform2D.IDENTITY)
+	field_mirror = false
+	tf()
 	draw_string(font,Vector2(L.VIEWPORT_SIZE.x-pos.x-w,pos.y),text,align,width,size,color)
+	field_mirror = true
 	tf()
 
 func say(text: String, _urgent: bool = false) -> void:
@@ -314,10 +484,18 @@ func button(rect: Rect2, caption: String, action: Callable) -> Button:
 	ui.append(b)
 	return b
 
+func _net_ui_bucket(s: String) -> String:
+	return "searching" if s in ["connecting","searching"] else s
+
 func _physics_process(dt: float) -> void:
 	if net != null:
-		if net.poll() and screen == "net": start_net_battle()
-		if screen == "net": queue_redraw()
+		var prev_bucket := _net_ui_bucket(net.state)
+		if net.poll(dt) and screen == "net":
+			start_net_battle()
+			return
+		if screen == "net":
+			if _net_ui_bucket(net.state) != prev_bucket: show_net()
+			else: queue_redraw()
 		if screen == "battle" and net.state == "playing":
 			net.advance(model,dt,func():
 				attack_animation.observe(model)
@@ -328,9 +506,14 @@ func _physics_process(dt: float) -> void:
 	for i: int in range(speed if spectating else 1):
 		if adventure.is_opening(): adventure.opening.advance(self,dt)
 		attack_animation.observe(model)
+		if not model.paused and not model.ended:
+			recorder.dispatch_replay(model)
 		model.step(dt)
 		if adventure.is_opening(): adventure.opening.observe(self)
 		attack_animation.observe(model)
+		if not model.paused and not model.ended:
+			recorder.observe_tick(model, self)
+			recorder.tick += 1
 		consume_events()
 		if not model.time_stopped():
 			adventure.update(self)
@@ -359,7 +542,7 @@ func consume_events() -> void:
 		if e.kind == "spell":
 			hop = 0
 			sacrifice_team = e.team if e.get("card","") == "sacrifice" else -1
-		if e.kind == "breach": say(("我方第 %d 路城牆被攻破！敵兵走進來就輸了" if e.team == 1 else "攻破藍旗第 %d 路城牆！派兵走進去就贏") % (e.lane+1),e.team == 1)
+		if e.kind == "breach": say(("我方第 %d 路城牆被攻破！敵兵走進來就輸了" % (e.lane+1)) if e.team != me else ("攻破%s第 %d 路城牆！派兵走進去就贏" % [Ceremony.side_name(self,1-me),e.lane+1]),e.team != me)
 		if e.kind == "skill": say("%s%s發動「%s」" % ["紅方" if e.team == 0 else "藍方",B.lord_name(e.lord),B.lord_data(e.lord).get("skill","技能")])
 		if e.kind == "ramp": say("金幣產出與卡牌冷卻加快 ×%.1f" % e.multiplier)
 		if e.kind == "nightfall" and e.get("first",false): say("入夜：金幣 ×%s，雙方城牆開始朽壞" % B.number(B.NIGHT_GOLD))
@@ -367,7 +550,18 @@ func consume_events() -> void:
 		if sound != null:
 			if sound.has_method("cue_event"): sound.cue_event(e)
 			else: sound.cue(e.kind)
-		if e.kind == "breach" and shake_enabled: shake_left = 0.25
+		if e.kind == "play" and B.CARDS.get(e.get("card",""),{}).get("type","") == "spell":
+			lord_cast_duration[e.team] = 0.42
+			lord_cast_left[e.team] = 0.42
+			lord_cast_spell[e.team] = e.get("card","")
+		elif e.kind in ["skill","hero_slash"]:
+			lord_cast_duration[e.team] = 1.15
+			lord_cast_left[e.team] = 1.15
+			lord_cast_spell[e.team] = "skill:" + String(e.get("lord",""))
+			if e.kind == "skill" and e.team == me:
+				skill_flash_left = 1.15
+		cinematic.on_event(self,e)
+		recording_presenter.observe(self,e)
 		if fx_enabled:
 			var copy := e.duplicate()
 			copy.life = {"nightfall":2.6 if e.get("first",false) else 1.2,"breach":2.0,"ramp":1.4,"burn":5.0,"death":0.35,"play":0.45,"ink":0.6,"skill":1.0,"link":0.6,"slash":0.35,"drum":0.6,"stone_impact":0.6,"catapult_fire":0.4,"curse_rise":0.5,"spell":1.0,"trap_blast":0.8,"boneburst":0.7}.get(e.kind,0.7)
@@ -409,7 +603,9 @@ func present(dt: float) -> void:
 		if result_seen != model:
 			result_seen = model
 			result_age = 0.0
+			recorder.finish(self, model)
 			if music != null: music.play_sting("victory" if Ceremony.mood(self) > 0 else "defeat")
+		recorder.poll_export()
 		result_age += dt
 	if music == null: return
 	music.enabled = music_volume > 0.001
@@ -425,6 +621,8 @@ func present(dt: float) -> void:
 		else: music.want("battle",phase)
 
 func _process(dt: float) -> void:
+	var real_dt := dt
+	step_art_prewarm()
 	present(dt)
 	if ui_time_locked():
 		queue_redraw()
@@ -434,11 +632,16 @@ func _process(dt: float) -> void:
 	purse_alarm = maxf(0,purse_alarm-dt)
 	place_flash = maxf(0,place_flash-dt)
 	skill_shake = maxf(0,skill_shake-dt)
+	skill_flash_left = maxf(0.0,skill_flash_left-real_dt)
+	cursor_hint_left = maxf(0.0,cursor_hint_left-real_dt)
 	for k: int in card_shake.keys():
 		card_shake[k] -= dt
 		if card_shake[k] <= 0: card_shake.erase(k)
-	position = Vector2(sin(shake_left*180),cos(shake_left*210))*shake_left*18 if shake_enabled and shake_left > 0 else Vector2.ZERO
-	for e: Dictionary in effects: e.life -= dt
+	position = Vector2.ZERO
+	cinematic.step(self,dt)
+	var fx_step: float = cinematic.fx_dt(dt)
+	for t_idx: int in range(2): lord_cast_left[t_idx] = maxf(0.0, lord_cast_left[t_idx] - fx_step)
+	for e: Dictionary in effects: e.life -= fx_step
 	effects = effects.filter(func(e: Dictionary) -> bool: return e.life > 0)
 	queue_redraw()
 
@@ -448,6 +651,7 @@ func card_rect(slot: int) -> Rect2:
 	return Rect2(560+slot*134,730,124,158)
 
 func card_at(pos: Vector2) -> int:
+	if adventure.is_opening() and adventure.opening.active: return -1
 	for i: int in [0,1,2,3,Battle.FARM_SLOT]:
 		if card_rect(i).has_point(pos): return i
 	return -1
@@ -465,6 +669,12 @@ func overlay_buttons() -> Array:
 	var entries: Array = []
 	if not model.ended: entries.append(["繼續",toggle_pause])
 	else: entries.append(["戰局復盤",show_review])
+	if model.ended and recorder.has_saved_replay() and not OS.has_feature("web"):
+		match recorder.export_state:
+			"done": entries.append(["開啟錄影夾", func(): recorder.open_recordings_folder()])
+			"rendering": entries.append(["MP4 轉檔中", func(): recorder.open_recordings_folder()])
+			"error": entries.append(["重試 MP4", func(): recorder.export_mp4()])
+			_: entries.append(["輸出 MP4", func(): recorder.export_mp4()])
 	if net == null and not rogue.in_battle: entries.append(["重新開始",restart])
 	if not model.ended: entries.append(["設定",func(): settings_return = "battle"; show_settings()])
 	if rogue.in_battle: entries.append(["肉鴿進度" if model.ended else "認輸離開",func(): rogue.leave_battle(self)])
@@ -486,6 +696,7 @@ func try_play(slot: int, pos: Vector2) -> bool:
 		selected = -1
 		return true
 	if reason.is_empty() and model.play(me,slot,pos):
+		recorder.record_cmd("play", me, slot, pos)
 		selected = -1
 		return true
 	say(reason)
@@ -493,8 +704,13 @@ func try_play(slot: int, pos: Vector2) -> bool:
 		Battle.Refusal.GOLD:
 			purse_alarm = 0.9
 			purse_need = B.CARDS[model.kind_at(me,slot)].cost
-		Battle.Refusal.COOLDOWN: card_shake[slot] = 0.45
-		Battle.Refusal.NOT_OURS, Battle.Refusal.OFF_GRID, Battle.Refusal.OCCUPIED: place_flash = 1.0
+			show_cursor_hint("金幣不足（還差 %d）" % ceili(purse_need - model.ink[me]), RED)
+		Battle.Refusal.COOLDOWN:
+			card_shake[slot] = 0.45
+			show_cursor_hint("冷卻中 %.1f秒" % model.slot_cd(me,slot), Color("7d4f1c"))
+		Battle.Refusal.NOT_OURS, Battle.Refusal.OFF_GRID, Battle.Refusal.OCCUPIED:
+			place_flash = 1.0
+			show_cursor_hint(reason, Color("7d4f1c"))
 	effects.append({"kind":"fail","pos":pos,"life":0.5,"duration":0.5})
 	if sound != null: sound.cue("fail")
 	return false
@@ -543,6 +759,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			if selected >= 0: selected = -1
 			else: toggle_pause()
 		if event.keycode == KEY_SPACE: toggle_pause()
+		if event.keycode == KEY_F9:
+			cinematic.theater_mode = not cinematic.theater_mode
+			cinematic.theater_hint_left = 2.4 if cinematic.theater_mode else 0.0
+			queue_redraw()
 		if event.keycode == KEY_R and net == null:
 			if model.paused or model.ended: restart()
 			else: say("戰鬥中 R 不重開；空白鍵暫停後可重玩")
@@ -641,13 +861,24 @@ func ink_frame(rect: Rect2) -> void:
 	draw_rect(rect.grow(-6),Color(INK,0.45),false,1)
 
 func art(kind: String, team: int = 0) -> Texture2D:
-	if team == 1 and blue_art.has(kind): return blue_art[kind]
 	if kind == "lord_adventure": return get_adventure_frame(0, team)
-	return textures.get(kind,textures.militia)
+	if team == 1:
+		var btex: Variant = blue_art.get(kind)
+		if btex != null: return btex
+		return ensure_art(kind,true)
+	var rtex: Variant = textures.get(kind)
+	if rtex != null: return rtex
+	return ensure_art(kind,false)
 
 func lord_art(kind: String, team: int = 0) -> Texture2D:
 	var key := kind if kind.begins_with("lord_") else "lord_"+kind
-	return blue_art[key] if team == 1 and blue_art.has(key) else textures.get(key,textures.militia)
+	if team == 1:
+		var btex: Variant = blue_art.get(key)
+		if btex != null: return btex
+		return ensure_art(key,true)
+	var rtex: Variant = textures.get(key)
+	if rtex != null: return rtex
+	return ensure_art(key,false)
 
 # Recolour only designated team materials. Natural fields/skin/wood are not team ink.
 # Ox cloth additionally has a spatial mask so its brown coat never enters the palette swap.
@@ -676,15 +907,13 @@ static func recolor_blue(source: Texture2D, max_size: int, kind: String = "") ->
 	var key := str(source.get_instance_id())+":"+str(max_size)+":"+kind
 	if recolor_cache.has(key): return recolor_cache[key]
 	# Build-time derivatives of the single source set; no per-pixel work on normal startup.
-	if palette_manifest.is_empty() and FileAccess.file_exists("res://assets/generated-palette/manifest.json"):
-		var parsed = JSON.parse_string(FileAccess.get_file_as_string("res://assets/generated-palette/manifest.json"))
-		if parsed is Dictionary: palette_manifest = parsed
+	load_manifest()
 	var entry: Dictionary = palette_manifest.get(kind,{})
 	var generated := "res://assets/generated-palette/"+kind+".png"
 	if entry.get("revision","") == PALETTE_REVISION and entry.get("source","") == source.resource_path and int(entry.get("size",-1)) == max_size and ResourceLoader.exists(generated):
 		# Original source files can be remapped inside exports; the build manifest remains valid there.
 		if not FileAccess.file_exists(source.resource_path) or entry.get("sha256","") == FileAccess.get_sha256(source.resource_path):
-			var texture: Texture2D = load(generated)
+			var texture: Texture2D = take_texture(generated)
 			recolor_cache[key] = texture
 			return texture
 	# Read the source file itself when it exists: the imported texture can be stale right after the
@@ -728,20 +957,27 @@ func draw_fitted_facing(texture: Texture2D, box: Rect2, face: float, shade: Colo
 	tf()
 
 func actor_rect(kind: String) -> Rect2:
-	if kind == "pouch_beast": return fitted_rect(art(kind).get_size(),Rect2(-58,-62,116,92),true)
+	if kind == "pouch_beast": return fitted_rect(art(kind).get_size(),Rect2(-68,-75,136,108),true)
+	if kind == "arcane_golem": return fitted_rect(art(kind).get_size(),Rect2(-83,-126,166,143),true)
 	if B.CARDS.get(kind,{}).get("series","") == "magic" and B.CARDS[kind].type == "unit": return fitted_rect(art(kind).get_size(),Rect2(-65,-95,130,112),true)
 	if kind == "glutton_nest": return fitted_rect(art(kind).get_size(),Rect2(-45,-28,90,62),true)
 	if B.CARDS.get(kind,{}).has("trap"): return fitted_rect(art(kind).get_size(),Rect2(-45,-8,90,46),true)
-	if B.CARDS.get(kind,{}).get("series","") == "beast":
-		var box: Rect2 = {"long_dragon":Rect2(-85,-50,170,67),"thorn_dragon":Rect2(-75,-75,150,92),"belly_eye":Rect2(-66,-72,132,89)}.get(kind,Rect2(-58,-75,116,92))
+	if B.CARDS.get(kind,{}).get("series","") == "beast" or kind in ["bog_troll","tusk_boar","dire_hydra","war_lodge","bramble_wall"]:
+		var box: Rect2 = {"thorn_dragon":Rect2(-101,-107,202,124),"dire_hydra":Rect2(-140,-88,280,111),"long_dragon":Rect2(-98,-60,196,77),"belly_eye":Rect2(-82,-94,164,111),"bog_troll":Rect2(-76,-104,152,121),"eyewing_dragon":Rect2(-76,-104,152,121),"tusk_boar":Rect2(-70,-93,140,110),"bramble_wall":Rect2(-68,-64,136,84),"war_lodge":Rect2(-51,-44,102,88)}.get(kind,Rect2(-58,-75,116,92))
 		return fitted_rect(art(kind).get_size(),box,true)
 	if kind == "arcane_tower": return fitted_rect(art(kind).get_size(),Rect2(-40,-65,80,100),true)
-	if kind == "corpse_giant": return fitted_rect(art(kind).get_size(),Rect2(-52,-85,104,104),true)
+	if kind == "corpse_giant": return fitted_rect(art(kind).get_size(),Rect2(-72,-125,144,144),true)
 	if kind == "plague_bishop": return fitted_rect(art(kind).get_size(),Rect2(-70,-132,140,150),true) # 封印祭壇's boss: towers over his monks
-	if kind == "lord_adventure": return fitted_rect(get_adventure_frame(0,0).get_size(),Rect2(-57,-75,114,102),true)
-	if kind.begins_with("lord_"): return fitted_rect(art(kind).get_size(),Rect2(-47,-67,94,94),true)
-	if kind in ["catapult"] or B.CARDS.get(kind,{}).get("type","") == "building": return fitted_rect(art(kind).get_size(),Rect2(-45,-39,90,78),true)
-	var width := 112.0 if kind in ["ox","ram"] else 80.0
+	if kind == "lord_adventure": return fitted_rect(get_adventure_frame(0,0).get_size(),Rect2(-62,-81,124,110),true)
+	if kind.begins_with("lord_"):
+		var lk := kind.trim_prefix("lord_")
+		var ls := 112.0 if lk == "iron" else (104.0 if B.lord_data(lk).get("hp",0.0) >= 1500.0 else 96.0)
+		return fitted_rect(art(kind).get_size(),Rect2(-ls*0.5,27.0-ls,ls,ls),true)
+	if kind in ["catapult"] or B.CARDS.get(kind,{}).get("type","") == "building":
+		var b_box: Rect2 = {"bonewall":Rect2(-56,-49,112,98),"barricade":Rect2(-54,-47,108,94),"scarecrow":Rect2(-51,-44,102,88),"mill":Rect2(-51,-44,102,88)}.get(kind,Rect2(-45,-39,90,78))
+		return fitted_rect(art(kind).get_size(),b_box,true)
+	if kind == "ram": return fitted_rect(art(kind).get_size(),Rect2(-76,-91,152,108),true)
+	var width := 112.0 if kind in ["ox","disgraced_lancer"] else 80.0
 	return fitted_rect(art(kind).get_size(),Rect2(-width/2,-63,width,80),true)
 
 func draw_actor(kind: String, team: int, pos: Vector2, face: float, shade: Color = Color.WHITE) -> void:
@@ -815,82 +1051,95 @@ func draw_combat_actor(kind: String, actor: Dictionary, pos: Vector2, face: floa
 	tf()
 
 func card_art_kinds(kind: String) -> Array:
-	var reference: Variant = B.CARDS[kind].get("art",[kind])
+	build_art_index()
+	var reference: Variant = B.CARDS.get(kind,{}).get("art",[kind])
 	if reference is String:
-		return [kind] if textures.has(kind) else [reference]
+		return [kind] if (textures.has(kind) or art_sources.has(kind)) else [reference]
 	return reference
 
-func draw_card_art(kind: String, box: Rect2, team: int = 0, shade: Color = Color.WHITE) -> void:
+func draw_card_art(kind: String, box: Rect2, team: int = 0, shade: Color = Color.WHITE, gray: bool = false) -> void:
+	var Style = preload("res://command_style.gd")
 	var kinds := card_art_kinds(kind)
 	for i: int in range(kinds.size()):
 		var part := box
 		if kinds.size() > 1:
 			part.size.x = box.size.x*0.58
 			part.position.x += i*box.size.x*0.42
-		draw_fitted(art(kinds[i],team),part,shade,true)
+		var tex := art(kinds[i],team)
+		if gray: tex = Style.gray_texture(tex)
+		draw_fitted(tex,part,shade,true)
 
 func draw_card(kind: String, rect: Rect2, slot: int = -1) -> void:
 	var data: Dictionary = B.CARDS[kind]
 	if card_shake.has(slot): rect.position.x += sin(card_shake[slot]*55)*5*clampf(card_shake[slot]/0.45,0,1)
 	var s := rect.size
+	var scale_k := clampf(s.x/124.0, 0.76, 1.30)
+	var Ornament = preload("res://interface_ornament.gd")
+	var Style = preload("res://command_style.gd")
 	var short: bool = screen == "battle" and model.ink[me] < data.cost
-	draw_texture_rect(ART.card(selected == slot and slot >= 0),rect,false,preload("res://command_style.gd").card_tint(kind))
-	preload("res://command_style.gd").type_frame(self,rect,data.type)
-	preload("res://command_style.gd").faction_frame(self,rect,kind,selected == slot and slot >= 0)
-	# No countdowns or shortfall numbers on cards (producer 2026-11-03). Not enough gold: a still
-	# grey mask. Cooling: a grey curtain that slowly parts from the middle (drawn further down).
 	var cooling: bool = slot >= 0 and screen == "battle" and model.slot_cd(me,slot) > 0
-	var blocked: bool = short and slot >= 0
-	var art_box := Rect2(rect.position+s*Vector2(0.08,0.13),s*Vector2(0.84,0.5))
-	var shade := Color(0.45,0.45,0.45) if short else Color.WHITE
-	draw_card_art(kind,art_box,0,shade)
-	if blocked: draw_rect(rect.grow(-3),Color(0.40,0.40,0.40,0.50))
+	var blocked: bool = short or cooling
+	var sel: bool = selected == slot and slot >= 0
+	# Soft vellum drop shadow grounds the card on stone or parchment.
+	draw_rect(Rect2(rect.position+Vector2(2,3),s),Color("1e150d",0.22))
+	var card_tex: Texture2D = ART.card(sel)
+	draw_texture_rect(Style.gray_texture(card_tex) if blocked else card_tex,rect,false,Color(0.68,0.68,0.68) if blocked else Style.card_tint(kind))
+	Style.type_frame(self,rect,data.type,blocked)
+	Style.faction_frame(self,rect,kind,sel,blocked)
+	# No countdowns or shortfall numbers on cards (producer 2026-11-03). Any unready card
+	# (cooling or short on gold) stays gray; cooling also shows a parting curtain.
+	var art_box := Rect2(rect.position+s*Vector2(0.08,0.125),s*Vector2(0.84,0.485))
+	var shade := Color(0.76,0.76,0.76) if blocked else Color.WHITE
+	draw_card_art(kind,art_box,0,shade,blocked)
+	if blocked: draw_rect(rect.grow(-4),Color(0.24,0.24,0.24,0.26))
 	if cooling: curtain(art_box,clampf(model.slot_cd(me,slot)/maxf(0.1,data.cooldown),0,1))
-	preload("res://interface_ornament.gd").card_caption(self,Rect2(rect.position+Vector2(10,s.y*0.645),Vector2(s.x-20,s.y*0.22)),preload("res://command_style.gd").card_tint(kind))
-	# Name and type sit above the frame's bottom corner flowers (they start ~83% down).
-	draw_string(font,rect.position+Vector2(0,s.y*0.74),data.name,HORIZONTAL_ALIGNMENT_CENTER,s.x,19,Color("2e2219") if blocked else INK)
-	draw_string(font,rect.position+Vector2(0,s.y*0.83),data.role,HORIZONTAL_ALIGNMENT_CENTER,s.x,15,Color("33261a") if blocked else Color("5a4630"))
-	if screen == "battle" and model != null and me < model.card_upgrades.size():
-		var lv: int = preload("res://card_upgrades.gd").level(model.card_upgrades[me].get(kind,{}))
+	var cap_rect := Rect2(rect.position+Vector2(s.x*0.074,s.y*0.614),Vector2(s.x*0.852,s.y*0.256))
+	Ornament.card_caption(self,cap_rect,Style.card_tint(kind),blocked)
+	# Name and keyword cartouches sit comfortably inside cap_rect, separated by an ink hairline.
+	var name_fsize := maxi(12, roundi(17.0 * scale_k))
+	draw_string(font,Vector2(rect.position.x,rect.position.y+s.y*0.735),data.name,HORIZONTAL_ALIGNMENT_CENTER,s.x,name_fsize,Color("2e2e2e") if blocked else INK)
+	Keywords.draw_card_pills(self,rect,kind,blocked)
+	var up_map: Dictionary = model.card_upgrades[me] if (screen in ["battle","battle_info"] and model != null and me < model.card_upgrades.size()) else (rogue.run.get("upgrades",{}) if screen == "rogue" and not rogue.run.is_empty() else {})
+	if not up_map.is_empty():
+		var lv: int = preload("res://card_upgrades.gd").level(up_map.get(kind,{}))
 		if lv > 0: # roguelike shop upgrade
-			draw_circle(rect.position+Vector2(19,s.y*0.66),13,RED)
-			draw_string(font,rect.position+Vector2(6,s.y*0.66+6),"+%d" % lv,HORIZONTAL_ALIGNMENT_CENTER,26,15,Color("fff0ca"))
+			Ornament.wax_upgrade_seal(self,rect.position+Vector2(18*scale_k,s.y*0.625),12.5*scale_k,lv)
 	if screen != "battle":
 		# Outside battle the top-left corner shows the card's cooldown (in battle it shows the hand slot).
-		draw_rect(Rect2(rect.position+Vector2(7,7),Vector2(34,20)),Color("725138"))
-		draw_string(font,rect.position+Vector2(7,22),"%ss" % B.number(data.cooldown),HORIZONTAL_ALIGNMENT_CENTER,34,13,Color("efdfb9"))
-		# Faction tag (經典／黑暗／中立) between the cooldown and the cost.
+		var cd_rect := Rect2(rect.position+Vector2(6*scale_k,6*scale_k),Vector2(36*scale_k,19*scale_k))
+		Ornament.corner_seal(self,cd_rect,"%ss" % B.number(data.cooldown),Color("6b4c33"),maxi(10,roundi(11.5*scale_k)))
+		# Faction tag (經典／黑暗／魔導／怪獸／中立) between the cooldown and the cost.
 		var faction: String = B.card_faction(kind)
-		var tag := Rect2(rect.position+Vector2(s.x*0.5-18,8),Vector2(36,17))
-		draw_rect(tag,preload("res://command_style.gd").tag_color(kind))
-		draw_string(font,tag.position+Vector2(0,13),B.FACTIONS[faction],HORIZONTAL_ALIGNMENT_CENTER,tag.size.x,12,Color("f3e6c4"))
-	# Ink cost badge, top right.
-	var badge := rect.position+Vector2(s.x-19,19)
-	draw_circle(badge,15,Color("2f3f5c"))
-	draw_arc(badge,15,0,TAU,24,Color("cfaa60"),2)
-	draw_string(font,badge+Vector2(-15,6),("-" if data.get("summon_only",false) else preload("res://gold_monster.gd").cost_text(kind,data)),HORIZONTAL_ALIGNMENT_CENTER,30,20,Color("fff6df"))
+		var tag := Rect2(rect.position+Vector2(s.x*0.53-16*scale_k,7*scale_k),Vector2(32*scale_k,16.5*scale_k))
+		Ornament.ribbon_tag(self,tag,B.FACTIONS[faction],Style.tag_color(kind),maxi(10,roundi(11.0*scale_k)))
+	# Ink cost medallion, top right.
+	var badge := rect.position+Vector2(s.x-18.5*scale_k,18.5*scale_k)
+	var cost_txt := "-" if data.get("summon_only",false) else preload("res://gold_monster.gd").cost_text(kind,data)
+	Ornament.cost_medallion(self,badge,14.8*scale_k,cost_txt,blocked)
 	if slot >= 0:
 		var key := "F" if slot == Battle.FARM_SLOT else str(slot+1)
-		draw_rect(Rect2(rect.position+Vector2(7,7),Vector2(22,22)),Color("3f5a2c") if slot == Battle.FARM_SLOT else Color("725138"))
-		draw_string(font,rect.position+Vector2(7,24),key,HORIZONTAL_ALIGNMENT_CENTER,22,14,Color("efdfb9"))
+		var seal_col := Color("5e5e5e") if blocked else (Style.tag_color(kind).darkened(0.08) if slot == Battle.FARM_SLOT else Color("6b4c33"))
+		var key_rect := Rect2(rect.position+Vector2(6.5*scale_k,6.5*scale_k),Vector2(22*scale_k,22*scale_k))
+		Ornament.corner_seal(self,key_rect,key,seal_col,maxi(11,roundi(13.5*scale_k)),slot == Battle.FARM_SLOT and not blocked)
 
-# A grey stage curtain over r: two halves that part from the middle as `closed` goes 1 -> 0.
-# Soft folds (light and shade bands) and a pale hem on the leading edge, like drawn cloth.
+# A gray stage curtain over r: two halves that part from the middle as `closed` goes 1 -> 0.
 func curtain(r: Rect2, closed: float) -> void:
 	var half := r.size.x*0.5*closed
 	if half < 0.5: return
 	for side: int in range(2):
 		var cloth := Rect2(r.position.x if side == 0 else r.end.x-half,r.position.y,half,r.size.y)
-		draw_rect(cloth,Color(0.38,0.37,0.36,0.82))
+		draw_rect(cloth,Color(0.24,0.24,0.24,0.76))
 		var fold := 0
 		var x := cloth.position.x
 		while x < cloth.end.x:
 			var w := minf(7.0,cloth.end.x-x)
-			draw_rect(Rect2(x,cloth.position.y,w,cloth.size.y),Color(1,1,1,0.07) if fold%2 == 0 else Color(0,0,0,0.10))
+			draw_rect(Rect2(x,cloth.position.y,w,cloth.size.y),Color(0.85,0.85,0.85,0.08) if fold%2 == 0 else Color(0.10,0.10,0.10,0.14))
 			x += 7.0
 			fold += 1
+		draw_line(cloth.position,Vector2(cloth.end.x,cloth.position.y),Color("7a7a7a",0.72),1.2)
+		draw_line(Vector2(cloth.position.x,cloth.end.y),cloth.end,Color("7a7a7a",0.72),1.2)
 		var edge: float = cloth.end.x if side == 0 else cloth.position.x
-		draw_line(Vector2(edge,r.position.y),Vector2(edge,r.end.y),Color(0.80,0.78,0.72,0.9),2)
+		draw_line(Vector2(edge,r.position.y),Vector2(edge,r.end.y),Color("a8a8a8",0.88),2.0)
 
 func _draw() -> void:
 	if font == null or model == null: return
@@ -1023,11 +1272,11 @@ func draw_battle() -> void:
 		adventure.opening.paint(self)
 		return
 	field_mirror = mirror_view
-	tf()
+	cinematic.begin_field(self)
 	var field: Rect2 = L.FIELD_FRAME
-	draw_texture_rect_region(PAPER,field,Rect2(field.position*0.6,field.size*0.6),FIELD_TINT)
-	draw_battle_landscape(field.grow(-7))
-	ink_frame(field)
+	draw_texture_rect_region(PAPER,field.grow(24),Rect2(field.position*0.6,field.size*0.6),FIELD_TINT)
+	draw_battle_landscape(field.grow(20))
+	cinematic.paint_ground(self,field)
 	var corner := Vector2(96,86)
 	draw_texture_rect(ART.ornament(0),Rect2(field.position+Vector2(8,8),corner),false,Color(1,1,1,0.85))
 	draw_texture_rect(ART.ornament(1),Rect2(Vector2(field.end.x-8-corner.x,field.position.y+8),corner),false,Color(1,1,1,0.85))
@@ -1038,6 +1287,10 @@ func draw_battle() -> void:
 	draw_mirrored(art("castle_wall",1),L.CASTLE_RECTS[1],CASTLE_SHADE)
 	var grid := Rect2(L.GRID_ORIGIN,L.GRID_SIZE)
 	draw_ground(grid)
+	for lane: int in model.water_lanes:
+		draw_water_band(Rect2(grid.position.x,grid.position.y+lane*L.CELL_SIZE.y,grid.size.x,L.CELL_SIZE.y),false)
+	for col: int in model.water_cols:
+		draw_water_band(Rect2(grid.position.x+col*L.CELL_SIZE.x,grid.position.y,L.CELL_SIZE.x,grid.size.y),true)
 	for row: int in range(L.GRID_ROWS):
 		for col: int in range(L.GRID_COLUMNS):
 			var cell := Vector2i(col,row)
@@ -1080,30 +1333,42 @@ func draw_battle() -> void:
 		draw_rect(tab,Color(INK,0.5),false,1)
 		field_text(tab.position+Vector2(0,15),ROMAN[model.active_lanes.find(lane)],HORIZONTAL_ALIGNMENT_CENTER,tab.size.x,14,INK)
 	review.draw_pressure(self) # danger glow sits on the ground, under the troops
+	for lane: int in model.active_lanes:
+		for team: int in range(2):
+			if model.gates[team][lane] <= 0: draw_wall_section(team,lane,true)
 	for b: Dictionary in model.buildings:
 		team_shadow(b.pos+Vector2(0,30),40,Color(0.25,0.17,0.08))
 		draw_combat_actor(b.kind,b,b.pos,1.0 if b.team == 0 else -1.0)
 		if b.hp < b.max_hp and not preload("res://glutton_nest.gd").hidden(b): bar(Rect2(b.pos-Vector2(30,43),Vector2(60,5)),b.hp,b.max_hp,RED if b.team == 0 else BLUE)
 		# Farm progress toward the next gold drop; brighter while doubled (farmer or 豐收).
-		if b.kind == "farm":
-			var doubled: bool = maxf(b.boost_until,b.harvest_until) > model.elapsed
-			bar(Rect2(b.pos+Vector2(-30,36),Vector2(60,5)),b.production,B.FARM_INTERVAL,Color("f2c230") if doubled else Color("c8962c"))
+		if b.kind == "farm": draw_farm_overlay(b)
 		elif b.kind == "grave":
 			bar(Rect2(b.pos+Vector2(-30,36),Vector2(60,5)),b.production,B.CARDS.grave.period,Color("a885af"))
 		elif b.kind == "crystal":
 			bar(Rect2(b.pos+Vector2(-30,36),Vector2(60,5)),b.production,Arcane.crystal_period(b),Color("4fc3f7"))
+		elif b.kind == "granary":
+			bar(Rect2(b.pos+Vector2(-30,36),Vector2(60,5)),b.get("stored_gold",0.0),B.CARDS.granary.store_max,Color("e5b93b"))
+		elif b.kind == "blood_altar":
+			bar(Rect2(b.pos+Vector2(-30,36),Vector2(60,5)),b.get("tithe_blood",0.0),B.CARDS.blood_altar.tithe_goal,Color("9b2f2f"))
 		preload("res://faction_cards.gd").draw_bar(self,b)
 		preload("res://seal_altar.gd").draw_bar(self,b)
 		if fx_enabled and b.kind == "blood_tower": preload("res://blood_tower_fx.gd").tower(self,b)
-		if b.boost_until > model.elapsed:
-			tf(b.pos+Vector2(0,22),0,Vector2(1,0.38))
-			draw_circle(Vector2.ZERO,46+3*sin(model.elapsed*4),Color(1.0,0.82,0.30,0.30))
-			tf()
 	draw_relations()
 	for zone: Dictionary in model.zones:
-		draw_circle(zone.pos,zone.radius,Color(0.35,0.42,0.19,0.20))
-		draw_arc(zone.pos,zone.radius,0,TAU,40,Color(0.28,0.35,0.16,0.65),1.5,true)
-		draw_fitted(art("plague"),Rect2(zone.pos-Vector2.ONE*zone.radius*0.65,Vector2.ONE*zone.radius*1.3),Color(1,1,1,0.42))
+		var zrect: Rect2 = zone.get("rect",Rect2())
+		if zrect.size != Vector2.ZERO:
+			draw_rect(zrect,Color("115224",0.22))
+			draw_rect(zrect,Color("1b6e32",0.80),false,2.2)
+			draw_fitted(art("plague"),Rect2(zrect.get_center()-Vector2(64,64),Vector2(128,128)),Color(0.75,1.0,0.80,0.45))
+		else:
+			draw_circle(zone.pos,zone.radius,Color("115224",0.24))
+			draw_arc(zone.pos,zone.radius,0,TAU,40,Color("1b6e32",0.75),2.0,true)
+			draw_fitted(art("plague"),Rect2(zone.pos-Vector2.ONE*zone.radius*0.65,Vector2.ONE*zone.radius*1.3),Color(0.75,1.0,0.80,0.45))
+	for pool: Dictionary in model.get_meta("pitch_pools",[]):
+		var prect: Rect2 = pool.get("rect",Rect2())
+		if prect.size != Vector2.ZERO:
+			draw_rect(prect,Color(0.95,0.38,0.08,0.24))
+			draw_rect(prect,Color(1.0,0.52,0.14,0.82),false,2.4)
 	preload("res://faction_cards.gd").draw(self)
 	layout_formations()
 	var ordered: Array = model.units.duplicate()
@@ -1116,77 +1381,33 @@ func draw_battle() -> void:
 		for team: int in range(2):
 			var x := L.gate_icon_x(team)
 			var standing: bool = model.gates[team][lane] > 0
-			draw_wall_section(team,lane,not standing)
+			if standing: draw_wall_section(team,lane,false)
 			if standing and model.gates[team][lane] < B.GATE_HP:
 				bar(Rect2(x-22,y+45,44,4),model.gates[team][lane],B.GATE_HP,RED if team == 0 else BLUE)
 		var gx := L.gate_icon_x(0)
 		if me != 0: continue
 		if model.alarm[lane] > 0: draw_arc(Vector2(gx,y-8),40+4*pulse,0,TAU,28,Color(RED,0.5+0.4*pulse),3)
 		elif model.building_alarm[lane] > 0: draw_arc(Vector2(gx,y-8),40,0,TAU,28,Color(0.85,0.6,0.1,0.7),2)
+	Details.draw_breach_smoke(self)
 	for lord: Dictionary in model.lords: draw_lord(lord)
 	for arrow: Dictionary in model.projectiles:
-		if arrow.get("rolling",false):
-			var stone_pos: Vector2 = arrow.pos-Vector2(0,32)
-			tf(arrow.pos+Vector2(0,6),0,Vector2(1,0.25))
-			draw_circle(Vector2.ZERO,37,Color(0.2,0.16,0.10,0.25))
-			tf()
-			for i: int in range(4):
-				draw_circle(arrow.pos-Vector2(arrow.direction*(35+i*12),-4),6-i,Color(0.65,0.55,0.38,0.3-i*0.05))
-			tf(stone_pos,arrow.angle)
-			draw_texture_rect(art("rolling_boulder"),Rect2(-50,-50,100,100),false)
-			tf()
-		elif arrow.kind == "axe_thrower":
-			tf(arrow.pos,(1-arrow.remaining/B.ARROW_TIME)*TAU*2*arrow.get("direction",1.0))
-			draw_line(Vector2(-9,0),Vector2(9,0),Color("78512d"),3,true)
-			draw_colored_polygon(PackedVector2Array([Vector2(3,-8),Vector2(12,-5),Vector2(12,5),Vector2(3,8)]),Color("a9a8a0"))
-			draw_polyline(PackedVector2Array([Vector2(3,-8),Vector2(12,-5),Vector2(12,5),Vector2(3,8)]),INK,1.5,true)
-			tf()
-		elif arrow.has("impact"):
-			var flight: float = clampf(1-arrow.remaining/arrow.flight,0,1)
-			var shadow_pos: Vector2 = arrow.start.lerp(arrow.impact,flight)
-			draw_circle(shadow_pos,5.0*flight,Color(0.2,0.16,0.10,0.35))
-			draw_arc(arrow.impact,arrow.radius,0,TAU,24,Color(0.8,0.35,0.15,0.3+0.15*sin(model.elapsed*12)),1.5)
-			var stone: Vector2 = arrow.pos-Vector2(0,sin(flight*PI)*65)
-			var shell_c := Color("3d3835") if arrow.kind in ["funeral_grenadier","dog_cannon"] else Color("86745c")
-			draw_circle(stone,6,shell_c)
-			draw_arc(stone,6,0,TAU,12,INK,1.5,true)
-			if arrow.kind in ["funeral_grenadier","dog_cannon"]:
-				draw_circle(stone+Vector2(3,-5),2.5,Color("f6a636"))
-		elif arrow.get("piercing",false) and arrow.kind == "long_dragon":
-			# Fire breath: a widening tongue of flame from the mouth to the front of the blast.
-			var mouth: Vector2 = arrow.start+Vector2(arrow.direction*40,8)
-			var front: Vector2 = arrow.pos+Vector2(0,8)
-			var flicker := sin(model.elapsed*40)*2
-			draw_polygon(PackedVector2Array([mouth+Vector2(0,-3),front+Vector2(0,-10-flicker),front+Vector2(arrow.direction*8,0),front+Vector2(0,10+flicker),mouth+Vector2(0,3)]),PackedColorArray([Color(0.85,0.30,0.08,0.75)]))
-			draw_polygon(PackedVector2Array([mouth,front+Vector2(-arrow.direction*6,-5),front,front+Vector2(-arrow.direction*6,5)]),PackedColorArray([Color(1.0,0.82,0.35,0.85)]))
-		elif arrow.get("piercing",false):
-			var tip: Vector2 = arrow.pos
-			var tail := Vector2(arrow.direction*24,0)
-			var beam := [Color("c4a75f",0.4),Color("e5c158"),Color("fff1b8")] if arrow.kind == "orrery_walker" else [Color("8966b8",0.35),Color("c5a4eb"),Color("ead7ff")]
-			draw_line(tip-tail*1.6,tip,beam[0],5)
-			draw_line(tip-tail,tip,beam[1],2)
-			draw_polyline(PackedVector2Array([tip-Vector2(arrow.direction*6,4),tip,tip-Vector2(arrow.direction*6,-4)]),beam[2],2)
-		elif arrow.kind == "dark_wizard":
-			draw_line(arrow.pos-Vector2(18*arrow.get("direction",1.0),0),arrow.pos,Color(0.48,0.22,0.65,0.7),5,true)
-			draw_circle(arrow.pos,6,Color("aa6bce"))
-			draw_circle(arrow.pos,2.5,Color("f0deff"))
-		elif arrow.get("curse_splash",false):
-			draw_line(arrow.pos-Vector2(16*arrow.get("direction",1.0),0),arrow.pos,Color("4f6642",0.65),4,true)
-			draw_circle(arrow.pos,5.5,Color("6c8a53"))
-			draw_arc(arrow.pos,5.5,0,TAU,12,INK,1.4,true)
-			draw_circle(arrow.pos,2.0,Color("d9e6b2"))
-		else: draw_line(arrow.pos-Vector2(12*arrow.get("direction",1.0),0),arrow.pos,INK,2)
+		Details.draw_projectile(self,arrow)
 	draw_preview()
+	if selected < 0: preload("res://grid_rules.gd").draw_hover(self,field_mouse()) # a damage building's reach
 	draw_effects()
 	DayCycle.light(self,L.FIELD_FRAME.grow(-7))
-	field_mirror = false
-	tf()
-	draw_hud()
+	cinematic.paint_atmosphere(self,field)
+	cinematic.end_field(self)
+	mask_field_margins(field)
+	ink_frame(field)
+	cinematic.paint_screen_overlay(self,field)
+	if not cinematic.theater_mode:
+		draw_hud()
+		panel(library.INFO_RECT,Color("ecdcb6"))
+		draw_string(font,library.INFO_RECT.position+Vector2(0,21),"戰局資料",HORIZONTAL_ALIGNMENT_CENTER,library.INFO_RECT.size.x,16,INK)
+		draw_string(font,library.INFO_RECT.position+Vector2(0,39),["簡單","普通","困難"][model.difficulty],HORIZONTAL_ALIGNMENT_CENTER,library.INFO_RECT.size.x,13,Color("6f5a3e"))
 	Ceremony.intro(self)
 	if net != null: draw_net_status()
-	panel(library.INFO_RECT,Color("ecdcb6"))
-	draw_string(font,library.INFO_RECT.position+Vector2(0,21),"戰局資料",HORIZONTAL_ALIGNMENT_CENTER,library.INFO_RECT.size.x,16,INK)
-	draw_string(font,library.INFO_RECT.position+Vector2(0,39),["簡單","普通","困難"][model.difficulty],HORIZONTAL_ALIGNMENT_CENTER,library.INFO_RECT.size.x,13,Color("6f5a3e"))
 	if model.ended and not model.time_stopped(): draw_result()
 	elif model.paused:
 		panel(L.OVERLAY_RECT,Color("efe0bd"))
@@ -1195,12 +1416,50 @@ func draw_battle() -> void:
 			panel(item[0],Color("fbf1d8") if item[0].has_point(get_global_mouse_position()) else Color("f3e6c6"))
 			draw_string(font,item[0].position+Vector2(0,27),item[1],HORIZONTAL_ALIGNMENT_CENTER,item[0].size.x,20,INK)
 
+func mask_field_margins(field: Rect2) -> void:
+	var scale := PAPER.get_size()/L.VIEWPORT_SIZE
+	var strips := [
+		Rect2(0,0,L.VIEWPORT_SIZE.x,field.position.y),
+		Rect2(0,field.end.y,L.VIEWPORT_SIZE.x,L.VIEWPORT_SIZE.y-field.end.y),
+		Rect2(0,field.position.y,field.position.x,field.size.y),
+		Rect2(field.end.x,field.position.y,L.VIEWPORT_SIZE.x-field.end.x,field.size.y),
+	]
+	for r: Rect2 in strips:
+		draw_texture_rect_region(PAPER,r,Rect2(r.position*scale,r.size*scale),PAPER_TINT)
+		var inner := r.intersection(L.PAGE_FRAME)
+		if inner.has_area(): draw_rect(inner,Color(0.85,0.74,0.53,0.15))
+	panel(L.PAGE_FRAME,Color(0,0,0,0))
+
+func draw_farm_overlay(b: Dictionary) -> void:
+	var doubled: bool = maxf(b.boost_until,b.harvest_until) > model.elapsed
+	bar(Rect2(b.pos+Vector2(-30,36),Vector2(60,5)),b.production,B.FARM_INTERVAL,Color("f2c230") if doubled else Color("c8962c"))
+	if b.boost_until > model.elapsed:
+		tf(b.pos+Vector2(0,22),0,Vector2(1,0.38))
+		draw_circle(Vector2.ZERO,46+3*sin(model.elapsed*4),Color(1.0,0.82,0.30,0.30))
+		tf()
+
 func result_title() -> String:
 	return Ceremony.title(self)+"　"+Ceremony.story(self)
 
 # The closing page: who won and how, with both sides' figures (battle_ceremony.gd).
 func draw_result() -> void:
 	Ceremony.result(self)
+	if result_age >= Ceremony.PANEL_DELAY + Ceremony.PANEL_IN and recorder.has_saved_replay() and not OS.has_feature("web"):
+		var msg := ""
+		var col := Color("4f4331")
+		match recorder.export_state:
+			"done":
+				msg = "已儲存 MP4 與剪輯筆記：%s" % recorder.mp4_path.get_file()
+				col = Color("2d5f2e")
+			"rendering":
+				msg = "正在背景渲染 60fps MP4（完成將自動開啟資料夾）· 剪輯筆記已就緒"
+				col = Color("7d4f1c")
+			"error":
+				msg = "MP4 轉檔失敗（重播檔與剪輯筆記已保存於 recordings/）"
+				col = RED
+			_:
+				msg = "已自動保存重播與 YT 剪輯筆記：%s（點「輸出 MP4」即可產片）" % recorder.notes_path.get_file()
+		draw_string(font, Vector2(RESULT_RECT.position.x + 24, RESULT_RECT.end.y + 24), msg, HORIZONTAL_ALIGNMENT_CENTER, RESULT_RECT.size.x - 48, 15, col)
 
 func result_value(team: int, key: String) -> float:
 	if key == "breaches": return model.gates[1-team].filter(func(hp: float) -> bool: return hp <= 0).size()
@@ -1215,6 +1474,30 @@ func team_base(center: Vector2, radius: float, color: Color) -> void:
 	draw_circle(Vector2.ZERO,radius,Color(color,0.62))
 	draw_circle(Vector2.ZERO,radius,Color(color.darkened(0.35),0.95),false,3.0)
 	tf()
+
+# Water lanes (horizontal) or water columns (vertical): non-buildable, slows ground units by 60%.
+func draw_water_band(lr: Rect2, vertical: bool) -> void:
+	draw_rect(lr,Color("2f6c96",0.44))
+	if vertical:
+		draw_rect(Rect2(lr.position,Vector2(6.0,lr.size.y)),Color("1f4663",0.48))
+		draw_rect(Rect2(Vector2(lr.end.x-6.0,lr.position.y),Vector2(6.0,lr.size.y)),Color("1f4663",0.48))
+		var flow := fmod(clock*38.0,88.0)
+		for wi: int in range(10):
+			var wx := lr.position.x + 18.0 + float((wi*29)%62)
+			var wy := lr.position.y + fmod(wi*68.0 + flow, lr.size.y - 36.0) + 10.0
+			draw_line(Vector2(wx,wy),Vector2(wx,wy+24.0),Color("c8ecff",0.50),1.8,true)
+			draw_line(Vector2(wx+7.0,wy+10.0),Vector2(wx+7.0,wy+30.0),Color("8bc9ea",0.38),1.3,true)
+		field_text(Vector2(lr.position.x+4.0,lr.position.y+20.0),"水路 禁建/-60%",HORIZONTAL_ALIGNMENT_CENTER,lr.size.x-8.0,12,Color("e8f6ff",0.88))
+	else:
+		draw_rect(Rect2(lr.position,Vector2(lr.size.x,6.0)),Color("1f4663",0.48))
+		draw_rect(Rect2(Vector2(lr.position.x,lr.end.y-6.0),Vector2(lr.size.x,6.0)),Color("1f4663",0.48))
+		var flow := fmod(clock*38.0,88.0)
+		for wi: int in range(14):
+			var wx := lr.position.x + fmod(wi*88.0 + flow, lr.size.x - 42.0) + 12.0
+			var wy := lr.position.y + 18.0 + float((wi*29)%52)
+			draw_line(Vector2(wx,wy),Vector2(wx+26.0,wy),Color("c8ecff",0.50),1.8,true)
+			draw_line(Vector2(wx+10.0,wy+6.0),Vector2(wx+32.0,wy+6.0),Color("8bc9ea",0.38),1.3,true)
+		field_text(lr.position+Vector2(44.0,22.0),"水路 · 禁建／非飛行 -60% 速",HORIZONTAL_ALIGNMENT_LEFT,320.0,13,Color("e8f6ff",0.86))
 
 # The battlefield floor: tinted zones, alternating lane shade, grass and pebbles, darker edges.
 func draw_ground(grid: Rect2) -> void:
@@ -1254,14 +1537,17 @@ func draw_unit(u: Dictionary) -> void:
 	var pos: Vector2 = u.draw-Vector2(u.face*4,0) if fx_enabled and u.flash > 0 else u.draw # small knockback on hit
 	var bounce := sin(model.actor_time(u)*8+u.phase)*2
 	if u.get("flying",false): bounce = -20+sin(model.actor_time(u)*10+u.phase)*5
-	var top: float = actor_rect(u.kind).position.y+bounce
+	var rect_top: float = actor_rect(u.kind).position.y
+	var ring_r: float = 24.0+(B.actor_radius(u)-B.UNIT_BODY_RADIUS)*0.75
+	var hp_y: float = minf(-68.0,rect_top-6.0)
+	var top: float = rect_top+bounce
 	var is_cursed: bool = u.get("cursed",false) or u.get("cursed_until",0.0) > model.elapsed
 	if is_cursed: top = minf(top,-78)
-	if u.hp < u.max_hp: top = minf(top,-69)
+	if u.hp < u.max_hp: top = minf(top,hp_y-1.0)
 	# No push-down for tall troops (producer 2026-11-18): they stay in their lane; the top frame may cover them.
 	if u.get("stealthed",false):
-		draw_arc(pos+Vector2(0,16),27,0,PI,16,Color("a8b5c7"),2)
-	team_base(pos+Vector2(0,16),24,RED if u.team == 0 else BLUE)
+		draw_arc(pos+Vector2(0,16),ring_r+3.0,0,PI,16,Color("a8b5c7"),2)
+	team_base(pos+Vector2(0,16),ring_r,RED if u.team == 0 else BLUE)
 	var tint := Color(1.6,1.6,1.6) if fx_enabled and u.flash > 0 else Color.WHITE
 	if u.get("phased",false):
 		draw_combat_actor(u.kind,u,pos+Vector2(-u.face*12,bounce),u.face,Color(0.65,0.55,1.0,0.16))
@@ -1272,9 +1558,9 @@ func draw_unit(u: Dictionary) -> void:
 		var center := pos+Vector2(0,-32)
 		draw_colored_polygon(PackedVector2Array([center+Vector2(0,-7),center+Vector2(5,0),center+Vector2(0,7),center+Vector2(-5,0)]),Color(0.55+0.4*strength,0.4+0.4*strength,0.8+0.2*strength,0.8))
 	if model.LordExpansion.active(model,u):
-		draw_arc(pos+Vector2(0,-30),25,0,TAU,24,Color(0.65,0.08,0.18,0.7),2)
+		draw_arc(pos+Vector2(0,-30),ring_r+1.0,0,TAU,24,Color(0.65,0.08,0.18,0.7),2)
 		var left: float = (model.vampire_until[u.team]-model.elapsed)/B.LORDS.vampire.blood_duration
-		draw_arc(pos+Vector2(0,16),25,-PI/2,-PI/2+TAU*left,24,Color("bd3d66"),2)
+		draw_arc(pos+Vector2(0,16),ring_r+1.0,-PI/2,-PI/2+TAU*left,24,Color("bd3d66"),2)
 	if is_cursed:
 		var halo_pos := pos-Vector2(0,50)
 		draw_arc(halo_pos,12,0,TAU,20,Color("926c9d"),2,true)
@@ -1297,25 +1583,35 @@ func draw_unit(u: Dictionary) -> void:
 			var a: float = model.elapsed*6.0+i*TAU/3.0
 			draw_circle(stun_pos+Vector2(cos(a)*10,sin(a)*4),2.5,Color("f6d354"))
 	if u.get("slow_left",0.0) > 0:
-		draw_arc(pos+Vector2(0,16),20,0,TAU,16,Color("64b5f6",0.6),1.5)
+		draw_arc(pos+Vector2(0,16),ring_r-4.0,0,TAU,16,Color("64b5f6",0.6),1.5)
 	if u.get("root_left",0.0) > 0:
-		draw_arc(pos+Vector2(0,16),22,0,TAU,16,Color("3d2c3e",0.85),2.5)
+		draw_arc(pos+Vector2(0,16),ring_r-2.0,0,TAU,16,Color("3d2c3e",0.85),2.5)
 		for i: int in range(4):
-			var rp := pos+Vector2(0,16)+Vector2.from_angle(i*PI*0.5+PI*0.25)*22
+			var rp := pos+Vector2(0,16)+Vector2.from_angle(i*PI*0.5+PI*0.25)*(ring_r-2.0)
 			draw_line(rp,rp+Vector2(0,6),Color("3d2c3e",0.85),2.0)
-	if u.get("hex_ticks",0) > 0:
-		draw_arc(pos+Vector2(0,16),19,0,TAU,16,Color("6c8a53",0.75),2.0)
+	if ((u.kind == "ox" or B.CARDS[u.kind].has("charge_damage")) and not u.get("charged",false) and not u.get("expansion_charged",false)) or u.get("granted_charge",false):
+		var c_dir: float = u.face
+		var c_col := Color("eb6b34",0.82)
+		draw_line(pos-Vector2(c_dir*18,14),pos-Vector2(c_dir*36,14),c_col,2.2)
+		draw_line(pos-Vector2(c_dir*14,24),pos-Vector2(c_dir*30,24),c_col,1.8)
+		var spear := pos+Vector2(c_dir*18,-20)
+		draw_polyline(PackedVector2Array([spear-Vector2(c_dir*6,5),spear+Vector2(c_dir*3,0),spear-Vector2(c_dir*6,-5)]),c_col,2.4)
+	if u.get("hex_ticks",0) > 0 or u.get("poison_remaining",0) > 0:
+		draw_arc(pos+Vector2(0,16),ring_r-4.0,0,TAU,16,Color("115224",0.88),2.4)
 		for i: int in range(3):
 			var ha: float = model.elapsed*4.0+i*TAU/3.0
-			draw_circle(pos+Vector2(cos(ha)*11,-18-fmod(model.elapsed*16+i*6,14)),2.2,Color("8ba86b",0.8))
-	if u.get("armor_until",0.0) > model.elapsed:
-		draw_arc(pos+Vector2(0,16),21,0,PI,16,Color("c4a75f",0.85),2.5)
+			draw_circle(pos+Vector2(cos(ha)*11,-18-fmod(model.elapsed*16+i*6,14)),2.6,Color("1b6e32",0.9))
+		field_text(pos+Vector2(-8,-50),"毒",HORIZONTAL_ALIGNMENT_LEFT,-1,13,Color("115224"))
+	if u.get("armor",0.0) > 0 or u.get("armor_until",0.0) > model.elapsed:
+		draw_arc(pos+Vector2(0,16),ring_r-3.0,0,PI,16,Color("c4a75f",0.85),2.5)
 	if u.get("shroud_until",0.0) > model.elapsed:
-		draw_circle(pos+Vector2(0,-20),24,Color("5e4b73",0.14))
-		draw_arc(pos+Vector2(0,-20),24,0,TAU,24,Color("9f86c0",0.5),1.8)
+		draw_circle(pos+Vector2(0,-20),ring_r,Color("5e4b73",0.14))
+		draw_arc(pos+Vector2(0,-20),ring_r,0,TAU,24,Color("9f86c0",0.5),1.8)
 	if u.get("borrowed_until",-1.0) >= 0:
-		draw_arc(pos+Vector2(0,16),16,0,TAU,16,Color("b9a3d6",0.55),1.5)
-	if u.hp < u.max_hp: bar(Rect2(pos-Vector2(24,68),Vector2(48,5)),u.hp,u.max_hp,RED if u.team == 0 else BLUE)
+		draw_arc(pos+Vector2(0,16),ring_r-8.0,0,TAU,16,Color("b9a3d6",0.55),1.5)
+	if u.hp < u.max_hp:
+		var bar_w: float = maxf(48.0,ring_r*1.8)
+		bar(Rect2(pos+Vector2(-bar_w*0.5,hp_y),Vector2(bar_w,5)),u.hp,u.max_hp,RED if u.team == 0 else BLUE)
 
 # Each lane renders a seamlessly tileable fortified stone curtain-wall section (or matching breach).
 func draw_wall_section(team: int, lane: int, broken: bool) -> void:
@@ -1323,11 +1619,21 @@ func draw_wall_section(team: int, lane: int, broken: bool) -> void:
 
 func draw_lord(lord: Dictionary) -> void:
 	if lord.hp <= 0: return
-	team_shadow(lord.pos+Vector2(0,24),30,Color(0.25,0.17,0.08))
-	draw_arc(lord.pos+Vector2(0,24),30,0,TAU,32,Color(0.8,0.6,0.15,0.8),2) # gold ring marks the lords
+	var face := 1.0 if lord.team == 0 else -1.0
+	var ring_r: float = 30.0+(B.actor_radius(lord)-B.LORD_BODY_RADIUS)*0.8
+	team_shadow(lord.pos+Vector2(0,24),ring_r,Color(0.25,0.17,0.08))
+	draw_arc(lord.pos+Vector2(0,24),ring_r,0,TAU,32,Color(0.8,0.6,0.15,0.8),2) # gold ring marks the lords
+	var cast_left: float = lord_cast_left[lord.team] if fx_enabled else 0.0
+	var cast_dur: float = maxf(0.1, lord_cast_duration[lord.team])
+	var cast_k: float = sin(clampf(1.0-cast_left/cast_dur,0.0,1.0)*PI) if cast_left > 0.0 else 0.0
+	var ult_cast: bool = lord_cast_spell[lord.team].begins_with("skill:")
+	var draw_pos: Vector2 = lord.pos+Vector2(face*(9.0 if ult_cast else 5.0)*cast_k,-(14.0 if ult_cast else 6.0)*cast_k)
 	# The art faces right; the blue lord is mirrored so both lords face the enemy.
-	draw_combat_actor("lord_"+lord.lord,lord,lord.pos,1.0 if lord.team == 0 else -1.0)
-	if lord.hp < lord.max_hp: bar(Rect2(lord.pos-Vector2(30,72),Vector2(60,4)),lord.hp,lord.max_hp,RED if lord.team == 0 else BLUE)
+	draw_combat_actor("lord_"+lord.lord,lord,draw_pos,face)
+	if cast_left > 0.0: Details.draw_lord_cast_aura(self,lord,cast_left,lord_cast_spell[lord.team])
+	if lord.hp < lord.max_hp:
+		var bar_y: float = minf(-72.0,actor_rect("lord_"+lord.lord).position.y-6.0)
+		bar(Rect2(lord.pos+Vector2(-30,bar_y),Vector2(60,4)),lord.hp,lord.max_hp,RED if lord.team == 0 else BLUE)
 
 func layout_formations() -> void:
 	# Units may overlap (producer decision 2026-10-29). Each one keeps the small up/down offset it got
@@ -1352,11 +1658,32 @@ func draw_preview() -> void:
 					draw_arc(actor.pos,32,0,TAU,24,Color(1,0.15,0.1,0.85),3,true)
 			draw_circle(start,data.radius,color,false,2)
 			return
-		draw_circle(pos,data.radius,color)
+		var srect: Rect2 = B.spell_rect(pos,data)
+		var sh: Vector2i = B.spell_shape(data)
+		var legal: bool = model.can_play(me,selected,pos)
+		var stroke := Color(0.28,0.85,0.42,0.92) if legal else Color(0.92,0.22,0.18,0.92)
+		draw_rect(srect,color)
+		for gc: int in range(1,sh.x):
+			var lx: float = srect.position.x+float(gc)*L.CELL_SIZE.x
+			draw_line(Vector2(lx,srect.position.y),Vector2(lx,srect.end.y),Color(stroke,0.50),1.4)
+		for gr: int in range(1,sh.y):
+			var ly: float = srect.position.y+float(gr)*L.CELL_SIZE.y
+			draw_line(Vector2(srect.position.x,ly),Vector2(srect.end.x,ly),Color(stroke,0.50),1.4)
+		draw_rect(srect,stroke,false,2.8)
+		field_text(srect.position+Vector2(6,16),"%d×%d %s" % [sh.x,sh.y,B.spell_shape_tag(sh)],HORIZONTAL_ALIGNMENT_LEFT,160.0,12,Color(1,0.98,0.90,0.95))
 		return
 	var cell: Vector2i = model.cell_at(pos)
 	if cell.x < 0: return
-	draw_card_art(kind,Rect2(L.cell_center(cell)-Vector2(45,40),Vector2(90,80)),0,Color(1,1,1,0.5))
+	var Grid = preload("res://grid_rules.gd")
+	if data.type == "building":
+		draw_card_art(kind,Rect2(L.cell_center(cell)-Vector2(45,40),Vector2(90,80)),0,Color(1,1,1,0.5))
+		Grid.draw_reach(self,kind,cell,me) # cells it will shoot at
+	if data.type == "unit" and Grid.footprint(kind) != Vector2i(1,1):
+		var fits: bool = model.can_play(me,selected,pos)
+		Grid.draw_cells(self,Grid.footprint_cells(kind,cell,me),Color(0.2,0.7,0.3,0.22) if fits else Color(0.8,0.1,0.1,0.22),Color(0.28,0.85,0.42,0.9) if fits else Color(0.92,0.22,0.18,0.9))
+		if fits: Grid.draw_spawn_preview(self,kind,cell,me) # ghosts where the squads will stand
+		return
+	if data.type == "unit" and model.can_play(me,selected,pos): Grid.draw_spawn_preview(self,kind,cell,me)
 	if data.type == "unit":
 		if data.get("patrol",false):
 			var left := cell.x
@@ -1378,7 +1705,7 @@ func draw_preview() -> void:
 				if b.kind == "farm" and b.team == me and b.cell.y == cell.y and (b.cell.x-cell.x)*(1 if me == 0 else -1) >= 0: draw_circle(b.pos,40,color,false,3)
 
 # Colours of the cause-and-effect links (battle.gd link()): one family per relation.
-const LINK_COLORS := {"repair":Color("c4a75f"),"soul":Color("b9a3d6"),"devour":Color("9b2f2f"),"summon":Color("7b4fa0"),"heal":Color("4f9a4a"),"harvest":Color("e2b23a"),"curse":Color("926c9d"),"mana":Color("4fc3f7"),"lightning":Color("cfe8ff")}
+const LINK_COLORS := {"repair":Color("c4a75f"),"soul":Color("b9a3d6"),"devour":Color("9b2f2f"),"summon":Color("7b4fa0"),"heal":Color("5ce675"),"harvest":Color("e2b23a"),"curse":Color("926c9d"),"mana":Color("4fc3f7"),"lightning":Color("cfe8ff")}
 
 # A light travelling from cause to effect along a shallow arc, with a fading trail and a ring where
 # it lands, so the player sees what fed what.
@@ -1498,11 +1825,11 @@ func draw_effects() -> void:
 			"curse_rise": FxPolish.curse_rise(self,e,progress)
 			"witch_curse":
 				var wr: float = e.get("radius",75.0)*(0.3+progress*0.7)
-				draw_circle(e.pos,wr,Color("5c7548",(1-progress)*0.18))
-				draw_arc(e.pos,wr,0,TAU,28,Color("7b965f",(1-progress)*0.85),2.5,true)
+				draw_circle(e.pos,wr,Color("115224",(1-progress)*0.24))
+				draw_arc(e.pos,wr,0,TAU,28,Color("1b6e32",(1-progress)*0.90),2.8,true)
 				for i: int in range(6):
 					var wa: float = i*TAU/6.0+progress*0.6
-					draw_circle(e.pos+Vector2(cos(wa)*wr*0.68,sin(wa)*wr*0.28-progress*14),2.6*(1-progress),Color("a37fb8",1-progress))
+					draw_circle(e.pos+Vector2(cos(wa)*wr*0.68,sin(wa)*wr*0.28-progress*14),3.0*(1-progress),Color("298a43",1-progress))
 			"stone_impact": FxPolish.stone_impact(self,e,progress)
 			"summoned": FxPolish.summon(self,e,progress,(RED if e.team == 0 else BLUE).lightened(0.35))
 			"boneburst": FxPolish.boneburst(self,e,progress)
@@ -1513,29 +1840,23 @@ func draw_effects() -> void:
 				if e.style == "lightning": FactionVisuals.lightning(self,e,progress)
 				else: draw_link(e.pos,e.to,LINK_COLORS.get(e.style,INK),progress)
 			"slash": draw_slash(e.pos.x,e.lane,progress,e.team)
-			"ink": draw_circle(e.pos.lerp(to_model(Vector2(80,765) if e.team == me else Vector2(1322,35)),progress),7,Color("d9a62e"))
+			"ink": Details.draw_ink(self,e,progress)
 			"spell":
-				if not FactionVisuals.spell(self,e,progress) and not FxPolish.spell(self,e,progress): draw_circle(e.pos,e.get("radius",50.0)*progress,Color(0.7,0.3,0.1,e.life*0.4))
+				if not FactionVisuals.spell(self,e,progress) and not FxPolish.spell(self,e,progress):
+					var srect: Rect2 = e.get("rect",Rect2())
+					if srect.size != Vector2.ZERO:
+						draw_rect(srect,Color(0.82,0.34,0.12,(1.0-progress)*0.24))
+						draw_rect(srect,Color(0.96,0.55,0.18,(1.0-progress)*0.88),false,3.0)
+					else:
+						draw_circle(e.pos,e.get("radius",50.0)*progress,Color(0.7,0.3,0.1,e.life*0.4))
 			"cultivate", "hoe": FxPolish.cultivate(self,e,progress)
-			"play":
-				var source := to_model(card_rect(e.get("slot",0)).get_center() if e.team == me else Vector2(1240,40))
-				if progress < 0.6: draw_card_art(e.card,Rect2(source.lerp(e.pos,progress/0.6)-Vector2(35,30),Vector2(70,60)),e.team,Color(1,1,1,0.75))
-				else: draw_circle(e.pos,(progress-0.6)*90,Color(0.2,0.15,0.1,(1-progress)*0.3))
-			"death":
-				var kind: String = e.get("art_kind",e.card)
-				var death_pos: Vector2 = e.pos
-				death_pos.y = maxf(death_pos.y,L.GRID_ORIGIN.y-actor_rect(kind).position.y+6)
-				var face: float = e.get("face",1.0 if e.team == 0 else -1.0)
-				if B.CARDS.has(kind) and B.CARDS[kind].type == "building": face = 1.0 if e.team == 0 else -1.0
-				if adventure.is_opening() and e.team == 1 and kind == "bandit":
-					draw_fitted_facing(adventure.opening.BANDIT,Rect2(death_pos-Vector2(43,73),Vector2(86,104)),-1.0,Color(1,1,1,1-progress))
-				else: draw_actor(kind,e.team,death_pos,face,Color(1,1,1,1-progress))
-				for i: int in range(5): draw_circle(e.pos+Vector2(cos(i*2),sin(i*2))*progress*24,3*(1-progress),INK)
+			"play": Details.draw_play(self,e,progress)
+			"death": Details.draw_death(self,e,progress)
 			"burn": FxPolish.burn(self,e,progress)
 			"breach":
 				for i: int in range(8): draw_line(e.pos+Vector2(cos(i),sin(i))*progress*55,e.pos+Vector2(cos(i),sin(i))*progress*65,Color("6e4825"),3)
 				# The whole lane flashes: red when it is our gate, gold when we broke theirs.
-				var ours: bool = e.team == 1
+				var ours: bool = e.team != me
 				var flash := Color(RED if ours else Color("e0b02c"),(1-progress)*(0.22+0.16*sin(progress*40)))
 				var lane_y: float = L.GRID_ORIGIN.y+e.lane*L.CELL_SIZE.y
 				draw_rect(Rect2(L.FIELD_FRAME.position.x+6,lane_y,L.FIELD_FRAME.size.x-12,L.CELL_SIZE.y),flash)
@@ -1550,16 +1871,27 @@ func draw_effects() -> void:
 				var c := Color(0.75,0.12,0.1,1-progress)
 				draw_line(e.pos+Vector2(-14,-14),e.pos+Vector2(14,14),c,4)
 				draw_line(e.pos+Vector2(-14,14),e.pos+Vector2(14,-14),c,4)
-	for spell: Dictionary in model.spells:
-		var height: float = spell.delay/B.SPELL_DELAY*160
-		draw_texture_rect(art(spell.kind),Rect2(spell.pos-Vector2(22,30+height),Vector2(44,60)),false)
+	Details.draw_spells(self)
 
 # Visual-only skill cues: positions were captured at cast time, no battle state is changed.
 func draw_skill_effect(e: Dictionary, progress: float) -> void:
 	var strength := sin(clampf(progress,0.0,1.0)*PI)
-	var gold := Color(1.0,0.82,0.30,strength*0.85)
+	var team_col: Color = RED if int(e.team) == 0 else BLUE
+	var gold := Color(1.0,0.84,0.32,strength*0.92)
 	var direction := 1.0 if e.team == 0 else -1.0
+	var origin: Vector2 = e.pos + Vector2(0.0,-22.0)
+	draw_circle(origin,28.0+progress*56.0,Color(1.0,0.86,0.42,strength*0.26))
+	draw_arc(origin,22.0+progress*82.0,0.0,TAU,36,gold,3.2,true)
+	draw_arc(origin,14.0+progress*52.0,0.0,TAU,28,Color(team_col.lightened(0.35),strength*0.75),2.2,true)
 	for point: Vector2 in e.get("targets",[]):
+		var beam_t := clampf(progress*1.65,0.0,1.0)
+		var dest := point+Vector2(0.0,-18.0)
+		var head := origin.lerp(dest,beam_t)
+		var ctrl := origin.lerp(dest,0.5)+Vector2(0.0,-32.0)
+		var arc_mid := origin.lerp(ctrl,beam_t).lerp(ctrl.lerp(dest,beam_t),beam_t)
+		draw_line(origin,arc_mid,Color(1.0,0.92,0.58,strength*0.72),2.4,true)
+		draw_line(arc_mid,head,Color(team_col.lightened(0.45),strength*0.65),2.0,true)
+		draw_circle(head,4.5*strength,Color(1.0,0.96,0.82,strength*0.9))
 		match e.lord:
 			"lion", "underworld", "rune", "vampire", "beast":
 				draw_circle(point+Vector2(0,-20),18+progress*30,Color(1.0,0.85,0.45,strength*0.22))
@@ -1582,8 +1914,11 @@ func draw_skill_effect(e: Dictionary, progress: float) -> void:
 				for i: int in range(4):
 					var y := point.y+25-progress*60-i*7
 					draw_line(Vector2(point.x-24,y),Vector2(point.x+24,y),Color(gold,strength*(1.0-i*0.2)),2.0,true)
+			_:
+				draw_circle(point+Vector2(0,-16),20.0+progress*36.0,Color(team_col.lightened(0.35),strength*0.24))
+				draw_arc(point+Vector2(0,-16),16.0+progress*42.0,0.0,TAU,32,gold,2.4,true)
 
-func draw_hud(single_lane: bool = false) -> void:
+func draw_hud(single_lane: bool = false, hide_bottom: bool = false) -> void:
 	# Lighter band and fainter diamonds: the red and blue team text needs the contrast.
 	draw_rect(L.HUD_FRAME,Color("c4dbe7"))
 	for x: int in range(48,1550,58):
@@ -1596,44 +1931,83 @@ func draw_hud(single_lane: bool = false) -> void:
 			draw_texture_rect(art("crest",team),Rect2(x-58,21,48,50),false)
 			draw_texture_rect(ART.object_icon(0),Rect2(x+238,20,28,30),false)
 			var standing: int = model.active_lanes.filter(func(lane: int) -> bool: return model.gates[team][lane] > 0).size()
-			label_at(Vector2(x,43),("紅獅" if team == 0 else "藍旗")+"  城牆 %d / %d" % [standing,model.active_lanes.size()],23,RED if team == 0 else BLUE)
+			var s_name: String = Ceremony.short_name(self,team)
+			var name_sz := 16 if s_name.length() >= 5 else (19 if s_name.length() >= 3 else 23)
+			label_at(Vector2(x,43),"%s  城牆 %d / %d" % [s_name,standing,model.active_lanes.size()],name_sz,RED if team == 0 else BLUE)
 			for lane: int in model.active_lanes: bar(Rect2(x+model.active_lanes.find(lane)*70,53,62,10),model.gates[team][lane],B.GATE_HP,RED if team == 0 else BLUE)
 			label_at(Vector2(x+270,43),"%d / 50" % model.ink[team],18)
 	panel(Rect2(712,24,140,58),Color("f2e3c0"))
 	var time := int(model.elapsed)
-	label_at(Vector2(725,58),"%02d:%02d" % [time/60,time%60],30,RED if model.multiplier() > 1 else INK)
-	# Faster income shows as coins beside the clock: one for x1.5, two for x2, three for the night's x3.
-	var coins: int = 0 if model.multiplier() <= 1.0 else (1 if model.multiplier() < 2.0 else (2 if model.multiplier() < 3.0 else 3))
+	label_at(Vector2(725,58),"%02d:%02d" % [time/60,time%60],30,RED if model.multiplier() > B.START_GOLD else INK)
+	# Faster income shows as coins beside the clock: one for noon, two for dusk, three for night.
+	var coins: int = model.day_phase()
 	for i: int in range(coins):
 		draw_texture_rect(preload("res://economy_hud.gd").coin_texture(),Rect2(824,(49-coins*8)+i*16,20,20),false)
 	if not single_lane: DayCycle.track(self)
 	panel(L.PAUSE_RECT)
 	label_at(L.PAUSE_RECT.position+Vector2(10,27),"Ⅱ",23)
+	if not single_lane and not model.night_decay and not model.field_mutators.is_empty():
+		var px := 474.0
+		for mi: int in range(mini(2,model.field_mutators.size())):
+			var fm: Dictionary = model.field_mutators[mi]
+			var fk := String(fm.get("kind",""))
+			var f_name := String(B.CARDS.get(fk,{}).get("name",fk))
+			var pill := Rect2(px,64,106,18)
+			var f_col: Color = RED if int(fm.get("team",1)) == 0 else BLUE
+			panel(pill,Color("f5ebd2"),f_col)
+			draw_string(font,pill.position+Vector2(3,13),"%s %ds" % [f_name.left(3),ceili(maxf(0.0,float(fm.get("timer",0.0))))],HORIZONTAL_ALIGNMENT_CENTER,pill.size.x-6,12,f_col)
+			px += 112.0
+	if hide_bottom: return
 	preload("res://command_style.gd").stone(self,L.COMMAND_FRAME)
 	preload("res://economy_hud.gd").draw(self)
 	if not single_lane: panel(LORD_PLATE,Color(0.92,0.86,0.72,0.92),Color("8a6f4a")) # plain backing for the lord text
-	# Permanent farmland slot: green-washed frame and a "常駐" tag so it reads apart from the hand.
+	var Ornament = preload("res://interface_ornament.gd")
+	var Style = preload("res://command_style.gd")
+	# Permanent home slot: faction-tinted vellum niche and a swallowtail "常駐" ribbon on the bottom sill.
 	var farm_rect := card_rect(Battle.FARM_SLOT)
-	panel(farm_rect.grow(6),Color("cfdcae"),Color("3f5a2c"))
+	var home_kind: String = model.kind_at(me,Battle.FARM_SLOT)
+	var home_col: Color = Style.tag_color(home_kind)
+	var home_blocked: bool = model.ink[me] < B.CARDS[home_kind].cost or model.slot_cd(me,Battle.FARM_SLOT) > 0
+	panel(farm_rect.grow(5),Color("b5b5b5") if home_blocked else Color("e8d9b5").lerp(home_col,0.22),Color("6b6b6b") if home_blocked else home_col.darkened(0.18))
 	var fr := farm_rect
 	if selected == Battle.FARM_SLOT: fr.position.y -= 16
 	elif hover_slot == Battle.FARM_SLOT: fr.position.y -= 8
-	draw_card(model.kind_at(me,Battle.FARM_SLOT),fr,Battle.FARM_SLOT)
-	var tag := Rect2(farm_rect.position.x+farm_rect.size.x/2-24,farm_rect.end.y-22,48,18)
-	draw_rect(tag,Color("3f5a2c"))
-	draw_string(font,tag.position+Vector2(0,14),"常駐",HORIZONTAL_ALIGNMENT_CENTER,tag.size.x,13,Color("efdfb9"))
-	draw_line(Vector2(551,728),Vector2(551,888),Color(INK,0.35),2)
+	draw_card(home_kind,fr,Battle.FARM_SLOT)
+	var tag := Rect2(fr.position.x+fr.size.x*0.5-22,fr.end.y-12,44,16)
+	Ornament.ribbon_tag(self,tag,"常駐",Color("5e5e5e") if home_blocked else home_col.darkened(0.10),12)
+	Ornament.vertical_rule(self,551,728,888,INK)
 	for i: int in range(4):
 		var r := card_rect(i)
 		if i == selected: r.position.y -= 16
 		elif i == hover_slot: r.position.y -= 8
 		draw_card(model.decks[me][i],r,i)
-	# Next card: smaller, faded, labelled.
-	draw_line(Vector2(1093,728),Vector2(1093,888),Color(INK,0.35),2)
-	draw_string(font,Vector2(NEXT_RECT.position.x,742),"下一張",HORIZONTAL_ALIGNMENT_CENTER,NEXT_RECT.size.x,15,INK)
+	# Next card: smaller, faded, labelled with a manuscript rule.
+	Ornament.vertical_rule(self,1093,728,888,INK)
+	draw_string(font,Vector2(NEXT_RECT.position.x,740),"下一張",HORIZONTAL_ALIGNMENT_CENTER,NEXT_RECT.size.x,14,Color("5a4630"))
+	Ornament.rule(self,Vector2(NEXT_RECT.position.x+8,745),Vector2(NEXT_RECT.end.x-8,745),Color("82663c"))
 	draw_card(model.decks[me][4],NEXT_RECT)
-	# It cannot be played yet, so it recedes: a parchment wash keeps it readable but quiet.
-	draw_rect(NEXT_RECT.grow(-3),Color(0.86,0.81,0.70,0.55))
+	# It cannot be played yet, so it recedes evenly under a soft vellum wash.
+	draw_rect(NEXT_RECT.grow(2),Color(0.88,0.82,0.70,0.40))
+	draw_rect(NEXT_RECT,Color("82663c",0.45),false,1.2)
+	var focus_slot: int = selected if selected >= 0 else hover_slot
+	if focus_slot >= 0 and not spectating and not single_lane:
+		var fk: String = model.kind_at(me,focus_slot)
+		if B.CARDS.has(fk):
+			var fkws: Array[String] = Keywords.for_card(fk)
+			var strip := Rect2(414,682,674,32)
+			panel(strip,Color(0.95,0.90,0.77,0.94),Color("8a6f4a"))
+			var bw: float = Keywords.draw_badges(self,strip.position+Vector2(10,22.5),fkws,14)
+			var fdata: Dictionary = B.CARDS[fk]
+			var f_notes: Array[String] = []
+			if fdata.type == "spell" and not fdata.get("rolling",false):
+				var sh := B.spell_shape(fdata)
+				f_notes.append("%d×%d %s" % [sh.x,sh.y,B.spell_shape_tag(sh)])
+			var f_ups: Dictionary = model.card_upgrades[me].get(fk,{}) if me < model.card_upgrades.size() else {}
+			if not f_ups.is_empty():
+				var Up = preload("res://card_upgrades.gd")
+				f_notes.append("+%d（%s）" % [Up.level(f_ups),Up.text(f_ups)])
+			f_notes.append(Keywords.desc_of(fkws[0]) if not fkws.is_empty() else fdata.role)
+			label_at(strip.position+Vector2(16+bw,23.0)," · ".join(f_notes),15,INK)
 	if spectating:
 		for i: int in range(SPEEDS.size()):
 			panel(SPEED_RECTS[i],Color("c9a96a") if speed == SPEEDS[i] else Color("e8d5ab"))
@@ -1646,28 +2020,41 @@ func draw_hud(single_lane: bool = false) -> void:
 	else: draw_skill_button()
 	for lord: Dictionary in model.lords:
 		var y: float = 814+lord.team*42
-		var info: Dictionary = B.lord_data(lord.lord)
 		var color: Color = RED if lord.team == 0 else BLUE
-		label_at(Vector2(1220,y),"%s · %s" % ["紅" if lord.team == 0 else "藍",info.name],16,color)
+		label_at(Vector2(1220,y),"%s · %s" % ["紅" if lord.team == 0 else "藍",Ceremony.side_name(self,lord.team)],16,color)
 		bar(Rect2(1220,y+8,170,6),lord.hp,lord.max_hp,color)
 		label_at(Vector2(1400,y+14),"%d / %d" % [maxi(0,int(lord.hp)),int(lord.max_hp)],14)
 		skill_mark(lord.team,Vector2(1500,y+6))
+	if not spectating: draw_cursor_hint(mouse)
 
-# Our lord's skill: Q or click. Lit when it can be cast; shows the cooldown otherwise.
+# Our lord's skill: Q or click. Lit when it can be cast; shows cost & cooldown otherwise.
 func draw_skill_button() -> void:
-	var info: Dictionary = B.LORDS[model.lords[me].lord]
-	var ready: bool = model.skill_error(0).is_empty()
-	panel(SKILL_RECT,Color("f2e3c0") if ready else Color("e3d2aa"),RED if ready else INK)
+	var lord_kind: String = model.lords[me].lord
+	var info: Dictionary = B.lord_data(lord_kind)
+	var has_sk: bool = B.has_skill(lord_kind)
+	var skill_cost: int = roundi(model.effective_skill_cost(me))
+	var ready: bool = model.skill_error(me).is_empty()
+	panel(SKILL_RECT,Color("f2e3c0") if ready else Color("bababa"),RED if ready else Color("5c5c5c"))
 	if ready: draw_rect(SKILL_RECT.grow(2),RED,false,3)
-	draw_rect(Rect2(SKILL_RECT.position+Vector2(8,10),Vector2(24,24)),Color("725138"))
-	draw_string(font,SKILL_RECT.position+Vector2(8,28),"Q",HORIZONTAL_ALIGNMENT_CENTER,24,15,Color("efdfb9"))
-	label_at(SKILL_RECT.position+Vector2(42,24),"領主技能：%s" % info.skill,17,RED if ready else INK)
+	var Ornament = preload("res://interface_ornament.gd")
+	Ornament.corner_seal(self,Rect2(SKILL_RECT.position+Vector2(8,14),Vector2(24,24)),"Q",RED if ready else Color("5e5e5e"),14,ready)
+	label_at(SKILL_RECT.position+Vector2(40,32),"領主技能：%s" % info.skill,17,RED if ready else Color("383838"))
+	if has_sk:
+		var badge_pos := SKILL_RECT.position + Vector2(SKILL_RECT.size.x - 24.0, 26.0)
+		Ornament.cost_medallion(self, badge_pos, 14.5, str(skill_cost), not ready)
+		label_at(SKILL_RECT.position+Vector2(SKILL_RECT.size.x-72.0,32.0),"金幣",13,Color("4f4f4f") if not ready else Color("5c442c"))
 	# Keep the skill label legible in every state; cooldown occupies only the bottom edge.
 	if ready:
 		var glow := 0.5+0.5*sin(Time.get_ticks_msec()/260.0)
 		draw_rect(SKILL_RECT.grow(4+glow*2),Color(0.95,0.75,0.25,0.25+0.35*glow),false,3)
-	elif model.skill_cd[me] > 0: draw_rect(Rect2(SKILL_RECT.position+Vector2(4,SKILL_RECT.size.y-7),Vector2((SKILL_RECT.size.x-8)*clampf(model.skill_cd[me]/B.skill_cooldown(model.lords[me].lord),0,1),4)),RED)
-	else: draw_rect(SKILL_RECT.grow(-2),Color("8a6f4a"),false,2)
+	elif model.skill_cd[me] > 0: draw_rect(Rect2(SKILL_RECT.position+Vector2(4,SKILL_RECT.size.y-7),Vector2((SKILL_RECT.size.x-8)*clampf(model.skill_cd[me]/B.skill_cooldown(lord_kind),0,1),4)),Color("666666"))
+	else: draw_rect(SKILL_RECT.grow(-2),Color("757575"),false,2)
+	if skill_flash_left > 0.0:
+		var fp := 1.0 - clampf(skill_flash_left / 1.15, 0.0, 1.0)
+		var fa := sin(fp * PI)
+		draw_rect(SKILL_RECT.grow(2.0 + fp * 14.0), Color(1.0, 0.85, 0.30, fa * 0.78), false, 3.5)
+		draw_rect(SKILL_RECT, Color(1.0, 0.90, 0.45, fa * 0.30))
+		draw_string(font, Vector2(SKILL_RECT.position.x, SKILL_RECT.position.y - 8.0 - fp * 10.0), "★ 領主大招發動！", HORIZONTAL_ALIGNMENT_CENTER, SKILL_RECT.size.x, 16, Color(0.95, 0.72, 0.12, fa))
 
 # A lord row's skill state as a small mark, no words: a glowing gem when it can be cast, a dial
 # filling up while it cools, a dull coin when gold is short, an empty ring when the lord is down.
@@ -1697,7 +2084,7 @@ func skill_state_text(team: int) -> String:
 	if lord.hp <= 0: return "領主倒下中"
 	if model.skill_cd[team] > 0: return "冷卻中"
 	if lord.lord == "underworld" and model.count_buildings(team,"grave") == 0: return "沒有墓碑"
-	if model.ink[team] < B.skill_cost(lord.lord): return "金幣不足"
+	if model.ink[team] < model.effective_skill_cost(team): return "金幣不足"
 	return "可發動"
 
 func try_skill() -> bool:
@@ -1706,14 +2093,75 @@ func try_skill() -> bool:
 	if reason.is_empty() and net != null:
 		net.queue(["s"])
 		return true
-	if reason.is_empty() and model.cast_skill(me): return true
+	if reason.is_empty() and model.cast_skill(me):
+		recorder.record_cmd("skill", me)
+		return true
 	say(reason)
 	skill_shake = 0.45
-	if model.skill_cd[me] <= 0 and model.ink[me] < B.skill_cost(model.lords[me].lord):
+	if model.skill_cd[me] > 0.00001:
+		show_cursor_hint("技能冷卻 %.1f秒" % model.skill_cd[me], Color("7d4f1c"))
+	elif model.ink[me] < model.effective_skill_cost(me):
 		purse_alarm = 0.9
-		purse_need = B.skill_cost(model.lords[me].lord)
+		purse_need = model.effective_skill_cost(me)
+		show_cursor_hint("金幣不足（還差 %d）" % ceili(purse_need - model.ink[me]), RED)
+	else:
+		show_cursor_hint(reason, Color("7d4f1c"))
 	if sound != null: sound.cue("fail")
 	return false
+
+func show_cursor_hint(text: String, color: Color = RED) -> void:
+	if text.is_empty(): return
+	cursor_hint_text = text
+	cursor_hint_color = color
+	cursor_hint_left = 1.25
+
+func cursor_status_hint(mouse: Vector2) -> Dictionary:
+	if model == null or model.paused or model.ended: return {}
+	if selected >= 0 and card_at(mouse) < 0 and (L.FIELD_FRAME.has_point(mouse) or dragging):
+		var kind: String = model.kind_at(me,selected)
+		if B.CARDS.has(kind):
+			var code: int = model.play_check(me,selected,to_model(mouse))
+			if code == Battle.Refusal.GOLD:
+				var cost: float = float(B.CARDS[kind].cost)
+				return {"text": "金幣不足（還差 %d）" % ceili(cost - model.ink[me]), "color": RED}
+			elif code == Battle.Refusal.COOLDOWN:
+				return {"text": "冷卻中 %.1f秒" % model.slot_cd(me,selected), "color": Color("7d4f1c")}
+	if hover_slot >= 0 and card_at(mouse) == hover_slot:
+		var hkind: String = model.kind_at(me,hover_slot)
+		if B.CARDS.has(hkind):
+			var cd: float = model.slot_cd(me,hover_slot)
+			var hcost: float = float(B.CARDS[hkind].cost)
+			if cd > 0.00001:
+				return {"text": "冷卻中 %.1f秒" % cd, "color": Color("7d4f1c")}
+			elif model.ink[me] < hcost:
+				return {"text": "金幣不足（還差 %d）" % ceili(hcost - model.ink[me]), "color": RED}
+	if SKILL_RECT.has_point(mouse) and B.has_skill(model.lords[me].lord):
+		if model.skill_cd[me] > 0.00001:
+			return {"text": "技能冷卻 %.1f秒" % model.skill_cd[me], "color": Color("7d4f1c")}
+		var scost: float = model.effective_skill_cost(me)
+		if model.ink[me] < scost:
+			return {"text": "金幣不足（還差 %d）" % ceili(scost - model.ink[me]), "color": RED}
+	if cursor_hint_left > 0.0 and not cursor_hint_text.is_empty():
+		return {"text": cursor_hint_text, "color": cursor_hint_color}
+	return {}
+
+func draw_cursor_hint(mouse: Vector2) -> void:
+	if adventure.is_opening() and adventure.opening.active: return
+	var info: Dictionary = cursor_status_hint(mouse)
+	if info.is_empty(): return
+	var text: String = info.text
+	var col: Color = info.color
+	var sz: Vector2 = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 14)
+	var w: float = sz.x + 22.0
+	var h: float = 28.0
+	var pos := mouse + (Vector2(24.0, -54.0) if dragging else Vector2(18.0, -34.0))
+	if pos.x + w > L.VIEWPORT_SIZE.x - 10.0: pos.x = mouse.x - w - 14.0
+	if pos.y < 10.0: pos.y = mouse.y + (42.0 if dragging else 24.0)
+	var box := Rect2(pos, Vector2(w, h))
+	draw_rect(Rect2(box.position + Vector2(1.5, 2.0), box.size), Color("1e150d", 0.28))
+	panel(box, Color(0.97, 0.92, 0.81, 0.96), col)
+	draw_circle(box.position + Vector2(10.0, h * 0.5), 3.2, col)
+	label_at(box.position + Vector2(17.0, 19.5), text, 14, col)
 
 
 func leave_net() -> void:
@@ -1723,23 +2171,14 @@ func leave_net() -> void:
 	mirror_view = false
 	field_mirror = false
 
-# Lobby: host (show my addresses) or join an address. Uses the saved deck and lord.
-func show_net() -> void:
-	if not DeckStore.valid(player_deck,player_lord):
-		show_deck()
-		return
-	if net == null: net = NetMatch.new()
-	screen = "net"
-	clear_ui()
-	button(Rect2(300,330,300,56),"開房（我當紅方）",func():
-		net.host(player_deck,player_lord)
-		show_net())
+func _net_input(rect: Rect2, value: String, placeholder: String, on_change: Callable, on_submit: Callable = Callable()) -> LineEdit:
 	var edit := LineEdit.new()
-	edit.position = Vector2(820,330)
-	edit.size = Vector2(300,56)
-	edit.text = net_ip
+	edit.position = rect.position
+	edit.size = rect.size
+	edit.text = value
+	edit.placeholder_text = placeholder
 	edit.add_theme_font_override("font",font)
-	edit.add_theme_font_size_override("font_size",22)
+	edit.add_theme_font_size_override("font_size",20)
 	var box := StyleBoxFlat.new()
 	box.bg_color = Color("f6ead0")
 	box.border_color = Color("846539")
@@ -1749,44 +2188,194 @@ func show_net() -> void:
 	edit.add_theme_stylebox_override("normal",box)
 	edit.add_theme_stylebox_override("focus",box)
 	edit.add_theme_color_override("font_color",INK)
-	edit.text_changed.connect(func(t: String): net_ip = t)
+	edit.add_theme_color_override("font_placeholder_color",Color("8c7758"))
+	edit.text_changed.connect(on_change)
+	if on_submit.is_valid(): edit.text_submitted.connect(func(_t: String): on_submit.call())
 	add_child(edit)
 	ui.append(edit)
-	button(Rect2(1140,330,160,56),"加入",func():
-		net.join(net_ip,player_deck,player_lord)
+	return edit
+
+func practice_lord_options() -> Array:
+	return ["random"] + B.lord_menu_order()
+
+func practice_ratio_options() -> Array:
+	return DeckStore.practice_ratio_ids() + ["random"]
+
+func _cycle_option(options: Array, current: String, step: int) -> String:
+	var idx := options.find(current)
+	if idx < 0: idx = 0
+	return String(options[(idx + step + options.size()) % options.size()])
+
+func roll_practice_opponent() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	var pool_lords: Array = B.lord_menu_order()
+	if practice_lord == "random" or not B.LORDS.has(practice_lord):
+		practice_foe_lord = String(pool_lords[rng.randi_range(0,pool_lords.size()-1)])
+	else:
+		practice_foe_lord = practice_lord
+	var ratio_ids := DeckStore.practice_ratio_ids()
+	if practice_ratio_id == "random" or not practice_ratio_id in ratio_ids:
+		practice_foe_ratio_id = String(ratio_ids[rng.randi_range(0,ratio_ids.size()-1)])
+	else:
+		practice_foe_ratio_id = practice_ratio_id
+	var ratio_entry := DeckStore.practice_ratio_entry(practice_foe_ratio_id)
+	practice_foe_deck = DeckStore.balanced_random_deck(rng,practice_foe_lord,ratio_entry.ratio)
+
+func ensure_practice_opponent() -> void:
+	var lord_mismatch := practice_lord != "random" and B.LORDS.has(practice_lord) and practice_foe_lord != practice_lord
+	var ratio_mismatch := practice_ratio_id != "random" and practice_ratio_id in DeckStore.practice_ratio_ids() and practice_foe_ratio_id != practice_ratio_id
+	if lord_mismatch or ratio_mismatch or practice_foe_lord.is_empty() or not B.LORDS.has(practice_foe_lord) or not DeckStore.valid(practice_foe_deck,practice_foe_lord):
+		roll_practice_opponent()
+
+func cycle_practice_lord(step: int) -> void:
+	practice_lord = _cycle_option(practice_lord_options(),practice_lord,step)
+	roll_practice_opponent()
+
+func cycle_practice_ratio(step: int) -> void:
+	practice_ratio_id = _cycle_option(practice_ratio_options(),practice_ratio_id,step)
+	roll_practice_opponent()
+
+# Battle Hub: online matchmaking (with optional AI fallback), private room code, and local practice.
+func show_net() -> void:
+	if not DeckStore.valid(player_deck,player_lord):
+		show_deck()
+		return
+	vs_ai_matched_name = ""
+	ensure_practice_opponent()
+	if net == null: net = NetMatch.new()
+	screen = "net"
+	clear_ui()
+	var searching: bool = net.state in ["connecting","searching"]
+	var waiting_room: bool = net.state == "room_waiting"
+	title_button(Rect2(146,298,280,56),"取消搜尋" if searching else "開始搜尋對手",func():
+		if searching: net.close()
+		else: net.search_match(player_deck,player_lord,difficulty,net_server_url,net_auto_ai)
+		show_net(),not searching)
+	button(Rect2(442,304,350,44),"無人時自動補 AI：" + ("開啟" if net_auto_ai else "關閉（純真人）"),func():
+		net_auto_ai = not net_auto_ai
 		show_net())
-	button(Rect2(120,805,220,50),"回到標題",show_title)
-	button(Rect2(370,805,220,50),"更換牌組",func():
+	button(Rect2(146,542,190,50),"關閉房間" if waiting_room else "建立房間",func():
+		if waiting_room: net.close()
+		else: net.host_room(player_deck,player_lord,net_server_url)
+		show_net())
+	var join_action := func():
+		net.join_room(net_room_code,player_deck,player_lord,net_server_url)
+		show_net()
+	_net_input(Rect2(360,542,230,50),net_room_code,"輸入 4 碼房號",func(t: String): net_room_code = t.to_upper(),join_action)
+	button(Rect2(604,542,188,50),"加入房間",join_action)
+	button(Rect2(896,264,152,44),"難度：" + ["簡單","普通","困難"][difficulty],func():
+		difficulty = (difficulty+1)%3
+		show_net())
+	button(Rect2(1060,264,44,44),"◀",func():
+		cycle_practice_lord(-1)
+		show_net())
+	button(Rect2(1108,264,198,44),"隨機領主" if practice_lord == "random" else B.lord_name(practice_lord),func():
+		cycle_practice_lord(1)
+		show_net())
+	button(Rect2(1310,264,44,44),"▶",func():
+		cycle_practice_lord(1)
+		show_net())
+	button(Rect2(1366,264,106,44),"重抽牌組",func():
+		roll_practice_opponent()
+		show_net())
+	var ratio_btn_text := "配比：隨機配比（4 選 1）" if practice_ratio_id == "random" else "配比：%s（%s）" % [DeckStore.practice_ratio_entry(practice_ratio_id).name,DeckStore.practice_ratio_label(DeckStore.practice_ratio_entry(practice_ratio_id).ratio)]
+	button(Rect2(896,316,44,42),"◀",func():
+		cycle_practice_ratio(-1)
+		show_net())
+	button(Rect2(944,316,480,42),ratio_btn_text,func():
+		cycle_practice_ratio(1)
+		show_net())
+	button(Rect2(1428,316,44,42),"▶",func():
+		cycle_practice_ratio(1)
+		show_net())
+	title_button(Rect2(896,538,576,58),"立即開始人機對戰",func():
+		leave_net()
+		spectating = false
+		start_battle())
+	button(Rect2(1290,678,190,50),"更換牌組",func():
 		leave_net()
 		show_deck())
+	button(Rect2(100,766,200,52),"回到標題",show_title)
+	var apply_server := func():
+		net_server_url = NetMatch.save_server_url(net_server_url)
+		if net != null: net.close()
+		show_net()
+	_net_input(Rect2(630,768,530,46),net_server_url,"ws:// 或 wss:// 配對伺服器",func(t: String): net_server_url = t,apply_server)
+	button(Rect2(1174,768,110,46),"套用",apply_server)
+	button(Rect2(1296,768,110,46),"重設",func():
+		net_server_url = NetMatch.save_server_url("")
+		if net != null: net.close()
+		show_net())
 	queue_redraw()
 
 func draw_net() -> void:
-	label_at(Vector2(120,110),"連線對戰",48)
-	label_at(Vector2(120,160),"雙方各用自己存好的牌組與領主。一方開房，另一方輸入開房者的 IP 加入。",20,Color("5a4a36"))
-	label_at(Vector2(120,190),"同一個 Wi-Fi 直接可連；跨網路需開房方的路由器轉發連接埠 %d，或用 Radmin VPN、ZeroTier 等虛擬區網。" % NetMatch.PORT,17,Color("6f5a3e"))
-	panel(Rect2(260,250,380,180))
-	label_at(Vector2(290,300),"開房",28)
-	panel(Rect2(780,250,560,180))
-	label_at(Vector2(810,300),"加入：輸入對方 IP",28)
-	panel(Rect2(100,457,1400,70),Color("efe0bd"))
-	label_at(Vector2(120,500),"我的牌組：%s · %s" % [B.LORDS[player_lord].name,"、".join(player_deck.map(func(k): return B.CARDS[k].name))],20)
-	var y := 560.0
-	if net != null and net.state == "hosting":
-		label_at(Vector2(120,y),"已開房，請對方輸入以下任一個 IP：",22,RED)
-		for ip: String in net.local_ips():
-			y += 34
-			label_at(Vector2(150,y),ip,26)
-	if net != null and not net.message.is_empty():
-		label_at(Vector2(120,y+60),net.message,22,RED if net.state in ["error","lost"] else INK)
+	label_at(Vector2(100,96),"對戰大廳",44)
+	label_at(Vector2(100,132),"搜尋線上真人對手、建立好友房碼，或立即進行單人練習。",19,Color("5a4a36"))
+	panel(Rect2(100,152,740,496))
+	panel(Rect2(124,174,692,238),Color("f3e5c4"))
+	label_at(Vector2(146,212),"線上配對 · 搜尋對手",26)
+	label_at(Vector2(146,240),"自動配對目前在線玩家；開啟補 AI 時，若 %d 秒內無真人對手將自動配對 AI。" % int(NetMatch.SEARCH_AI_FALLBACK_SEC),16,Color("5a4a36"))
+	var searching: bool = net != null and net.state in ["connecting","searching"]
+	if searching:
+		var dots := ".".repeat(1 + (int(clock * 3.0) % 3))
+		var stats_txt := (" · 在線 %d 人 · 排隊 %d 人" % [net.online_count, net.queued_count]) if net.online_count > 0 else ""
+		label_at(Vector2(146,274),"%s%s%s" % [net.message, dots, stats_txt],19,RED)
+		var bar := Rect2(146,374,646,16)
+		draw_rect(bar,Color("d9c497"))
+		var frac := clampf(net.search_elapsed / NetMatch.SEARCH_AI_FALLBACK_SEC,0.0,1.0) if net_auto_ai else fmod(clock * 0.45, 1.0)
+		if net_auto_ai:
+			draw_rect(Rect2(bar.position,Vector2(bar.size.x * frac,bar.size.y)),Color("963f30"))
+		else:
+			var seg_w := 140.0
+			draw_rect(Rect2(bar.position.x + (bar.size.x - seg_w) * frac,bar.position.y,seg_w,bar.size.y),Color("963f30"))
+		draw_rect(bar,Color("846539"),false,1.5)
+	elif net != null and not net.message.is_empty() and net.state in ["error","lost"]:
+		label_at(Vector2(146,274),net.message,18,RED)
+	else:
+		label_at(Vector2(146,274),"準備就緒 · 點擊下方按鈕開始配對",18,Color("4f4331"))
+	panel(Rect2(124,428,692,198),Color("efe0bd"))
+	label_at(Vector2(146,464),"好友私人房（房間代碼）",24)
+	label_at(Vector2(146,492),"產生 4 碼房號分享給朋友，或輸入對方的房間代碼加入對戰。",16,Color("5a4a36"))
+	if net != null and net.state == "room_waiting":
+		label_at(Vector2(146,522),"房間代碼：%s（等待好友加入…）" % net.room_code,20,RED)
+	elif net != null and net.state == "joining":
+		label_at(Vector2(146,522),net.message,18,Color("7d4f1c"))
+	panel(Rect2(868,152,632,496))
+	label_at(Vector2(896,206),"單人練習（自由對戰）",26)
+	label_at(Vector2(896,236),"可指定或隨機對手領主，並切換 4 種編隊配比（或隨機配比）。",15,Color("5a4a36"))
+	panel(Rect2(896,368,576,158),Color("efe0bd"))
+	ensure_practice_opponent()
+	draw_fitted(lord_art(practice_foe_lord,1),Rect2(912,378,104,138))
+	var tag := "（隨機領主）" if practice_lord == "random" else "（指定領主）"
+	label_at(Vector2(1034,396),"練習領主：" + B.lord_name(practice_foe_lord) + tag,20)
+	label_at(Vector2(1034,424),"技能：%s · 平均費 %.1f" % [B.LORDS[practice_foe_lord].skill,DeckStore.average(practice_foe_deck)],15,Color("5a4a36"))
+	label_at(Vector2(1034,454),"、".join(practice_foe_deck.slice(0,4).map(func(k): return B.CARDS[k].name)),16)
+	label_at(Vector2(1034,480),"、".join(practice_foe_deck.slice(4,8).map(func(k): return B.CARDS[k].name)),16)
+	var ratio_entry := DeckStore.practice_ratio_entry(practice_foe_ratio_id)
+	label_at(Vector2(1034,510),"%s：%s" % [ratio_entry.name,DeckStore.practice_ratio_label(ratio_entry.ratio)],15,Color("6f5a3e"))
+	panel(Rect2(100,666,1400,74),Color("efe0bd"))
+	label_at(Vector2(124,711),"我的牌組：%s · %s" % [B.LORDS[player_lord].name,"、".join(player_deck.map(func(k): return B.CARDS[k].name))],19)
+	label_at(Vector2(526,798),"配對伺服器",17,Color("6f5a3e"))
 
 func start_net_battle() -> void:
-	me = net.local_team
-	mirror_view = me == 1
 	spectating = false
 	adventure.index = -1
+	rogue.in_battle = false
+	if net.is_ai_match:
+		vs_ai_matched_name = net.ai_opponent_name
+		me = 0
+		mirror_view = false
+		field_mirror = false
+		model = net.make_battle()
+		leave_net()
+		enter_battle("已配對對手：" + vs_ai_matched_name)
+		return
+	vs_ai_matched_name = ""
+	me = net.local_team
+	mirror_view = me == 1
 	model = net.make_battle()
-	enter_battle("連線對戰")
+	enter_battle("線上對戰")
 
 # Waiting for the peer, peer lost, or the two simulations disagree.
 func draw_net_status() -> void:
@@ -1800,6 +2389,8 @@ func draw_net_status() -> void:
 
 func show_title() -> void:
 	leave_net()
+	vs_ai_matched_name = ""
+	adventure.index = -1
 	rogue.in_battle = false
 	adventure_deck_mode = false
 	screen = "title"
@@ -1961,7 +2552,8 @@ func tab_count(tab: String) -> int:
 
 func lord_tooltip(kind: String) -> String:
 	var info: Dictionary = B.LORDS[kind]
-	return "%s（%s）\n%d 血 · 普攻 %d\n%s" % [info.name,info.role,int(info.hp),int(info.damage),B.skill_text(kind)]
+	var atk := "遠程普攻 %d（射程 %d）" % [int(info.damage),int(B.lord_attack_range(kind))] if B.lord_is_ranged(kind) else "普攻 %d" % int(info.damage)
+	return "%s（%s）\n%d 血 · %s\n%s" % [info.name,info.role,int(info.hp),atk,B.skill_text(kind)]
 
 # Lords are picked from the 領主 tab, in the same grid as the cards.
 func lord_rect(index: int) -> Rect2:
@@ -1988,6 +2580,22 @@ func choose_lord(lord: String) -> void:
 		save_choice()
 		adventure.choose_lord(lord)
 		adventure.open_adventure_deck(self)
+		return
+	if watch_edit >= 0: # each watch lord keeps its own deck separately
+		if DeckStore.valid(player_deck,player_lord):
+			watch_lord_decks[watch_edit][player_lord] = player_deck.duplicate()
+			watch_lord_sources[watch_edit][player_lord] = -1
+		player_lord = lord
+		if watch_lord_decks[watch_edit].has(lord) and DeckStore.valid(watch_lord_decks[watch_edit][lord],lord):
+			player_deck = watch_lord_decks[watch_edit][lord].duplicate()
+		else:
+			var rng := RandomNumberGenerator.new()
+			rng.randomize()
+			player_deck = random_deck(rng,lord)
+			watch_lord_decks[watch_edit][lord] = player_deck.duplicate()
+			watch_lord_sources[watch_edit][lord] = 0
+		menu_notice = ""
+		show_deck()
 		return
 	var fitted: Array = DeckStore.fit_to_lord(player_deck,lord)
 	if fitted != player_deck: menu_notice = "已換掉%s不能用的卡牌。" % B.LORDS[lord].name
@@ -2018,9 +2626,8 @@ func draw_lord_card(kind: String, r: Rect2, chosen: bool) -> void:
 	draw_string(font,Vector2(r.position.x,r.end.y-27),info.role,HORIZONTAL_ALIGNMENT_CENTER,r.size.x,16,Color("5a4a36"))
 	draw_string(font,Vector2(r.position.x,r.end.y-10),"%s %d" % [info.skill,int(B.skill_cost(kind))],HORIZONTAL_ALIGNMENT_CENTER,r.size.x,16,RED)
 	var faction: String = B.lord_faction(kind)
-	var tag := Rect2(r.position+Vector2(6,6),Vector2(36,17))
-	draw_rect(tag,preload("res://command_style.gd").TAGS.get(faction,Color("7d7466")))
-	draw_string(font,tag.position+Vector2(0,13),B.FACTIONS[faction],HORIZONTAL_ALIGNMENT_CENTER,tag.size.x,12,Color("f3e6c4"))
+	var tag := Rect2(r.position+Vector2(9,7),Vector2(36,17))
+	preload("res://interface_ornament.gd").ribbon_tag(self,tag,B.FACTIONS[faction],preload("res://command_style.gd").TAGS.get(faction,Color("7d7466")),12)
 	if chosen:
 		draw_rect(r.grow(3),RED,false,4)
 		draw_check(r.position+Vector2(r.size.x-10,10))
@@ -2044,9 +2651,12 @@ func draw_deck() -> void:
 	label_at(Vector2(SLOT_X,104),B.skill_text(lord),17,INK)
 	# Home card (fixed) + eight slots.
 	var home := deck_slot_rect(0)
-	panel(home.grow(4),Color("cfdcae"),Color("3f5a2c"))
-	draw_card(B.home_card(lord),home)
-	draw_string(font,Vector2(home.position.x,home.end.y+22),"常駐",HORIZONTAL_ALIGNMENT_CENTER,home.size.x,14,Color("3f5a2c"))
+	var home_kind: String = B.home_card(lord)
+	var home_col: Color = preload("res://command_style.gd").tag_color(home_kind)
+	panel(home.grow(4),Color("e8d9b5").lerp(home_col,0.22),home_col.darkened(0.18))
+	draw_card(home_kind,home)
+	var htag := Rect2(home.position.x+home.size.x*0.5-22,home.end.y-12,44,16)
+	preload("res://interface_ornament.gd").ribbon_tag(self,htag,"常駐",home_col.darkened(0.10),12)
 	var shown: Array = B.menu_sorted(player_deck)
 	for i: int in range(8):
 		var r := deck_slot_rect(i+1)
@@ -2092,20 +2702,59 @@ func draw_deck() -> void:
 static func random_deck(rng: RandomNumberGenerator, lord: String = "") -> Array:
 	return DeckStore.random_deck(rng,lord)
 
-func set_watch_source(team: int, source: int) -> void:
-	watch_source[team] = source
-	if source == 0:
+func save_watch_lord(team: int) -> void:
+	var lord: String = watch_lords[team]
+	if B.LORDS.has(lord) and DeckStore.valid(watch_decks[team],lord):
+		watch_lord_decks[team][lord] = watch_decks[team].duplicate()
+		watch_lord_sources[team][lord] = watch_source[team]
+
+func randomize_watch_deck(team: int) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	watch_source[team] = 0
+	watch_decks[team] = random_deck(rng,watch_lords[team])
+	save_watch_lord(team)
+	save_watch()
+
+func select_watch_lord(team: int, choice: String) -> void:
+	save_watch_lord(team)
+	watch_lords[team] = choice
+	if watch_lord_decks[team].has(choice) and DeckStore.valid(watch_lord_decks[team][choice],choice):
+		watch_decks[team] = watch_lord_decks[team][choice].duplicate()
+		watch_source[team] = int(watch_lord_sources[team].get(choice,0))
+	else:
 		var rng := RandomNumberGenerator.new()
 		rng.randomize()
-		watch_lords[team] = B.LORDS.keys()[rng.randi_range(0,B.LORDS.size()-1)]
-		watch_decks[team] = random_deck(rng,watch_lords[team])
+		watch_decks[team] = random_deck(rng,choice)
+		watch_source[team] = 0
+		save_watch_lord(team)
+	save_watch()
+
+func set_watch_source(team: int, source: int) -> void:
+	if source == 0:
+		if watch_decks[team].is_empty():
+			var rng := RandomNumberGenerator.new()
+			rng.randomize()
+			watch_lords[team] = B.LORDS.keys()[rng.randi_range(0,B.LORDS.size()-1)]
+		randomize_watch_deck(team)
 	else:
+		save_watch_lord(team)
+		watch_source[team] = source
 		watch_lords[team] = player_lord
 		watch_decks[team] = player_deck.duplicate() if DeckStore.valid(player_deck,player_lord) else DeckStore.fit_to_lord(B.DEFAULT_DECK,player_lord)
+		save_watch_lord(team)
+		save_watch()
 
 # Spectate side editing reuses the deck screen on that side's deck and lord.
 func edit_watch_side(team: int) -> void:
-	watch_stash = {"deck":player_deck.duplicate(),"lord":player_lord,"tab":deck_tab}
+	save_watch_lord(team)
+	watch_stash = {
+		"deck":player_deck.duplicate(),
+		"lord":player_lord,
+		"tab":deck_tab,
+		"lord_decks":watch_lord_decks[team].duplicate(true),
+		"lord_sources":watch_lord_sources[team].duplicate(true),
+	}
 	player_deck = watch_decks[team].duplicate()
 	player_lord = watch_lords[team]
 	watch_edit = team
@@ -2119,6 +2768,11 @@ func finish_watch_edit(keep: bool) -> void:
 		watch_decks[watch_edit] = player_deck.duplicate()
 		watch_lords[watch_edit] = player_lord
 		watch_source[watch_edit] = -1
+		save_watch_lord(watch_edit)
+		save_watch()
+	else:
+		watch_lord_decks[watch_edit] = watch_stash.lord_decks.duplicate(true)
+		watch_lord_sources[watch_edit] = watch_stash.lord_sources.duplicate(true)
 	player_deck = watch_stash.deck
 	player_lord = watch_stash.lord
 	deck_tab = watch_stash.tab
@@ -2136,7 +2790,54 @@ func cycle_watch_card(team: int, index: int) -> void:
 			watch_decks[team][index] = next
 			break
 	watch_source[team] = -1
+	save_watch_lord(team)
+	save_watch()
 	show_watch()
+
+func save_watch() -> void:
+	if watch_path.is_empty(): return
+	var data := {
+		"decks":watch_decks,
+		"lords":watch_lords,
+		"source":watch_source,
+		"lord_decks":watch_lord_decks,
+		"lord_sources":watch_lord_sources,
+	}
+	var file := FileAccess.open(watch_path,FileAccess.WRITE)
+	if file != null: file.store_string(JSON.stringify(data))
+
+func load_watch() -> void:
+	if watch_path.is_empty() or not FileAccess.file_exists(watch_path): return
+	var parsed = JSON.parse_string(FileAccess.get_file_as_string(watch_path))
+	if not parsed is Dictionary: return
+	var decks = parsed.get("decks",[])
+	var lords = parsed.get("lords",[])
+	var sources = parsed.get("source",[])
+	var lord_decks = parsed.get("lord_decks",[])
+	var lord_sources = parsed.get("lord_sources",[])
+	for team: int in range(2):
+		if lord_decks is Array and team < lord_decks.size() and lord_decks[team] is Dictionary:
+			var clean_decks := {}
+			for k in lord_decks[team]:
+				var lk := str(k)
+				if B.LORDS.has(lk) and lord_decks[team][k] is Array and DeckStore.valid(lord_decks[team][k],lk):
+					clean_decks[lk] = lord_decks[team][k].duplicate()
+			watch_lord_decks[team] = clean_decks
+		if lord_sources is Array and team < lord_sources.size() and lord_sources[team] is Dictionary:
+			var clean_src := {}
+			for k in lord_sources[team]:
+				var lk := str(k)
+				if B.LORDS.has(lk): clean_src[lk] = clampi(int(lord_sources[team][k]),-1,WATCH_SOURCES.size()-1)
+			watch_lord_sources[team] = clean_src
+		if lords is Array and team < lords.size() and B.LORDS.has(str(lords[team])):
+			watch_lords[team] = str(lords[team])
+		if decks is Array and team < decks.size() and decks[team] is Array and DeckStore.valid(decks[team],watch_lords[team]):
+			watch_decks[team] = decks[team].duplicate()
+		elif watch_lord_decks[team].has(watch_lords[team]):
+			watch_decks[team] = watch_lord_decks[team][watch_lords[team]].duplicate()
+		if sources is Array and team < sources.size():
+			watch_source[team] = clampi(int(sources[team]),-1,WATCH_SOURCES.size()-1)
+		save_watch_lord(team)
 
 # Spectate setup (producer 2026-11-05): the deck screen's "army" frame, one per side —
 # header with the deck source, a row of lord chips, then the lord portrait and two rows of four cards.
@@ -2165,11 +2866,12 @@ func show_watch() -> void:
 		var x := watch_x(team)
 		var source: int = watch_source[team]
 		button(Rect2(x+352,108,220,46),"牌組：%s ▸" % ("自訂" if source < 0 else WATCH_SOURCES[source]),func(): set_watch_source(side,(maxi(source,0)+1)%WATCH_SOURCES.size()); show_watch())
-		button(Rect2(x+582,108,158,46),"重新隨機",func(): set_watch_source(side,0); show_watch())
+		var rand_btn := button(Rect2(x+582,108,158,46),"重新隨機",func(): randomize_watch_deck(side); show_watch())
+		rand_btn.tooltip_text = "僅隨機目前領主的 8 張牌組，其他領主陣容維持不變"
 		var index := 0
 		for lord_kind: String in B.lord_menu_order():
 			var choice := lord_kind
-			var b := button(watch_lord_rect(team,index),"",func(): watch_lords[side] = choice; watch_decks[side] = DeckStore.fit_to_lord(watch_decks[side],choice); show_watch())
+			var b := button(watch_lord_rect(team,index),"",func(): select_watch_lord(side,choice); show_watch())
 			b.tooltip_text = lord_tooltip(lord_kind)
 			b.modulate = Color(1,1,1,0.01)
 			index += 1
@@ -2182,15 +2884,20 @@ func show_watch() -> void:
 	queue_redraw()
 
 func swap_watch() -> void:
+	save_watch_lord(0)
+	save_watch_lord(1)
 	watch_decks.reverse()
 	watch_lords.reverse()
 	watch_source.reverse()
+	watch_lord_decks.reverse()
+	watch_lord_sources.reverse()
+	save_watch()
 	show_watch()
 
 func draw_watch() -> void:
 	var muted := Color("5a4a36")
 	label_at(Vector2(60,78),"觀戰設定",40)
-	label_at(Vector2(260,74),"點領主頭像更換 · 點牌組進入編輯",18,muted)
+	label_at(Vector2(260,74),"點領主頭像切換（各自保留陣容）· 點牌組進入編輯",18,muted)
 	for team: int in range(2):
 		var x := watch_x(team)
 		var color: Color = RED if team == 0 else BLUE
@@ -2226,12 +2933,21 @@ func draw_watch() -> void:
 	draw_line(Vector2(800,120),Vector2(800,660),Color(INK,0.25),2)
 
 func card_description(kind: String) -> String:
+	var up_map: Dictionary = {}
+	if screen in ["battle","battle_info"] and model != null and me < model.card_upgrades.size():
+		up_map = model.card_upgrades[me]
+	elif screen == "rogue" and rogue != null and not rogue.run.is_empty():
+		up_map = rogue.run.get("upgrades",{})
+	var ups: Dictionary = up_map.get(kind,{})
+	if not ups.is_empty():
+		var Up = preload("res://card_upgrades.gd")
+		return "【+%d 強化：%s】\n%s" % [Up.level(ups),Up.text(ups),B.card_description(kind,Up.table({kind:ups}))]
 	return B.card_description(kind)
 
 func help_columns() -> Array[String]:
 	return [
-		"[b]選牌與放置[/b]\n1–4 選手牌，F 選常駐牌；點卡再點戰場，或拖曳放置。右鍵取消選牌。Esc 取消選牌或切換暫停。\n空白鍵暫停；暫停或結束後按 R 重玩。F11 切換全螢幕。\n\n[b]牌組與領主[/b]\n選一位領主與 8 張輪轉牌，另有一張常駐經濟牌。依領主陣營使用經典、黑暗、魔法與中立牌。\n領主由 AI 移動防守；按 Q 發動技能，費用與效果見技能按鈕及圖鑑。\n\n[b]種田與防守[/b]\n農田自己產金幣；農民從田後方出發，順路耕田加速並回血。相同建築覆蓋自己的舊建築可補滿生命。\n部隊只往前走，不追身後範圍外的敵人；城牆不反擊，靠領主、部隊與建築防守。",
-		"[b]一日戰役[/b]\n上方日晷的太陽走完一天：白天 3 分鐘（正常）；03:00 正午（×1.5）；04:30 黃昏（×2）。\n%d 分鐘入夜（×%d，雙方城牆持續掉血，每分鐘加倍）。\n%d 分鐘天亮仍未分勝負，領地較大的一方獲勝。肉鴿模式不入夜，改在 %d 分鐘比城牆血量。\n\n[b]破門與勝負[/b]\n建築與部隊限己方領地：建築、城牆周圍八格先佔先得，失去所有己方建築覆蓋就釋出。城牆損毀後，敵兵直接穿過缺口，不需拆除殘垣。\n任何敵兵走進家門就輸。\n\n[b]觀戰模式[/b]\n開戰前調整雙方牌組與領主（預設隨機），AI 出牌；1–4 切換 ×1／×2／×4／×8，＋／－ 逐級調速。" % [int(B.NIGHT_START/60),int(B.NIGHT_GOLD),int(B.DAWN/60),int(preload("res://roguelike_catalog.gd").TIME_LIMIT/60)]
+		"[b]選牌與放置[/b]\n1–4 選手牌，F 選常駐牌；點卡再點戰場，或拖曳放置。右鍵取消選牌。Esc 取消選牌或切換暫停。\n空白鍵暫停；暫停或結束後按 R 重玩。F11 切換全螢幕。\n\n[b]牌組與領主[/b]\n選一位領主與 8 張輪轉牌，另有一張常駐經濟牌。依領主陣營使用經典、黑暗、魔法與中立牌。\n領主由 AI 移動防守；按 Q 發動技能，費用與效果見技能按鈕及圖鑑。\n\n[b]種田與防守[/b]\n農田自己產金幣；農民從田後方出發，順路耕田加速並回血。相同建築覆蓋自己的舊建築可補滿生命。\n部隊只往前走，不追身後範圍外的敵人；城牆無固定減傷（僅遠程非魔法攻擊對城牆傷害減半）且不反擊，靠領主、部隊與建築防守。",
+		"[b]一日戰役[/b]\n上方日晷的太陽走完一天：白天 3 分鐘（×1.5）；03:00 正午（×2）；04:30 黃昏（×2.5）。\n%d 分鐘入夜（×%d，雙方城牆持續掉血，每分鐘加倍）。\n%d 分鐘天亮仍未分勝負，領地較大的一方獲勝。肉鴿模式不入夜，改在 %d 分鐘比城牆血量。\n\n[b]破門與勝負[/b]\n建築與部隊限己方領地：建築、城牆周圍八格先佔先得，失去所有己方建築覆蓋就釋出。城牆損毀後，敵兵直接穿過缺口，不需拆除殘垣。\n任何敵兵走進家門就輸。\n\n[b]觀戰模式[/b]\n開戰前調整雙方牌組與領主（預設隨機），AI 出牌；1–4 切換 ×1／×2／×4／×8，＋／－ 逐級調速。" % [int(B.NIGHT_START/60),int(B.NIGHT_GOLD),int(B.DAWN/60),int(preload("res://roguelike_catalog.gd").TIME_LIMIT/60)]
 	]
 
 func show_help() -> void:
@@ -2267,7 +2983,7 @@ var settings_return := "title" # "battle" while the settings were opened from th
 
 func save_settings() -> void:
 	var file := FileAccess.open(settings_path,FileAccess.WRITE)
-	if file != null: file.store_string(JSON.stringify({"effects":fx_enabled,"shake":shake_enabled,"sound":sfx_volume > 0.001,"music_volume":music_volume,"sfx_volume":sfx_volume,"fullscreen":fullscreen}))
+	if file != null: file.store_string(JSON.stringify({"effects":fx_enabled,"shake":shake_enabled,"cinematic":cinematic.enabled,"replay":replay_enabled,"sound":sfx_volume > 0.001,"music_volume":music_volume,"sfx_volume":sfx_volume,"fullscreen":fullscreen}))
 
 func load_settings() -> void:
 	if not FileAccess.file_exists(settings_path): return
@@ -2275,6 +2991,8 @@ func load_settings() -> void:
 	if data is Dictionary:
 		fx_enabled = bool(data.get("effects",true))
 		shake_enabled = bool(data.get("shake",true))
+		cinematic.enabled = bool(data.get("cinematic",true))
+		replay_enabled = bool(data.get("replay",false))
 		# Files from before the volume sliders only know sound on / off.
 		sfx_volume = clampf(float(data.get("sfx_volume",0.8 if bool(data.get("sound",true)) else 0.0)),0.0,1.0)
 		music_volume = clampf(float(data.get("music_volume",0.7)),0.0,1.0)
@@ -2289,7 +3007,7 @@ func apply_audio_settings() -> void:
 
 # A window larger than the desktop (1600 x 900 on a small laptop) is shrunk to fit, then centred.
 func fit_window() -> void:
-	if DisplayServer.get_name() == "headless": return
+	if DisplayServer.get_name() == "headless" or OS.has_feature("web"): return
 	if fullscreen:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 		return
@@ -2315,7 +3033,7 @@ func show_settings() -> void:
 func show_review() -> void:
 	screen = "recap"
 	clear_ui()
-	library.text_box(Rect2(140,161,1320,555),review.report(model),24)
+	library.text_box(Rect2(140,493,1320,240),review.report(model,[Ceremony.side_name(self,0),Ceremony.side_name(self,1)]),20)
 	title_button(Rect2(100,804,250,48),"返回結算",close_review)
 	if rogue.in_battle: title_button(Rect2(1250,804,250,48),"肉鴿進度",func(): rogue.leave_battle(self))
 	else: title_button(Rect2(1250,804,250,48),"再次挑戰" if adventure.index >= 0 else "再戰一局",restart)

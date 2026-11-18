@@ -13,6 +13,9 @@ const QUIET := -60.0
 var enabled := true
 var wanted := "" # the piece that should be heard now ("" = silence)
 var duck := 1.0 # 0..1 extra gain (the pause screen lowers the music)
+var event_duck := 1.0 # brief dip for dramatic skills / breaches
+var event_duck_hold := 0.0
+var event_duck_target := 1.0
 var players := {} # piece -> AudioStreamPlayer
 var gain := {} # piece -> current 0..1
 var layer_gain := [1.0,0.0,0.0]
@@ -87,12 +90,22 @@ func play_sting(piece: String) -> void:
 func stop_sting() -> void:
 	if sting != null and sting.playing: sting.stop()
 
+func duck_pulse(level: float = 0.5, duration: float = 0.55) -> void:
+	event_duck_target = minf(event_duck_target, clampf(level, 0.15, 1.0))
+	event_duck_hold = maxf(event_duck_hold, duration)
+
 func _process(dt: float) -> void:
 	if DisplayServer.get_name() == "headless": return
+	if event_duck_hold > 0.0:
+		event_duck_hold = maxf(0.0, event_duck_hold - dt)
+		event_duck = move_toward(event_duck, event_duck_target, dt * 8.0)
+	else:
+		event_duck_target = 1.0
+		event_duck = move_toward(event_duck, 1.0, dt * 1.8)
 	var step := dt/FADE
 	for piece: String in players:
 		var player: AudioStreamPlayer = players[piece]
-		var target := duck if enabled and piece == wanted else 0.0
+		var target := duck * event_duck if enabled and piece == wanted else 0.0
 		gain[piece] = move_toward(gain[piece],target,step)
 		if gain[piece] <= 0.0:
 			if player.playing: player.stop()

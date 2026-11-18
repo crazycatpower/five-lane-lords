@@ -16,6 +16,16 @@ static func keep_out_of_opening(deck: Array) -> void:
 		if B.CARDS.get(deck[i],{}).get("no_opening",false): held.push_front(deck.pop_at(i))
 	deck.append_array(held)
 
+# "hold_cooldown": the card in hand does not count down while one of ours is still standing.
+static func holds_cooldown(m, team: int, kind: String) -> bool:
+	if not B.CARDS.get(kind,{}).get("hold_cooldown",false): return false
+	for b: Dictionary in m.buildings:
+		if b.hp > 0 and b.team == team and b.kind == kind: return true
+	return false
+
+static func cooldown_note(m, team: int, kind: String) -> String:
+	return "（場上的%s還在，冷卻暫停中。）" % B.CARDS[kind].name if holds_cooldown(m,team,kind) else ""
+
 static func is_duplicate(m, team: int, kind: String, cell: Vector2i) -> bool:
 	if not B.CARDS.get(kind,{}).get("unique",false): return false
 	for b: Dictionary in m.buildings:
@@ -87,6 +97,7 @@ static func release(m, b: Dictionary) -> void:
 
 # 瘟疫主教: the ground rots behind him (a small plague cloud every rot_period seconds).
 static func update(m, dt: float) -> void:
+	if not m.has_plague_bishop: return
 	for u: Dictionary in m.units:
 		if u.hp <= 0 or u.kind != "plague_bishop" or u.get("spawn_delay",0.0) > 0: continue
 		var d: Dictionary = B.CARDS.plague_bishop
@@ -110,7 +121,7 @@ static func describe(kind: String) -> Array[String]:
 	if kind == "seal_altar":
 		var d: Dictionary = B.CARDS.seal_altar
 		var bishop: Dictionary = B.CARDS[d.summon]
-		lines.append("不會出現在起手牌；每方只能有一座。任何一路每死 1 名部隊（敵我皆算）得 %s 魂。" % B.number(d.soul_per_death))
+		lines.append("不會出現在起手牌；每方只能有一座，場上有祭壇時這張牌不冷卻。任何一路每死 1 名部隊（敵我皆算）得 %s 魂。" % B.number(d.soul_per_death))
 		lines.append("%s 魂時封印依序碎裂，每破一道使半徑 %s 內敵兵恐懼 %s 秒；集滿 %s 魂祭壇碎裂，召喚%s與 %d 名%s。祭壇被拆則靈魂散去。" % ["／".join(d.seals.map(func(x) -> String: return str(x))),B.number(d.radius),B.number(d.seal_fear),str(d.seals[-1]),bishop.name,int(d.escort[1]),B.CARDS[d.escort[0]].name])
 	elif kind == "plague_bishop":
 		var p: Dictionary = B.CARDS.plague_bishop

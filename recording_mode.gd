@@ -42,17 +42,20 @@ static func open(g) -> void:
 
 static func explanation(kind: String) -> String:
 	if not B.CARDS.has(kind): return ""
-	if kind == "phase_rider":
-		return "登場時不會被直接鎖定，也不觸發陷阱。攻擊或被偵查後永久現形；仍會受到範圍傷害。"
-	var lines := B.card_description(kind).split("\n", false)
-	var detail := String(lines[-1]) if not lines.is_empty() else ""
-	# Use the actual rule description, never repeat the role label.
-	return detail.split("。", false)[0] + "。" if not detail.is_empty() else ""
+	var text := B.card_description(kind).strip_edges()
+	if kind == "phase_rider" and not ("不會被" in text):
+		text += "\n登場時不會被直接鎖定，也不觸發陷阱。"
+	return text
 
 func observe(g, event: Dictionary) -> void:
 	if not g.recorder.replaying or String(event.get("kind", "")) != "play": return
 	var kind := String(event.get("card", ""))
-	if seen.has(kind) or g.clock - last_time < 7.0: return
-	seen[kind] = true
-	last_time = g.clock
-	g.cinematic.trigger_spotlight(g, event.get("pos", Vector2(800,394)), int(event.get("team",0)), kind, explanation(kind), 1.12, 2.0, 6.0)
+	if kind.is_empty(): return
+	var team := int(event.get("team", 0))
+	var pos: Vector2 = event.get("pos", Vector2(800,394))
+	if not seen.has(kind):
+		seen[kind] = true
+		last_time = g.clock
+		g.cinematic.enqueue_spotlight(g, pos, team, kind, explanation(kind))
+	else:
+		g.cinematic.push_repeat_hint(team, kind)

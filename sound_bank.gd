@@ -11,7 +11,7 @@ const CUES := {
 	"spell":"bookPlace1",
 	"breach":"warhorn",
 	"arrow":"bow_shoot",
-	"heal":"holy_heal",
+	"heal":"heal_chime",
 	"overflow":"metalPot1",
 	"finish":"metalPot1",
 	"ramp":"warhorn",
@@ -32,7 +32,7 @@ const CUES := {
 	"lightning":"lightning",
 	"ram":"ram_hit",
 	"charge_impact":"ram_hit",
-	"support_pulse":"holy_heal",
+	"support_pulse":"heal_chime",
 	"blood_gain":"dark_magic",
 	"summoned":"dark_magic",
 	"nightfall":"bell",
@@ -50,11 +50,12 @@ const COOLDOWNS := {
 	"sword": 130,
 	"shield": 140,
 	"hit": 120,
+	"heal": 450,
 	"boulder": 300,
 	"lightning": 150,
 	"drum": 150,
 	"charge_impact": 220,
-	"support_pulse": 600,
+	"support_pulse": 850,
 	"blood_gain": 400,
 	"summoned": 200,
 	"ui_hover": 45,
@@ -70,10 +71,11 @@ const VOLUMES := {
 	"sword": -6.0,
 	"shield": -5.0,
 	"hit": -6.0,
+	"heal": -5.5,
 	"ram": -3.0,
 	"drum": 2.0,
 	"charge_impact": -3.0,
-	"support_pulse": -12.0,
+	"support_pulse": -13.5,
 	"blood_gain": -9.0,
 	"summoned": -9.0,
 	"skill": 1.5,
@@ -122,12 +124,13 @@ func cue_event(e: Dictionary) -> void:
 	var k: String = e.get("kind", "")
 	if k == "spell":
 		var card: String = e.get("card", "")
-		if card == "charge_horn": cue("skill")
-		elif card == "chain_lightning": cue("lightning")
+		if card in ["charge_horn", "wing_gust", "pack_ambush", "counter_charge"]: cue("skill")
+		elif card in ["chain_lightning", "mana_drain"]: cue("lightning")
 		elif card == "rolling_boulder": cue("boulder")
-		elif card == "fire": cue("burn")
-		elif card in ["curse", "plague"]: cue("curse_rise")
-		elif card == "harvest": cue("heal")
+		elif card in ["fire", "flaming_pitch"]: cue("burn")
+		elif card in ["curse", "plague", "gravity_well", "corrosive_bile", "sealed_coffin", "devouring_maw"]: cue("curse_rise")
+		elif card in ["harvest", "feral_mutation", "berserk_blood", "arcane_shield", "mana_spring"]: cue("heal")
+		elif card in ["swarm_eruption", "borrowed_bones", "grave_exchange"]: cue("summoned")
 		else: cue("spell")
 	elif k == "hit":
 		var attacker: String = e.get("attacker", "")

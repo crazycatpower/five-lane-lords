@@ -10,7 +10,7 @@ static func do_roar(m, u: Dictionary) -> void:
 	var d: Dictionary = B.CARDS[u.kind]
 	if not d.has("roar_fear"): return
 	for foe: Dictionary in m.units:
-		if foe.hp > 0 and foe.team != u.team and foe.get("spawn_delay",0.0) <= 0 and foe.pos.distance_to(u.pos) <= d.radius:
+		if foe.hp > 0 and foe.team != u.team and foe.get("spawn_delay",0.0) <= 0 and B.edge_distance(u,foe) <= d.radius:
 			foe.fear_left = maxf(foe.get("fear_left",0.0),d.roar_fear)
 	m.event("roar",u.pos,u.team,{"radius":d.radius})
 
@@ -22,8 +22,9 @@ static func on_spawn(m, u: Dictionary) -> void:
 
 # 腹眼魔: stealthed enemies near it lose their stealth. Phased riders stay hidden.
 static func update(m, dt: float) -> void:
+	if not m.has_monster_tick: return
 	for u: Dictionary in m.units:
-		if u.hp <= 0 or u.get("spawn_delay",0.0) > 0: continue
+		if u.hp <= 0 or not u.get("has_monster_tick",false) or u.get("spawn_delay",0.0) > 0: continue
 		var d: Dictionary = B.CARDS[u.kind]
 		if d.has("roar_fear") and d.has("roar_period"):
 			u.roar_cd = u.get("roar_cd", d.roar_period) - dt
@@ -32,8 +33,8 @@ static func update(m, dt: float) -> void:
 				do_roar(m, u)
 		var reach: float = d.get("reveal_radius",0.0)
 		if reach > 0:
-			for foe: Dictionary in m.units:
-				if foe.team != u.team and foe.get("stealthed",false) and foe.pos.distance_to(u.pos) <= reach:
+			for foe: Dictionary in m.foe_units[u.team]:
+				if (foe.get("stealthed",false) or (B.CARDS[foe.kind].get("stealth",false) and not foe.get("revealed",false))) and B.edge_distance(u,foe) <= reach:
 					Arcane.reveal(m, foe)
 
 # A hit landed. 鬍子魔 steals from buildings; 骨刺龍 pricks the melee troop that hit it.
@@ -41,8 +42,9 @@ static func on_hit(m, target: Dictionary, source: Dictionary) -> void:
 	var source_data: Dictionary = B.CARDS.get(source.get("kind",""),{})
 	if source_data.is_empty() or not source.has("lane"): return # spells, lords and buildings
 	if source_data.has("steal_gold") and target.has("cell"): steal(m,source)
-	var thorns: float = B.CARDS.get(target.get("kind",""),{}).get("thorns",0.0)
-	if thorns > 0 and source.hp > 0 and source_data.get("range",0.0) <= B.MELEE_RANGE and not source_data.get("projectile",false):
+	var thorns: float = float(target.get("thorns",B.CARDS.get(target.get("kind",""),{}).get("thorns",0.0)))
+	thorns = preload("res://core_cards.gd").thorns(m,target,thorns) # 荊棘母獸 aura
+	if thorns > 0 and source.hp > 0 and not source_data.get("projectile",false) and not source_data.get("lob",false) and not source_data.get("suicide_blast",false):
 		m.damage(source,thorns,target.team,target.get("card",target.kind)) # no source: thorns never bounce back
 
 static func on_gate_hit(m, source: Dictionary) -> void:

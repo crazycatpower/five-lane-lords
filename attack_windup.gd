@@ -3,6 +3,7 @@ const MIN_SECONDS := 0.05
 const MAX_SECONDS := 0.2
 
 static func target_key(target: Dictionary) -> String:
+	if target.kind == "gate": return "gate:%d:%d" % [target.team,target.lane]
 	return "lord:%d" % target.team if target.kind == "lord" else "actor:%d" % target.id
 
 static func cancel(unit: Dictionary) -> void:

@@ -1,6 +1,7 @@
 extends RefCounted
 const B = preload("res://balance.gd")
 const Lore = preload("res://card_lore.gd")
+const Keywords = preload("res://card_keywords.gd")
 const INFO_RECT := Rect2(1418,28,148,48) # top-right corner: the top centre is kept for the clock
 var game
 var category := "all"
@@ -32,7 +33,8 @@ func text_box(rect: Rect2, text: String, size: int = 20) -> RichTextLabel:
 	var label := RichTextLabel.new()
 	label.position = rect.position
 	label.size = rect.size
-	label.text = text
+	label.bbcode_enabled = true
+	label.text = Keywords.colorize_bbcode(text)
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	label.add_theme_constant_override("line_separation",4)
 	label.add_theme_font_override("normal_font",game.font)
@@ -62,8 +64,9 @@ func show_catalog() -> void:
 	game.title_button(Rect2(420,802,140,46),"上一頁",func(): page -= 1; show_catalog()).disabled = page == 0
 	game.title_button(Rect2(670,802,140,46),"下一頁",func(): page += 1; show_catalog()).disabled = (page+1)*12 >= list.size()
 	var lord := selected.begins_with("lord_")
-	var rules: String = B.skill_text(selected.trim_prefix("lord_")) if lord else B.card_description(selected)
-	text_box(Rect2(955,405,535,212),rules,22)
+	var lord_id := selected.trim_prefix("lord_")
+	var rules: String = B.skill_text(lord_id) if lord else B.card_description(selected)
+	text_box(Rect2(955,405,535,212),rules,20)
 	text_box(Rect2(955,657,535,118),Lore.TEXT.get(selected,""),19)
 	game.queue_redraw()
 
@@ -95,6 +98,8 @@ func draw_catalog() -> void:
 	if selected.begins_with("lord_"): game.draw_fitted(game.art(selected),Rect2(1050,137,350,233))
 	else: game.draw_card_art(selected,Rect2(1050,137,350,233))
 	game.label_at(Vector2(955,390),"卡牌說明",22)
+	var kws: Array[String] = Keywords.for_lord(selected.trim_prefix("lord_")) if selected.begins_with("lord_") else Keywords.for_card(selected)
+	Keywords.draw_badges(game,Vector2(1062,389),kws,15)
 	game.ink_line(Vector2(955,625),Vector2(1490,625),3)
 	game.label_at(Vector2(955,650),"卡牌趣聞",22)
 
@@ -111,12 +116,16 @@ func show_battle_info(entering: bool = true) -> void:
 		var kinds: Array = [game.model.home_cards[team]]+game.model.decks[team].duplicate()
 		for i: int in range(kinds.size()):
 			var kind: String = kinds[i]
+			if kind.is_empty(): continue
 			var hit = game.button(deck_rect(team,i),"",func(): open(kind,"battle_info"))
 			hit.modulate.a = 0.01
-			hit.tooltip_text = entry_name(kind)+" · 查看圖鑑"
-		var lord: String = "lord_"+game.model.lords[team].lord
-		var hit = game.button(Rect2(95,215+team*285,132,170),"",func(): open(lord,"battle_info"))
+			hit.tooltip_text = game.card_description(kind)+"\n\n（點擊開啟完整圖鑑）"
+		var raw_lord: String = game.model.lords[team].lord
+		var is_camp: bool = team == 1 and game.adventure.index >= 0 and game.adventure.STAGES[game.adventure.index].enemy_camp
+		var target_entry: String = "bandit" if is_camp else (B.MINION_LORDS[raw_lord].card if B.is_minion(raw_lord) else "lord_"+raw_lord)
+		var hit = game.button(Rect2(95,215+team*285,132,170),"",func(): open(target_entry,"battle_info"))
 		hit.modulate.a = 0.01
+		hit.tooltip_text = game.Ceremony.side_name(game,team)+" · 查看圖鑑"
 	game.queue_redraw()
 
 func close_battle_info() -> void:
@@ -136,14 +145,33 @@ func composition(team: int) -> String:
 func draw_battle_info() -> void:
 	game.panel(Rect2(62,62,1476,712))
 	game.label_at(Vector2(90,111),"戰局資料",38)
-	game.label_at(Vector2(385,107),"難度："+["簡單","普通","困難"][game.model.difficulty],24)
+	var mode_line: String = "難度："+["簡單","普通","困難"][game.model.difficulty]
+	if game.rogue.in_battle and not game.rogue.run.is_empty():
+		mode_line = "肉鴿 第 %d / %d 場 · AI %s" % [game.rogue.battle_floor_number(),game.rogue.Catalog.FLOORS,["簡單","普通","困難"][game.model.difficulty]]
+	elif game.adventure.index >= 0:
+		mode_line = "征服 · %s（%s）" % [game.adventure.STAGES[game.adventure.index].name,["簡單","普通","困難"][game.model.difficulty]]
+	game.label_at(Vector2(310,107),mode_line,24)
 	game.label_at(Vector2(1120,107),"閱讀中暫停 · 點卡牌查看趣聞",19)
 	for team: int in range(2):
 		var y := 175+team*285
 		var lord: String = game.model.lords[team].lord
-		game.label_at(Vector2(95,y),["紅方","藍方"][team]+" · "+B.lord_name(lord),24,game.RED if team == 0 else game.BLUE)
-		game.label_at(Vector2(600,y),composition(team),22)
-		game.draw_fitted(game.lord_art(lord,team),Rect2(95,y+40,132,170))
+		var side_title: String = ["紅方","藍方"][team]+" · "+game.Ceremony.side_name(game,team)
+		game.label_at(Vector2(95,y),side_title,24,game.RED if team == 0 else game.BLUE)
+		game.label_at(Vector2(650,y),composition(team),21)
+		if game.rogue.in_battle and not game.rogue.run.is_empty():
+			var sub_note: String = ""
+			if team == 0:
+				var r_names: Array = game.rogue.run.get("relics",[]).map(func(k: String) -> String: return game.rogue.Catalog.RELICS[k].name)
+				sub_note = "持有遺物："+("、".join(r_names) if not r_names.is_empty() else "無")
+			else:
+				var mut: Dictionary = game.rogue.Catalog.mutator_data(game.rogue.active_slot())
+				var m_line: String = (" · 異變【%s】%s" % [String(mut.name),String(mut.desc)]) if not mut.is_empty() else ""
+				sub_note = (("敵方被動："+B.minion_text(lord)) if B.is_minion(lord) else ("敵方技能："+B.skill_text(lord)))+m_line
+			game.label_at(Vector2(248,y+28),sub_note,16,Color("5a4632"))
+		elif game.adventure.index >= 0 and team == 1 and not game.adventure.STAGES[game.adventure.index].enemy_camp:
+			var adv_note: String = ("守將特性："+B.minion_text(lord)) if B.is_minion(lord) else ("守將技能："+B.skill_text(lord))
+			game.label_at(Vector2(248,y+28),adv_note,16,Color("5a4632"))
+		game.draw_fitted(game.Ceremony.side_portrait(game,team),Rect2(95,y+40,132,170))
 		var kinds: Array = [game.model.home_cards[team]]+game.model.decks[team].duplicate()
 		for i: int in range(kinds.size()):
 			if not kinds[i].is_empty(): game.draw_card(kinds[i],deck_rect(team,i)) # a lord without farms has no home card

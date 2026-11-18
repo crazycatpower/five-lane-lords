@@ -7,7 +7,7 @@ small stone room. Every run makes identical files (fixed seed).
     python tools/make_music.py            # everything
     python tools/make_music.py menu night # only these pieces
 
-Needs numpy, scipy and ffmpeg. Output: assets/music/*.ogg, assets/audio/{bell,ui_tick,ui_tock}.ogg
+Needs numpy, scipy and ffmpeg. Output: assets/music/*.ogg, assets/audio/{bell,heal_chime,ui_tick,ui_tock}.ogg
 The battle music is three loops of the same length that play together (music_player.gd raises
 them one by one as the day goes on): battle_lute, battle_drums, battle_tune.
 """
@@ -425,6 +425,14 @@ def extras() -> None:
     mix = Mix(0.4, False)
     mix.add(tock, 0.0, 1.0, 0.0, 0.12)
     save("ui_tock", level([mix.render()], 0.7)[0], "audio")
+    # 治癒豎琴清音：輕撥 D 大調上行分散和弦，不帶人聲。
+    mix = Mix(0.95, False)
+    for i, (note, gain, pan) in enumerate((("D5", 0.45, -0.15), ("F#5", 0.52, 0.0), ("A5", 0.60, 0.12), ("D6", 0.68, 0.05))):
+        mix.add(pluck(hz(note), 0.75, 0.75 + 0.05 * i), i * 0.055, gain, pan, 0.28)
+    heal_audio = mix.render()
+    fade = int(0.18 * SR)
+    heal_audio[-fade:] *= np.linspace(1, 0, fade)[:, None]
+    save("heal_chime", level([heal_audio], 0.72)[0], "audio")
 
 
 PIECES = {"menu": menu, "battle": battle, "night": night, "victory": victory, "defeat": defeat, "extras": extras}

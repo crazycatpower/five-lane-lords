@@ -1,10 +1,10 @@
 extends RefCounted
 # 設定 (2026-11-12): music and sound volume, full screen, effects and shake. Opened from the title
 # or from the pause banner of a local battle (g.settings_return says where "back" leads).
-const PANEL := Rect2(410,130,780,640)
-const ROWS := ["音樂音量","音效音量","全螢幕","戰鬥特效","畫面震動"]
-const ROW_Y := 268.0
-const ROW_STEP := 74.0
+const PANEL := Rect2(410,120,780,660)
+const ROWS := ["音樂音量","音效音量","全螢幕","戰鬥特效","畫面震動","電影運鏡","對戰錄影"]
+const ROW_Y := 228.0
+const ROW_STEP := 56.0
 const CONTROL_X := 720.0
 static var knob_texture: ImageTexture
 
@@ -69,7 +69,9 @@ static func build(g) -> void:
 	toggle(g,2,g.fullscreen,func(): g.set_fullscreen(not g.fullscreen); build(g))
 	toggle(g,3,g.fx_enabled,func(): g.fx_enabled = not g.fx_enabled; g.effects.clear(); g.save_settings(); build(g))
 	toggle(g,4,g.shake_enabled,func(): g.shake_enabled = not g.shake_enabled; g.save_settings(); build(g))
-	g.title_button(Rect2(650,662,300,54),"回到戰局" if g.settings_return == "battle" else "回到標題",func(): back(g),true)
+	toggle(g,5,g.cinematic.enabled,func(): g.cinematic.enabled = not g.cinematic.enabled; g.save_settings(); build(g))
+	toggle(g,6,g.replay_enabled,func(): g.replay_enabled = not g.replay_enabled; g.save_settings(); build(g))
+	g.title_button(Rect2(650,656,300,54),"回到戰局" if g.settings_return == "battle" else "回到標題",func(): back(g),true)
 	g.queue_redraw()
 
 static func back(g) -> void:
@@ -95,5 +97,7 @@ static func paint(g) -> void:
 	g.draw_string(g.font,Vector2(CONTROL_X+340,row_y(1)),"%d%%" % roundi(g.sfx_volume*100),HORIZONTAL_ALIGNMENT_RIGHT,70,20,Color("6f5a3e"))
 	g.label_at(Vector2(CONTROL_X+170,row_y(2)),"F11 隨時切換",17,Color("6f5a3e"))
 	g.label_at(Vector2(CONTROL_X+170,row_y(3)),"光效、飛行金幣與落葉",17,Color("6f5a3e"))
-	g.label_at(Vector2(CONTROL_X+170,row_y(4)),"破門時的畫面晃動",17,Color("6f5a3e"))
+	g.label_at(Vector2(CONTROL_X+170,row_y(4)),"重擊與破門時的畫面晃動",17,Color("6f5a3e"))
+	g.label_at(Vector2(CONTROL_X+170,row_y(5)),"大招特寫、終結慢動作（F9 隱UI）",17,Color("6f5a3e"))
+	g.label_at(Vector2(CONTROL_X+170,row_y(6)),"瀏覽器端暫不開放本機 MP4 輸出" if OS.has_feature("web") else "自動保存重播、剪輯筆記與輸出 MP4",17,Color("6f5a3e"))
 	g.draw_string(g.font,Vector2(PANEL.position.x,PANEL.end.y-24),"羊皮紙戰記 %s" % g.VERSION,HORIZONTAL_ALIGNMENT_CENTER,PANEL.size.x,15,Color(g.INK,0.55))

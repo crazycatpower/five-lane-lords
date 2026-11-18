@@ -43,21 +43,23 @@ static func launch(m, s: Dictionary) -> void:
 	m.projectiles.append({"rolling":true,"pos":pos,"start":pos,"team":s.team,"kind":s.kind,"lane":lane,"direction":direction,"remaining":100.0,"hit_ids":[],"angle":0.0})
 
 static func roll(m, stone: Dictionary, dt: float) -> void:
-	var data: Dictionary = B.CARDS[stone.kind]
+	var data: Dictionary = m.spell_card_data(stone.team,stone.kind)
 	var start: Vector2 = stone.pos
 	var stop: float = L.gate_stop(1-stone.team)
 	stone.pos.x = move_toward(stone.pos.x,stop,data.roll_speed*dt)
 	stone.angle += (stone.pos.x-start.x)/data.radius
 	# Swept collision prevents tunnelling at fast-forward / large simulation steps.
-	for actor: Dictionary in (m.units+m.buildings+m.lords).duplicate():
-		if actor.hp <= 0 or actor.get("spawn_delay",0.0) > 0: continue
-		if actor.kind == "lord" and not m.lord_active[actor.team]: continue
-		var id: String = "lord:%d" % actor.team if actor.kind == "lord" else "actor:%d" % actor.id
-		if id in stone.hit_ids: continue
-		var closest := Vector2(clampf(actor.pos.x,minf(start.x,stone.pos.x),maxf(start.x,stone.pos.x)),start.y)
-		if actor.pos.distance_to(closest) > data.radius: continue
-		stone.hit_ids.append(id)
-		m.damage(actor,data.building_damage if actor.has("cell") else data.damage,stone.team,stone.kind)
+	for group: Array in [m.units, m.buildings, m.lords]:
+		for i: int in range(group.size()):
+			var actor: Dictionary = group[i]
+			if actor.hp <= 0 or actor.get("spawn_delay",0.0) > 0: continue
+			if actor.kind == "lord" and not m.lord_active[actor.team]: continue
+			var id: String = "lord:%d" % actor.team if actor.kind == "lord" else "actor:%d" % actor.id
+			if id in stone.hit_ids: continue
+			var closest := Vector2(clampf(actor.pos.x,minf(start.x,stone.pos.x),maxf(start.x,stone.pos.x)),start.y)
+			if B.point_edge_distance(closest,actor) > data.radius: continue
+			stone.hit_ids.append(id)
+			m.damage(actor,data.building_damage if actor.has("cell") else data.damage,stone.team,stone.kind)
 	if is_equal_approx(stone.pos.x,stop):
 		m.hit_gate(1-stone.team,stone.lane,data.gate_damage,stone.kind)
 		m.event("stone_impact",stone.pos,stone.team,{"radius":data.radius})

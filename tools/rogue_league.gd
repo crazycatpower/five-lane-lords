@@ -59,7 +59,7 @@ static func play(red: String, blue: String, seed_value: int) -> int:
 			m.finish(0 if g[0] > g[1] else (1 if g[1] > g[0] else -1))
 	return m.winner
 
-# [domestic, combat, foe] for every pair of different lords against six seeded tier-1 小怪.
+# [lord, foe] for every lord against six seeded tier-1 小怪.
 static func duo_jobs() -> Array:
 	var foes: Array = Catalog.MINIONS.keys().filter(func(k: String) -> bool: return Catalog.MINIONS[k].get("enabled",true) and Catalog.MINIONS[k].tier == 1)
 	foes.sort()
@@ -70,17 +70,15 @@ static func duo_jobs() -> Array:
 		var f: String = foes[rng.randi_range(0,foes.size()-1)]
 		if not f in picked: picked.append(f)
 	var jobs: Array = []
-	for d: String in B.LORDS:
-		for c: String in B.LORDS:
-			if d != c:
-				for f: String in picked: jobs.append([d,c,f])
+	for l: String in B.LORDS:
+		for f: String in picked: jobs.append([l,f])
 	return jobs
 
 static func play_duo(job: Array, index: int, slice: int) -> int:
 	var r = Rogue.new()
 	r.save_path = "user://rogue-duo-%d.json" % slice
-	r.begin(job[0],job[1],300+index)
-	r.run.foes[0] = job[2]
+	r.begin(job[0],300+index)
+	r.run.foes[0] = job[1]
 	var m = r.make_battle()
 	m.difficulty = 0
 	m.record_events = false
@@ -271,13 +269,11 @@ static func run_report(count: int, seed_start: int) -> void:
 	for floor_index: int in range(Catalog.FLOORS): report.floors.append({"entered":0,"won":0,"elite":0})
 	var lords: Array = B.LORDS.keys()
 	for trial: int in range(count):
-		var d: String = lords[trial%lords.size()]
-		var c: String = lords[(trial/lords.size()+trial+1)%lords.size()]
-		if d == c: c = lords[(lords.find(c)+1)%lords.size()]
+		var l: String = lords[trial%lords.size()]
 		var r = Rogue.new()
 		r.save_path = "user://rogue-run-save-%d.json" % OS.get_process_id()
-		r.begin(d,c,seed_start+trial)
-		var row := {"domestic":d,"combat":c,"seed":seed_start+trial,"battles":[],"repairs":0,"upgrades":0,"rewards":0}
+		r.begin(l,seed_start+trial)
+		var row := {"lord":l,"seed":seed_start+trial,"battles":[],"repairs":0,"upgrades":0,"rewards":0}
 		while r.run.phase == "map":
 			var floor_index: int = r.run.floor
 			# Half of runs take one elite at floor 3, once rewards have provided preparation.
@@ -325,7 +321,7 @@ static func run_report(count: int, seed_start: int) -> void:
 		var output := FileAccess.open(path,FileAccess.WRITE)
 		output.store_string(JSON.stringify(report,"  "))
 		output.close()
-		print("run %d/%d %s / %s: %d wins, clear=%s" % [trial+1,count,d,c,r.best,str(row.cleared)])
+		print("run %d/%d %s: %d wins, clear=%s" % [trial+1,count,l,r.best,str(row.cleared)])
 	print(JSON.stringify(report.floors))
 	print("Report: "+ProjectSettings.globalize_path(path))
 

@@ -2,11 +2,11 @@ extends RefCounted
 const B = preload("res://balance.gd")
 # Card background by role (producer 2026-11-05); the faction is the coloured outer band (BAND_COLORS).
 const ROLES := {
- "economy":["glutton_nest","crystal","farm","grave","farmer","mill","harvest","artificer","mana_spring","sacrifice","mule_cart","funeral_cottage","blood_altar","grave_exchange","granary","soul_well","supply_depot","mana_battery","mana_drain","devouring_maw","imp_burrow"],
- "melee":["gold_monster","plague_bishop","militia","knight","shieldguard","corpse_giant","skeleton","ghoul","reaper","ram","spearbow","manor_retainer","chimera","arcane_golem","ox","levy","mass_grave","eyewing_dragon","belly_eye","thorn_dragon","hook_collector","gatebreaker","disgraced_lancer","monster_hunter","spellbreaker","pallbearer","blood_attendant","borrowed_bones","macebreaker","bog_troll","tusk_boar","ossuary","monster_hatchery","halberdier","rune_sentinel","dire_hydra","parasite_mite","pack_ambush","berserk_blood"],
+ "economy":["glutton_nest","crystal","farm","grave","farmer","mill","harvest","artificer","mana_spring","sacrifice","mule_cart","funeral_cottage","blood_altar","grave_exchange","granary","supply_depot","mana_battery","mana_drain","devouring_maw","imp_burrow"],
+ "melee":["gold_monster","plague_bishop","thorn_mother","militia","knight","shieldguard","corpse_giant","skeleton","ghoul","reaper","ram","spearbow","manor_retainer","chimera","arcane_golem","ox","levy","mass_grave","eyewing_dragon","belly_eye","thorn_dragon","hook_collector","gatebreaker","disgraced_lancer","monster_hunter","spellbreaker","pallbearer","blood_attendant","borrowed_bones","macebreaker","bog_troll","tusk_boar","ossuary","monster_hatchery","halberdier","rune_sentinel","dire_hydra","parasite_mite","pack_ambush","berserk_blood"],
  "harass":["bandit","raven","mob","phase_rider","blink_blade","fishbeak","bearded_imp","hooknose_flyer","twin_gambler","runaway_thrall","oathless_imp","assassin","imp_bomb_runner","aether_hound","thorn_hound","sky_scavenger","phase_shift"],
- "ranged":["arcane_tower","hunter","catapult","tower","rain","fire","axe_thrower","rolling_boulder","arcane_archer","dark_wizard","chain_lightning","watchtower","long_dragon","vampire_hunter","arquebusier","funeral_grenadier","dog_cannon","orrery_walker","seal_bearer","shroud_arbalist","astrolabe_surveyor","ballista_tower","prism_mage","spell_mirror","flaming_pitch","swarm_eruption"],
- "support":["seal_altar","funeral_monk","healer","drummer","necromancer","guard","arcane_shield","charge_horn","blood_tower","corpse_stitcher","sleepless_belfry","mourning_shroud","bellbearer","sigil_weaver","field_smithy","rune_workshop","observatory","war_lodge","counter_charge","mirror_clone","blood_cauldron","hive_nest","leech_vine","feral_mutation"],
+ "ranged":["spell_tide_magus","arcane_tower","hunter","catapult","tower","rain","fire","axe_thrower","rolling_boulder","arcane_archer","dark_wizard","chain_lightning","watchtower","long_dragon","vampire_hunter","arquebusier","funeral_grenadier","dog_cannon","orrery_walker","seal_bearer","shroud_arbalist","astrolabe_surveyor","ballista_tower","prism_mage","spell_mirror","flaming_pitch","swarm_eruption"],
+ "support":["seal_altar","funeral_monk","healer","drummer","necromancer","guard","arcane_shield","charge_horn","blood_tower","corpse_stitcher","sleepless_belfry","mourning_shroud","bellbearer","sigil_weaver","field_smithy","rune_workshop","observatory","war_lodge","counter_charge","mirror_clone","blood_cauldron","hive_nest","leech_vine","feral_mutation","soul_well"],
  "control":["teleport_trap","blast_trap","barricade","curse","plague","bonewall","scarecrow","summon_trap","chronomancer","time_field","net_hunter","dread_howl","renegade_artificer","powder_barrel","mourning_maid","sealed_coffin","beekeeper","old_witch","warp_beacon","gravity_well","web_spinner","mimic_egg","bramble_wall","corrosive_bile","wing_gust"]
 }
 const ROLE_TINTS := {"economy":Color("f3d079"),"melee":Color("e7ac9b"),"ranged":Color("a9cbe6"),"support":Color("b2d5a2"),"control":Color("cbb0df"),"harass":Color("c98078")}
@@ -32,6 +32,28 @@ static func tag_color(kind: String) -> Color:
 # frame keeps its hand-drawn shading. Neutral cards keep the plain gold band.
 const BAND_COLORS := {"normal":Color("6fa33a"),"dark":Color("9a62b8"),"magic":Color("4d8ad8"),"beast":Color("c4622e")}
 static var bands := {}
+static var gray_cache := {}
+static func gray_texture(tex: Texture2D) -> Texture2D:
+	if tex == null: return tex
+	var key := str(tex.get_instance_id())
+	if gray_cache.has(key): return gray_cache[key]
+	var src: Image = tex.get_image()
+	if src == null:
+		gray_cache[key] = tex
+		return tex
+	if src.is_compressed(): src.decompress()
+	src.convert(Image.FORMAT_RGBA8)
+	var w := src.get_width()
+	var h := src.get_height()
+	for y: int in range(h):
+		for x: int in range(w):
+			var c := src.get_pixel(x,y)
+			if c.a <= 0.0: continue
+			var lum := c.r*0.299 + c.g*0.587 + c.b*0.114
+			src.set_pixel(x,y,Color(lum,lum,lum,c.a))
+	var out := ImageTexture.create_from_image(src)
+	gray_cache[key] = out
+	return out
 static func faction_band(faction: String, selected: bool) -> Texture2D:
 	var key := faction+str(selected)
 	if bands.has(key): return bands[key]
@@ -50,15 +72,19 @@ static func faction_band(faction: String, selected: bool) -> Texture2D:
 			out.set_pixel(x,y,Color(clampf(tint.r*k,0,1),clampf(tint.g*k,0,1),clampf(tint.b*k,0,1),c.a))
 	bands[key] = ImageTexture.create_from_image(out)
 	return bands[key]
-static func faction_frame(g, r: Rect2, kind: String, selected: bool = false) -> void:
+static func faction_frame(g, r: Rect2, kind: String, selected: bool = false, blocked: bool = false) -> void:
 	var faction: String = B.card_faction(kind)
 	if not BAND_COLORS.has(faction): return
-	g.draw_texture_rect(faction_band(faction,selected),r,false)
-static func type_frame(g, r: Rect2, type: String) -> void:
+	var band := faction_band(faction,selected)
+	if blocked:
+		g.draw_texture_rect(gray_texture(band),r,false,Color(0.75,0.75,0.75))
+	else:
+		g.draw_texture_rect(band,r,false)
+static func type_frame(g, r: Rect2, type: String, blocked: bool = false) -> void:
 	var box := Rect2(r.position+r.size*Vector2(0.09,0.17),r.size*Vector2(0.82,0.48))
 	var p := box.position
 	var s := box.size
-	var ink := Color(0.30,0.25,0.18,0.62)
+	var ink := Color(0.30,0.30,0.30,0.52) if blocked else Color(0.30,0.25,0.18,0.62)
 	if type == "unit":
 		# Shield silhouette and diagonal heraldic hatching.
 		var points := PackedVector2Array([p,p+Vector2(s.x,0),p+Vector2(s.x,s.y*0.72),p+Vector2(s.x*0.5,s.y),p+Vector2(0,s.y*0.72),p])

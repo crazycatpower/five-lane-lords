@@ -1,12 +1,9 @@
 extends RefCounted
-# 冒險模式：大地圖征服 (2026-11-12 remake). Authoring data only: no battle, UI, save files or
-# resource loading. Fifteen territories joined by roads; a territory can be attacked once a
-# neighbouring one is ours, so the player picks the order. Each is held by its own ruler (the
-# roguelike's 小怪領主 with their passives, real lords in the capitals) and pays out cards.
+# 冒險模式：大地圖征服 (2026-11-15 meta remake). Authoring data only: no battle, UI, save files or
+# resource loading. Fifteen territories rebuilt for gate heavy armor, enlarged frontline radii,
+# lord-targeting sieges, unified status effects, and all 49 adventure-pool cards + 8 unlockable lords.
 const B = preload("res://balance.gd")
 const DeckStore = preload("res://deck_store.gd")
-const RogueCatalog = preload("res://roguelike_catalog.gd")
-# Regions of the map (a stage's "chapter" is its region).
 const CHAPTERS := [
 	{"name":"邊境","color":Color("6f8a45"),"at":Vector2(225,400)},
 	{"name":"麥田諸侯","color":Color("a8842c"),"at":Vector2(595,170)},
@@ -22,44 +19,122 @@ const ALL_LANES := [0,1,2,3,4]
 const MIDDLE_LANES := [1,2,3]
 # The four capitals whose fall opens the road to the royal seat.
 const CAPITALS := ["lion_keep","clock_tower","blood_chapel","dragon_vale"]
-# Side roads pay in lords (producer 2026-11-12): conquer a capital and its lord may lead our army,
-# bringing that faction's cards. A lord not in B.LORDS (yet) is simply not offered.
-const UNLOCK_LORDS := {"lion_keep":"lion","clock_tower":"mage","blood_chapel":"vampire","dragon_vale":"beast","royal_seat":"iron"}
+# Conquer regional strongholds and capitals to recruit all 8 other playable lords.
+const UNLOCK_LORDS := {
+	"granary_keep":"harvest",
+	"lion_keep":"lion",
+	"arcane_observatory":"rune",
+	"clock_tower":"mage",
+	"bone_crypt":"underworld",
+	"blood_chapel":"vampire",
+	"dragon_vale":"beast",
+	"royal_seat":"iron",
+}
 
-# One territory. The enemy's deck is its ruler's roguelike deck unless one is given.
-static func land(id: String, chapter: int, name: String, ruler: String, ai: int, at: Vector2, links: Array, rewards: Array, story: String, lanes: Array = ALL_LANES, buildings: Array = []) -> Dictionary:
+static func land(id: String, chapter: int, name: String, ruler: String, ai: int, at: Vector2, links: Array, enemy_deck: Array, rewards: Array, story: String, lanes: Array = ALL_LANES, buildings: Array = []) -> Dictionary:
 	return {"id":id,"chapter":chapter,"name":name,"lord":"adventure","kind":"conquer","ai":ai,"enemy_lord":ruler,"story":story,"goal":GOAL,
-		"deck":"player","enemy_deck":RogueCatalog.foe_deck(ruler),"active_lanes":lanes,"buildings":buildings,"map":at,"links":links,"rewards":rewards,
+		"deck":"player","enemy_deck":enemy_deck,"active_lanes":lanes,"buildings":buildings,"map":at,"links":links,"rewards":rewards,
 		"enemy_lord_active":true,"enemy_camp":false,"opening":false,"dialogue":true,"capital":id in CAPITALS}
 
 static var cache: Array = []
 static func stages() -> Array:
 	if not cache.is_empty(): return cache
 	cache = [
-		# The first lesson keeps its scripted farm raid: one lane, a bandit camp, no lords.
+		# 0. Opening scripted raid: teaches farming, defending and breaking the gate; awards armor-piercing & control tools.
 		{"id":"first_farm","chapter":0,"name":"第一塊農田","lord":"adventure","kind":"conquer","ai":0,"enemy_lord":"iron",
 			"story":"史官記：邊境小領主只想種田。可惜強盜把他的田也算成了自己的領地。","goal":GOAL,
 			"deck":["farmer","hunter","farmer","hunter","militia","farmer","hunter","militia"],
-			"enemy_deck":["bandit","bandit","bandit","bandit","bandit","bandit","bandit","bandit"],
+			"enemy_deck":["bandit","farmer","militia","farmer","farmer","bandit","farmer","militia"],
 			"active_lanes":[2],"buildings":[],"allow_duplicates":true,"map":Vector2(150,480),"links":["crossroads"],
-			"rewards":["mob","barricade","rain","scarecrow"],"enemy_lord_active":false,"enemy_camp":true,"opening":true,"dialogue":false,"capital":false},
-		land("crossroads",0,"十字驛站","bandit_chief",0,Vector2(300,480),["first_farm","ox_hill","rune_fields","raven_roost","fishbeak_shore"],["spearbow","shieldguard"],"史官記：四條路在此交會，每一條的盡頭都有人想當王。驛站目前歸一個嗓門很大的強盜。",MIDDLE_LANES),
-		land("ox_hill",1,"牧牛坡","ox_herder",1,Vector2(440,272),["crossroads","militia_pass"],["ox","harvest"],"史官記：此地的牛比人多，脾氣也比人大。"),
-		land("militia_pass",1,"民兵關","militia_captain",1,Vector2(590,240),["ox_hill","lion_keep","golem_works"],["levy","tower"],"史官記：守關的隊長已經忘了替誰守關，但他守得很認真。",MIDDLE_LANES,[[7,2,"tower"]]),
-		land("lion_keep",1,"紅獅堡","lion",2,Vector2(750,272),["militia_pass","royal_seat"],["knight","charge_horn","ram"],"史官記：紅獅領主自稱正統。他的理由是他的旗子最大。"),
-		land("rune_fields",2,"法陣原","trap_weaver",1,Vector2(460,400),["crossroads","golem_works"],["rolling_boulder","watchtower"],"史官記：原野上畫滿法陣。畫的人自己也不記得哪些會爆炸。"),
-		land("golem_works",2,"魔像工坊","golem_smith",1,Vector2(610,385),["rune_fields","clock_tower","militia_pass"],["manor_retainer"],"史官記：工坊日夜敲打，造出不吃不睡不領薪水的士兵。"),
-		land("clock_tower",2,"時鐘塔","mage",2,Vector2(770,400),["golem_works","royal_seat"],["mill"],"史官記：法師領主算出自己會當王。他沒算到有人不按時間表來。"),
-		land("raven_roost",3,"鴉巢","raven_mother",1,Vector2(460,560),["crossroads","bone_ford"],["bandit"],"史官記：鴉群專啄農田。牠們的巢裡有全國一半的湯匙。"),
-		land("bone_ford",3,"骸骨渡口","skeleton_king",1,Vector2(610,575),["raven_roost","blood_chapel","imp_market"],["healer"],"史官記：骷髏王主張論資排輩。他確實比誰都資深。",MIDDLE_LANES),
-		land("blood_chapel",3,"血契禮拜堂","vampire",2,Vector2(770,560),["bone_ford","royal_seat"],["drummer","guard"],"史官記：吸血領主的契約很公道：你出血，他出力。"),
-		land("fishbeak_shore",4,"魚喙灘","fishbeak_boss",1,Vector2(440,690),["crossroads","imp_market"],["net_hunter"],"史官記：灘上的怪物說不清是魚是鳥，但牠們沒繳過稅。"),
-		land("imp_market",4,"鬍子魔集市","imp_thief",1,Vector2(590,712),["fishbeak_shore","dragon_vale","bone_ford"],["axe_thrower"],"史官記：集市今日特價——你的錢袋。"),
-		land("dragon_vale",4,"龍骨谷","dragon_lord",2,Vector2(750,690),["imp_market","royal_seat"],["catapult","fire"],"史官記：骨刺龍王不說話。牠背上的每一根刺都替牠說了。"),
-		land("royal_seat",5,"王都","iron",2,Vector2(935,480),["lion_keep","clock_tower","blood_chapel","dragon_vale"],[],"史官記：鐵壁領主守著空王座。四座首府都換了顏色，城牆才會為人打開。"),
+			"rewards":["mob","scarecrow","gatebreaker","rain"],"enemy_lord_active":false,"enemy_camp":true,"opening":true,"dialogue":false,"capital":false},
+		# 1. Frontier hub: introduces 3-lane combat with pitchfork mob swarms and lane-switching threats (fishbeak & scarecrow).
+		land("crossroads",0,"哨堡十字路","militia_captain",0,Vector2(300,480),
+			["first_farm","smithy_ridge","beacon_ford","belfry_fen","nest_wastes"],
+			["farmer","hunter","mob","fishbeak","scarecrow","drummer","watchtower","supply_depot"],
+			["macebreaker","watchtower","shieldguard","barricade"],
+			"史官記：哨堡前分出三路：乾草叉暴民三路齊衝，稻草人與魚喙怪逼人換路支援。守住三路才能出關。",
+			MIDDLE_LANES),
+		# Region 1: North Wheatlands (Armor, Firearms, Economy & Heavy Sieges)
+		land("smithy_ridge",1,"鐵匠坡","card_enemy_field_smithy",1,Vector2(440,272),
+			["crossroads","granary_keep"],
+			["field_smithy","shieldguard","militia","arquebusier","hunter","farmer","healer","counter_charge"],
+			["field_smithy","arquebusier","counter_charge","mule_cart"],
+			"史官記：鐵匠鋪的爐火日夜不熄，敲出的鎧甲連弓箭都彈得開，只有重錘與破甲火器咬得動。"),
+		land("granary_keep",1,"豐收莊園","harvest",1,Vector2(590,240),
+			["smithy_ridge","lion_keep","arcane_observatory"],
+			["farmer","granary","militia","manor_retainer","hunter","watchtower","harvest","rain"],
+			["granary","harvest","manor_retainer","ox"],
+			"史官記：豐收領主坐擁滿倉麥糧與守備高塔，最擅長拖成一場比誰口袋更深的消耗戰。",
+			MIDDLE_LANES,[[7,2,"granary"]]),
+		land("lion_keep",1,"紅獅堡","lion",2,Vector2(750,272),
+			["granary_keep","royal_seat"],
+			["knight","disgraced_lancer","charge_horn","militia","arquebusier","ram","supply_depot","spearbow"],
+			["knight","disgraced_lancer","charge_horn"],
+			"史官記：紅獅領主統率重裝騎士與攻城槌。破門之後，連領主本人都是攻城槌的目標。",
+			ALL_LANES,[[6,2,"supply_depot"]]),
+		# Region 2: Magic Spire (Displacement, Traps, Anti-Magic & Time Freeze)
+		land("beacon_ford",2,"折躍哨所","card_enemy_warp_beacon",1,Vector2(460,400),
+			["crossroads","arcane_observatory"],
+			["warp_beacon","rune_sentinel","prism_mage","teleport_trap","summon_trap","blink_blade","mana_drain","arcane_shield"],
+			["spellbreaker","flaming_pitch","drummer","spearbow"],
+			"史官記：折躍信標每隔片刻便把前排震退，地上還畫滿傳送與召獸法陣，專治衝得太急的部隊。",
+			ALL_LANES,[[7,1,"teleport_trap"],[7,3,"summon_trap"]]),
+		land("arcane_observatory",2,"符文觀測台","rune",1,Vector2(610,385),
+			["beacon_ford","clock_tower","granary_keep"],
+			["artificer","arcane_golem","orrery_walker","arcane_archer","spell_mirror","observatory","rune_workshop","chain_lightning"],
+			["rolling_boulder","tower","supply_depot","twin_gambler"],
+			"史官記：符文領主在每一路前緣布滿法陣，星儀光束與貫星箭矢能一路穿死整排後排。",
+			ALL_LANES,[[7,2,"observatory"]]),
+		land("clock_tower",2,"時鐘塔","mage",2,Vector2(770,400),
+			["arcane_observatory","royal_seat"],
+			["arcane_golem","blink_blade","arcane_archer","gravity_well","chain_lightning","time_field","mirror_clone","aether_hound"],
+			["mill","levy","assassin","ballista_tower"],
+			"史官記：法師領主用重力井聚敵、鏡像複製重裝魔像，並在鐘響時凝滯全場時間。",
+			ALL_LANES),
+		# Region 3: Dark Marsh (Poison/Cleanse, Giant Bonewall, Ravens & Blood Pacts)
+		land("belfry_fen",3,"疫沼鐘樓","card_enemy_sleepless_belfry",1,Vector2(460,560),
+			["crossroads","bone_crypt"],
+			["skeleton","pallbearer","mourning_maid","funeral_grenadier","ossuary","sleepless_belfry","sealed_coffin","raven"],
+			["healer","old_witch","vampire_hunter","net_hunter"],
+			"史官記：沼澤裡鐘聲不斷，不眠鐘樓替亡者淨化毒霧，喪鐘侍女則讓來犯者舉步維艱。"),
+		land("bone_crypt",3,"白骨冥府","underworld",1,Vector2(610,575),
+			["belfry_fen","blood_chapel","nest_market"],
+			["skeleton","corpse_giant","pallbearer","mourning_maid","bandit","farmer","barricade","rain"],
+			["bandit","hook_collector","ram"],
+			"史官記：三千血的巨型骨牆擋在渡口，身後是腐屍巨人與源源不絕的骷髏亡者。",
+			ALL_LANES,[[7,2,"bonewall"]]),
+		land("blood_chapel",3,"血契禮拜堂","vampire",2,Vector2(770,560),
+			["bone_crypt","royal_seat"],
+			["blood_attendant","ghoul","reaper","shroud_arbalist","raven","blood_tower","mourning_shroud","sacrifice"],
+			["guard","axe_thrower"],
+			"史官記：吸血領主簽下鮮血盟約後愈戰愈厚，烏鴉群還會繞過防線直撲我方領主。",
+			ALL_LANES,[[7,1,"blood_altar"],[7,3,"blood_tower"]]),
+		# Region 4: Beast Wastes (Glutton Nests, Giant Bodies, Thorns & Anti-Beast)
+		land("nest_wastes",4,"貪食荒灘","card_enemy_glutton_nest",1,Vector2(440,690),
+			["crossroads","nest_market"],
+			["pouch_beast","parasite_mite","web_spinner","fishbeak","hooknose_flyer","imp_bomb_runner","monster_hatchery","wing_gust"],
+			["halberdier","monster_hunter"],
+			"史官記：荒灘上的巢穴會忍住貪慾，等孤軍自己走進嘴裡才張口；只有足夠火力能趁張嘴時劈碎它。"),
+		land("nest_market",4,"野豬戰寨","card_enemy_tusk_boar",0,Vector2(590,712),
+			["nest_wastes","dragon_vale","bone_crypt"],
+			["tusk_boar","bramble_wall","corrosive_bile","farmer","hunter","militia","scarecrow","barricade"],
+			["powder_barrel","beekeeper","gold_monster"],
+			"史官記：野豬人撞暈前排、地刺高牆帶反傷，酸雨還會腐蝕護盾與護甲。",
+			ALL_LANES),
+		land("dragon_vale",4,"龍骨谷","beast",2,Vector2(750,690),
+			["nest_market","royal_seat"],
+			["thorn_dragon","bog_troll","dire_hydra","eyewing_dragon","long_dragon","belly_eye","devouring_maw","feral_mutation"],
+			["catapult","fire"],
+			"史官記：巨大化的魔物佔滿視線：骨刺龍鎮守前排、眼翼龍吼退兵線再疾馳追殺。",
+			ALL_LANES),
+		# 5. Finale: Iron Fortress
+		land("royal_seat",5,"王都","iron",2,Vector2(935,480),
+			["lion_keep","clock_tower","blood_chapel","dragon_vale"],
+			["knight","macebreaker","manor_retainer","arquebusier","healer","ram","barricade","counter_charge"],
+			[],
+			"史官記：重甲城牆、鐵匠鋪與雙座重弩塔守護著空王座。四座首府換上紅旗，最後的決戰才算開始。",
+			ALL_LANES,[[7,1,"ballista_tower"],[7,2,"field_smithy"],[7,3,"ballista_tower"]]),
 	]
-	# The first outpost teaches a mixed force, not the roguelike chief's repeated ambush rush.
-	cache[1].enemy_deck = ["bandit","militia","hunter","farmer","healer","scarecrow","barricade","rain"]
 	cache[cache.size()-1].needs = CAPITALS
 	return cache
 

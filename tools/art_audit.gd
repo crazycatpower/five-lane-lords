@@ -31,6 +31,7 @@ func run() -> void:
  DirAccess.make_dir_recursive_absolute("res://docs/art-audit")
  var game = load("res://main.tscn").instantiate()
  root.add_child(game)
+ game.load_all_art()
  game.set_physics_process(false)
  game.set_process(false)
  game.fx_enabled = true

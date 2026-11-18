@@ -66,8 +66,9 @@ func observe(g) -> void:
 	if not attacked and m.units.any(func(u: Dictionary) -> bool: return u.team == 0 and u.kind == "farmer" and u.hp < u.max_hp):
 		attacked = true
 	killed = not m.units.any(func(u: Dictionary) -> bool: return u.team == 0 and u.kind == "farmer" and u.hp > 0)
-	burned = m.count_buildings(0,"farm") == 1
-	var at_village: bool = m.units.any(func(u: Dictionary) -> bool: return u.team == 1 and u.hp > 0 and u.pos.x <= L.cell_center(Vector2i(0,2)).x+B.MELEE_RANGE+5)
+	burned = m.count_buildings(0,"farm") <= 1
+	var reach: float = L.cell_center(Vector2i(0,2)).x+B.MELEE_RANGE+B.UNIT_BODY_RADIUS+B.kind_radius("farm")+5.0
+	var at_village: bool = m.units.any(func(u: Dictionary) -> bool: return u.team == 1 and u.hp > 0 and u.pos.x <= reach)
 	if killed and burned and at_village:
 		arrived = true
 		arrived_at = time
@@ -104,6 +105,7 @@ func paint(g) -> void:
 	for b: Dictionary in m.buildings:
 		g.draw_combat_actor(b.kind,b,b.pos,1.0 if b.team == 0 else -1.0)
 		if b.hp < b.max_hp: g.bar(Rect2(b.pos-Vector2(30,40),Vector2(60,5)),b.hp,b.max_hp,g.RED if b.team == 0 else g.BLUE)
+		if b.kind == "farm": g.draw_farm_overlay(b)
 	g.layout_formations()
 	var visible: Array = m.units.filter(func(u: Dictionary) -> bool: return u.hp > 0 and u.get("spawn_delay",0.0) <= 0)
 	for u: Dictionary in visible:
@@ -132,7 +134,7 @@ func paint(g) -> void:
 	for a: Dictionary in m.projectiles: g.draw_line(a.pos-Vector2(12,0),a.pos,g.INK,2)
 	g.draw_effects()
 	if not active and g.model.cell_at(g.get_global_mouse_position()).y == 2: g.draw_preview()
-	g.draw_hud(true)
+	g.draw_hud(true, active)
 	paint_status(g)
 	# Replace the five-gate summary with this stage's single objective.
 	for team: int in range(2):
@@ -145,11 +147,12 @@ func paint(g) -> void:
 		var speaker := "農民"
 		var speaker_color := Color("4a7838")
 		var words := "這茬麥子長得真不賴。"
+		var need_cultivate: int = int(B.CARDS.farmer.count)*2
 		if time >= 2.5 and time < 6.5:
 			words = "前面還有一塊，耕完收工。"
-		elif time >= 6.5 and m.stats[0].cultivated < 6:
+		elif time >= 6.5 and m.stats[0].cultivated < need_cultivate:
 			words = "快了，最後幾鋤頭。"
-		elif m.stats[0].cultivated >= 6 and not attacked and not killed:
+		elif m.stats[0].cultivated >= need_cultivate and not attacked and not killed:
 			words = "搞定！……等等，草裡有人？"
 		elif attacked and not killed:
 			speaker = "強盜"
@@ -182,7 +185,6 @@ func paint(g) -> void:
 		# Subtitle / Hint
 		var hint := "空白鍵暫停" if active else "選牌部署在我方領地，開始反攻"
 		g.draw_string(g.font,Vector2(box.position.x+18,box.position.y+65),hint,HORIZONTAL_ALIGNMENT_LEFT,box.size.x-36,14,Color("796344"))
-		if active: g.draw_rect(Rect2(410,725,790,158),Color(0.2,0.17,0.12,0.45))
 	if m.ended: g.draw_result()
 	elif m.paused:
 		g.panel(L.OVERLAY_RECT)
@@ -192,6 +194,7 @@ func paint(g) -> void:
 			g.draw_string(g.font,item[0].position+Vector2(0,27),item[1],HORIZONTAL_ALIGNMENT_CENTER,item[0].size.x,20,g.INK)
 
 func paint_status(g) -> void:
+	if active: return
 	var m = g.model
 	if not arrived:
 		g.panel(g.SKILL_RECT,Color("bcb19a"))

@@ -1,18 +1,22 @@
 extends RefCounted
 # Scene-shaped controls reuse manuscript art; all labels remain real, focusable UI.
 static func build(g) -> void:
+	if not OS.has_feature("web"):
+		g.title_button(Rect2(955,700,480,46),"錄影模式",func(): preload("res://recording_mode.gd").open(g))
 	g.adventure.load_progress()
-	entry(g,Rect2(955,250,480,96),"冒險模式",g.show_adventure,36)
-	entry(g,Rect2(955,414,480,38),"自由對戰",func(): g.spectating = false; g.start_battle(),24)
-	entry(g,Rect2(955,496,480,38),"肉鴿模式",g.show_rogue,24)
-	entry(g,Rect2(955,578,480,38),"觀戰模式",g.show_watch,24)
-	entry(g,Rect2(955,660,480,38),"連線對戰",g.show_net,24)
+	entry(g,Rect2(955,210,480,96),"對戰（尋找對手）",g.show_net,34)
+	entry(g,Rect2(955,390,480,42),"冒險模式",g.show_adventure,25)
+	entry(g,Rect2(955,513,480,38),"肉鴿模式",g.show_rogue,24)
+	entry(g,Rect2(955,607,480,38),"觀戰模式",g.show_watch,24)
 	entry(g,Rect2(100,720,280,85),"牌組編成",g.show_deck,28)
 	entry(g,Rect2(448,720,280,85),"卡牌圖鑑",func(): g.library.open(),28)
-	g.title_button(Rect2(1085,190,230,42),"對戰難度："+["簡單","普通","困難"][g.difficulty],func(): g.difficulty = (g.difficulty+1)%3; g.show_title())
-	g.title_button(Rect2(941,770,170,46),"操作說明",g.show_help)
-	g.title_button(Rect2(1127,770,150,46),"設定",g.show_settings)
-	g.title_button(Rect2(1293,770,150,46),"離開",func(): g.get_tree().quit())
+	if OS.has_feature("web"):
+		g.title_button(Rect2(955,770,230,46),"操作說明",g.show_help)
+		g.title_button(Rect2(1205,770,230,46),"設定",g.show_settings)
+	else:
+		g.title_button(Rect2(941,770,170,46),"操作說明",g.show_help)
+		g.title_button(Rect2(1127,770,150,46),"設定",g.show_settings)
+		g.title_button(Rect2(1293,770,150,46),"離開",func(): g.get_tree().quit())
 static func entry(g, r: Rect2, caption: String, action: Callable, size: int) -> void:
 	var b: Button = g.title_button(r,caption,action)
 	b.add_theme_font_size_override("font_size",size)
@@ -44,9 +48,9 @@ static func adventure_progress(g, y: float) -> void:
 	var next: int = a.frontier()
 	var done: int = a.cleared_count()
 	var line := "地圖已一統！可以再打一次" if done == count else "領地 %d / %d · 下一塊：「%s」" % [done,count,a.STAGES[next].name]
-	g.draw_string(g.font,Vector2(955,y+106),line,HORIZONTAL_ALIGNMENT_CENTER,480,18,Color("fff5df"))
+	g.draw_string(g.font,Vector2(955,y+62),line,HORIZONTAL_ALIGNMENT_CENTER,480,17,Color("fff5df"))
 	for i: int in range(count):
-		var p := Vector2(1195+(i-(count-1)/2.0)*30,y+131)
+		var p := Vector2(1195+(i-(count-1)/2.0)*30,y+84)
 		if i == next and done < count: g.draw_circle(p,11,Color("f4d78c"))
 		g.draw_circle(p,8,Color("6e2a20") if a.is_cleared(i) else Color(0.95,0.88,0.7,0.35))
 		g.draw_arc(p,8,0,TAU,20,Color("e5cda1"),1.5,true)
@@ -76,17 +80,17 @@ static func paint(g) -> void:
 	g.title_soldier("lord_"+g.player_lord,Vector2(409,649),0,1.55)
 	g.title_soldier("reaper",Vector2(596,649),1,1.55)
 	# Banners hang from one campaign standard, rather than a panel of identical buttons.
-	g.draw_line(Vector2(914,151),Vector2(914,705),Color("604831"),9,true)
+	g.draw_line(Vector2(914,151),Vector2(914,692),Color("604831"),9,true)
 	g.draw_line(Vector2(914,154),Vector2(1487,154),Color("604831"),8,true)
 	g.draw_circle(Vector2(914,143),13,Color("b58a43"))
 	g.draw_circle(Vector2(1487,154),7,Color("b58a43"))
 	g.draw_string(g.font,Vector2(964,125),"五路戰線 · 一卷戰史",HORIZONTAL_ALIGNMENT_CENTER,480,27,g.INK)
-	banner(g,240,160,Color("963f30"),"")
-	adventure_progress(g,240)
-	banner(g,412,74,Color("3b5662"),"用你的牌組對戰 AI",14.0)
-	banner(g,494,74,Color("8a5a2b"),"八場連戰、邊打邊換牌，輸一場就結束",14.0)
-	banner(g,576,74,Color("4c5032"),"兩邊都交給 AI，看牌組怎麼打",14.0)
-	banner(g,658,72,Color("6b3f5e"),"輸入 IP，和朋友對戰",14.0)
+	banner(g,200,172,Color("963f30"),"搜尋線上對手 · 不足補 AI · 自由練習／好友房",20.0)
+	g.draw_string(g.font,Vector2(955,322),"出征領主：%s · 牌組 %d 張" % [g.B.LORDS[g.player_lord].name,g.player_deck.size()],HORIZONTAL_ALIGNMENT_CENTER,480,18,Color("fff5df"))
+	banner(g,386,110,Color("3b5662"),"")
+	adventure_progress(g,386)
+	banner(g,510,80,Color("8a5a2b"),"八場連戰、邊打邊換牌，輸一場就結束",16.0)
+	banner(g,604,80,Color("4c5032"),"兩邊都交給 AI，看牌組怎麼打",16.0)
 	g.draw_string(g.font,Vector2(951,752),"出征領主 · "+g.B.LORDS[g.player_lord].name,HORIZONTAL_ALIGNMENT_CENTER,490,19,g.INK)
 	book(g,88,"軍備名冊")
 	book(g,436,"萬物與軼聞")

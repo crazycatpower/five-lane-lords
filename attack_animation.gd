@@ -33,12 +33,12 @@ func observe(model: RefCounted) -> void:
 		if actor.hp <= 0: continue
 		var id := key(actor)
 		alive[id] = model.actor_time(actor)
-		var timers := [float(actor.get("cd",0)),float(actor.get("heal_cd",0)),float(actor.get("summon_left",0)),float(actor.get("drum_cd",0))]
-		if not previous.has(id): previous[id] = [0.0,0.0,0.0,0.0]
+		var timers := [float(actor.get("cd",0)),float(actor.get("heal_cd",0)),float(actor.get("summon_left",0)),float(actor.get("drum_cd",0)),float(actor.get("strike_seq",0))]
+		if not previous.has(id): previous[id] = [0.0,0.0,0.0,0.0,0.0]
 		for i: int in range(timers.size()):
 			if timers[i] > previous[id][i]+0.0001:
 				var kind: String = "lord_"+actor.lord if actor.kind == "lord" else actor.kind
-				var mode := style(kind) if i == 0 else ("drum" if i == 3 else "cast")
+				var mode := style(kind) if (i == 0 or i == 4) else ("drum" if i == 3 else "cast")
 				clips[id] = {"start":model.actor_time(actor),"duration":clampf(timers[i]*0.92,0.28,0.42) if mode == "cleave" else clampf(timers[i]*0.7,0.16,0.42),"style":mode}
 				break
 		previous[id] = timers

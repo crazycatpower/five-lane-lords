@@ -192,7 +192,7 @@ func update(game) -> void:
 		ending.begin(game)
 		return
 	var first_crowning: bool = won and STAGES[index].id == "royal_seat" and not is_cleared(index)
-	settle(won,"")
+	settle(won,"（天亮平手）" if m.winner < 0 else "")
 	if first_crowning:
 		finale.show(game)
 		return
@@ -205,7 +205,7 @@ func active_story():
 	return road_story
 
 func settle(won: bool, reason: String) -> void:
-	outcome = ("征服「%s」！" % STAGES[index].name) if won else "進攻失敗"+reason
+	outcome = ("征服「%s」！" % STAGES[index].name) if won else ("進攻「%s」失敗%s" % [STAGES[index].name,reason])
 	if won and not is_cleared(index):
 		cleared[STAGES[index].id] = true
 		save_progress()
@@ -232,19 +232,20 @@ func show(game) -> void:
 		b.tooltip_text = "%s · %s" % [STAGES[i].name,ruler_name(i)]
 	var d: Dictionary = STAGES[selected]
 	var words: String = d.story
-	if B.is_minion(d.enemy_lord) and not d.enemy_camp: words += "\n守將特性："+B.minion_text(d.enemy_lord)
+	if B.is_minion(d.enemy_lord) and not d.enemy_camp: words += "\n守將特性：%s\n守將技能：%s" % [B.minion_text(d.enemy_lord), B.skill_text(d.enemy_lord)]
 	elif not d.enemy_camp: words += "\n守將技能："+B.LORDS[d.enemy_lord].skill
-	game.library.text_box(Rect2(SIDE.position.x+30,SIDE.position.y+236,SIDE.size.x-60,118),words,18)
+	game.library.text_box(Rect2(SIDE.position.x+30,SIDE.position.y+212,SIDE.size.x-60,98),words,18)
 	if unlocked(selected):
 		var caption := "再打一次" if is_cleared(selected) else "出征"
 		if d.deck is String:
-			game.title_button(Rect2(SIDE.position.x+60,SIDE.position.y+516,SIDE.size.x-120,44),"%s · 編成牌組（%d 張可選）" % [B.lord_name(lord).trim_suffix("領主"),card_pool().size()],func(): open_adventure_deck(game))
-			game.title_button(Rect2(SIDE.position.x+60,SIDE.end.y-72,SIDE.size.x-120,52),caption,func():
-				if stage_deck(game,selected).size() != 8: open_adventure_deck(game)
+			if card_pool().size() > 8:
+				game.title_button(Rect2(SIDE.position.x+60,SIDE.position.y+532,SIDE.size.x-120,42),"%s · 編成牌組（%d 張可選）" % [B.lord_name(lord).trim_suffix("領主"),card_pool().size()],func(): open_adventure_deck(game))
+			game.title_button(Rect2(SIDE.position.x+60,SIDE.end.y-66,SIDE.size.x-120,48),caption,func():
+				if card_pool().size() > 8 and stage_deck(game,selected).size() != 8: open_adventure_deck(game)
 				else: start(game,selected)
 			,true)
 		else:
-			game.title_button(Rect2(SIDE.position.x+60,SIDE.end.y-72,SIDE.size.x-120,52),caption,func(): start(game,selected),true)
+			game.title_button(Rect2(SIDE.position.x+60,SIDE.end.y-66,SIDE.size.x-120,48),caption,func(): start(game,selected),true)
 	game.title_button(Rect2(100,820,230,46),"返回標題",game.show_title)
 	game.queue_redraw()
 
@@ -324,30 +325,30 @@ func paint_side(g) -> void:
 	g.panel(SIDE,Color("efe0bd"))
 	g.ink_frame(SIDE.grow(-8))
 	var chapter: Dictionary = CHAPTERS[d.chapter]
-	g.draw_string(g.font,Vector2(x,y+46),chapter.name+("首府" if d.capital else "")+(" · 已是我方領地" if is_cleared(selected) else ""),HORIZONTAL_ALIGNMENT_CENTER,w,20,chapter.color)
-	g.draw_string(g.font,Vector2(x,y+94),d.name,HORIZONTAL_ALIGNMENT_CENTER,w,36,g.INK)
+	g.draw_string(g.font,Vector2(x,y+40),chapter.name+("首府" if d.capital else "")+(" · 已是我方領地" if is_cleared(selected) else ""),HORIZONTAL_ALIGNMENT_CENTER,w,20,chapter.color)
+	g.draw_string(g.font,Vector2(x,y+82),d.name,HORIZONTAL_ALIGNMENT_CENTER,w,36,g.INK)
 	var portrait: Texture2D = g.art("bandit",1) if d.enemy_camp else g.lord_art(d.enemy_lord,1)
-	g.draw_fitted(portrait,Rect2(x+34,y+108,110,120),Color.WHITE,true)
-	g.label_at(Vector2(x+164,y+146),"守將　"+ruler_name(selected),22)
-	g.label_at(Vector2(x+164,y+178),"強度　"+["簡單","普通","困難"][d.ai],20,Color("6f5a3e"))
-	g.label_at(Vector2(x+164,y+208),"戰場　%d 路" % d.active_lanes.size(),20,Color("6f5a3e"))
+	g.draw_fitted(portrait,Rect2(x+34,y+94,102,110),Color.WHITE,true)
+	g.label_at(Vector2(x+156,y+130),"守將　"+ruler_name(selected),22)
+	g.label_at(Vector2(x+156,y+160),"強度　"+["簡單","普通","困難"][d.ai],20,Color("6f5a3e"))
+	g.label_at(Vector2(x+156,y+188),"戰場　%d 路" % d.active_lanes.size(),20,Color("6f5a3e"))
 	# The ruler's eight cards.
-	g.label_at(Vector2(x+30,y+378),"守軍",18)
+	g.label_at(Vector2(x+30,y+328),"守軍",18)
 	for i: int in range(d.enemy_deck.size()):
-		var cell := Rect2(x+30+i*51,y+388,47,50)
+		var cell := Rect2(x+30+i*51,y+338,47,50)
 		g.panel(cell,Color("f6ead0"))
-		g.draw_fitted(g.art(B.CARDS[d.enemy_deck[i]].get("art",[d.enemy_deck[i]])[0],1),cell.grow(-3),Color.WHITE,true)
+		g.draw_fitted(g.art(g.card_art_kinds(d.enemy_deck[i])[0],1),cell.grow(-3),Color.WHITE,true)
 	# What conquering it pays.
-	g.label_at(Vector2(x+30,y+466),"征服獎勵",18,g.RED)
-	if d.rewards.is_empty(): g.label_at(Vector2(x+124,y+466),"王座" if selected == STAGES.size()-1 else "無",18)
+	g.label_at(Vector2(x+30,y+416),"征服獎勵",18,g.RED)
+	if d.rewards.is_empty(): g.label_at(Vector2(x+124,y+416),"王座" if selected == STAGES.size()-1 else "無",18)
 	for i: int in range(d.rewards.size()):
-		var cell := Rect2(x+30+(i%2)*200,y+478+(i/2)*50,192,46)
+		var cell := Rect2(x+30+(i%2)*200,y+428+(i/2)*48,192,44)
 		g.panel(cell,Color("f6ead0") if not is_cleared(selected) else Color("e4d6b4"))
-		g.draw_fitted(g.art(B.CARDS[d.rewards[i]].get("art",[d.rewards[i]])[0]),Rect2(cell.position+Vector2(3,2),Vector2(42,46)),Color.WHITE,true)
+		g.draw_fitted(g.art(g.card_art_kinds(d.rewards[i])[0]),Rect2(cell.position+Vector2(3,2),Vector2(40,40)),Color.WHITE,true)
 		var name: String = B.CARDS[d.rewards[i]].name
-		g.draw_string(g.font,cell.position+Vector2(46,30),name,HORIZONTAL_ALIGNMENT_CENTER,140,17,g.INK)
+		g.draw_string(g.font,cell.position+Vector2(46,28),name,HORIZONTAL_ALIGNMENT_CENTER,140,17,g.INK)
 	var prize: String = Catalog.UNLOCK_LORDS.get(d.id,"")
-	if B.LORDS.has(prize): g.label_at(Vector2(x+150,y+466),("可出戰：" if is_cleared(selected) else "解鎖領主：")+B.lord_name(prize),16,g.RED)
+	if B.LORDS.has(prize): g.label_at(Vector2(x+(184 if d.rewards.is_empty() else 124),y+416),("可出戰：" if is_cleared(selected) else "解鎖領主：")+B.lord_name(prize),16,g.RED)
 	if not unlocked(selected):
 		var needs: Array = d.get("needs",[])
 		var held: int = needs.filter(func(id: String) -> bool: return cleared.has(id)).size()

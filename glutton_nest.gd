@@ -1,22 +1,25 @@
 extends RefCounted
 const B = preload("res://balance.gd")
+const L = preload("res://layout.gd")
 
 static func hidden(actor: Dictionary) -> bool:
 	return actor.get("kind","") == "glutton_nest" and actor.get("digest_left",0.0) <= 0.0 and actor.get("nest_windup",0.0) <= 0.0
 
-static func gold_for_health(health: float) -> int:
-	var d: Dictionary = B.CARDS.glutton_nest
-	# Arithmetic progression: 100, 220, 360, 520... cumulative HP.
-	var half_step: float = d.gold_step / 2.0
-	var linear: float = d.gold_first-half_step
+static func gold_for_health(health: float, d: Dictionary = B.CARDS.glutton_nest) -> int:
+	# Arithmetic progression: gold_first, gold_first + gold_step... cumulative HP.
+	var half_step: float = float(d.gold_step) / 2.0
+	var linear: float = float(d.gold_first)-half_step
 	return maxi(0,int(floor((sqrt(linear*linear+4.0*half_step*maxf(0.0,health))-linear)/(2.0*half_step))))
 
 static func digestion_time(gold: int) -> float:
 	var d: Dictionary = B.CARDS.glutton_nest
 	return d.digest_time + maxi(0,gold)*d.digest_per_gold
 
+static func edible_unit(u: Dictionary) -> bool:
+	return u.hp > 0 and u.get("kind","") != "lord" and not u.has("cell") and not u.get("phased",false) and not B.CARDS.get(u.kind,{}).get("flying",false)
+
 static func edible(u: Dictionary) -> bool:
-	return u.get("kind","") != "lord" and not u.has("cell") and u.hp > 0 and u.get("spawn_delay",0.0) <= 0 and not u.get("phased",false) and not B.CARDS.get(u.kind,{}).get("flying",false)
+	return edible_unit(u) and u.get("spawn_delay",0.0) <= 0
 
 static func update(m, b: Dictionary, dt: float) -> bool:
 	if b.kind != "glutton_nest": return false
@@ -36,7 +39,7 @@ static func update(m, b: Dictionary, dt: float) -> bool:
 		return true
 	if b.get("nest_windup",0.0) <= 0:
 		for u: Dictionary in m.units:
-			if edible(u) and u.pos.distance_to(b.pos) <= d.trigger_radius:
+			if edible(u) and B.point_edge_distance(b.pos,u) <= d.trigger_radius:
 				b.nest_windup = d.windup
 				m.event("nest_windup",b.pos,b.team)
 				m.build_lookups()
@@ -47,12 +50,14 @@ static func update(m, b: Dictionary, dt: float) -> bool:
 	# Recheck at impact: units can flee or enter the mouth during the tell.
 	var victims: Array[Dictionary] = []
 	for u: Dictionary in m.units:
-		if edible(u) and u.pos.distance_to(b.pos) <= d.radius: victims.append(u)
+		if edible(u) and B.point_edge_distance(b.pos,u) <= d.radius: victims.append(u)
+	var cap: float = d.get("bite_cap",500.0)
 	var health := 0.0
 	for u: Dictionary in victims:
-		health += u.hp
+		var dealt: float = cap if u.hp > cap else u.hp
+		health += dealt
 		# Sacrifice bypasses armour, shields and lethal-hit rescue, but preserves death accounting.
-		m.damage(u,u.hp,b.team,b.kind,{},true)
+		m.damage(u,dealt,b.team,b.kind,{},true)
 		m.link(u.pos,b.pos,b.team,"devour")
 	b.meal_health = health
 	b.last_gold = gold_for_health(health)
@@ -107,7 +112,98 @@ static func draw_body(g, b: Dictionary, pos: Vector2, rect: Rect2, texture: Stri
 	var bottom := pos+Vector2(rect.get_center().x,rect.end.y)
 	g.draw_texture_rect(g.art(texture,b.team),Rect2(bottom-Vector2(size.x*0.5,size.y),size),false)
 
-static func ai_score(c: Dictionary, s: Dictionary, _target_lane: int, defend: int) -> float:
+static func unit_building_damage(u: Dictionary, ud: Dictionary, first_hit: bool = false) -> float:
+	var dmg: float = u.get("damage",ud.get("damage",0.0))
+	if u.kind == "ox":
+		dmg = (B.OX_CHARGE if (first_hit and not u.get("charged",false)) else dmg)*B.OX_BUILDING_BONUS
+	return dmg*ud.get("structure_mult",1.0)
+
+static func safe_coverage(s: Dictionary) -> Dictionary:
+	var team: int = s.team
+	var forward := 1.0 if team == 0 else -1.0
+	var d: Dictionary = B.CARDS.glutton_nest
+	var covered := {}
+	var bait_lanes := [false,false,false,false,false]
+	var bait_pos := [INF,INF,INF,INF,INF]
+	var has_armed_nest := false
+	for b: Dictionary in s.buildings:
+		if b.hp > 0 and b.team == team and b.kind == "glutton_nest" and (hidden(b) or b.get("nest_windup",0.0) > 0.0):
+			has_armed_nest = true
+			break
+	if not has_armed_nest:
+		return {"covered":covered,"bait_lanes":bait_lanes,"bait_pos":bait_pos}
+	var max_approach: float = 4.5*L.CELL_SIZE.x
+	for lane: int in s.get("active_lanes",[0,1,2,3,4]):
+		var nests: Array[Dictionary] = []
+		for b: Dictionary in s.buildings:
+			if b.hp > 0 and b.team == team and b.kind == "glutton_nest" and b.cell.y == lane and (hidden(b) or b.get("nest_windup",0.0) > 0.0):
+				nests.append(b)
+		if nests.is_empty(): continue
+		nests.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return (a.pos.x-b.pos.x)*forward > 0)
+		var claimed := {}
+		for b: Dictionary in nests:
+			var r_nest: float = B.actor_radius(b)
+			var winding: bool = b.get("nest_windup",0.0) > 0.0
+			var windup_dur: float = b.nest_windup if winding else d.windup
+			var t_trigger := 0.0 if winding else INF
+			var close_approach := winding
+			if not winding:
+				for u: Dictionary in s.units:
+					if not edible_unit(u) or u.lane != lane: continue
+					var u_speed: float = maxf(1.0,u.get("speed",B.CARDS.get(u.kind,{}).get("speed",40.0)))
+					var edge_now: float = B.point_edge_distance(b.pos,u)
+					if u.team != team:
+						if claimed.has(u.get("id",-1)): continue
+						if (u.pos.x-b.pos.x)*forward < -d.trigger_radius or edge_now > max_approach: continue
+						t_trigger = minf(t_trigger,maxf(0.0,edge_now-d.trigger_radius)/u_speed)
+					else:
+						# Friendly ground troops behind an armed nest trigger it early as they walk over it.
+						if (b.pos.x-u.pos.x)*forward >= -d.trigger_radius and edge_now <= d.radius+u_speed*5.0:
+							t_trigger = minf(t_trigger,maxf(0.0,edge_now-d.trigger_radius)/u_speed)
+			if is_inf(t_trigger): continue
+			var windup_damage := 0.0
+			var will_eat: Array[Dictionary] = []
+			for u: Dictionary in s.units:
+				if u.hp <= 0 or u.team == team or u.lane != lane or claimed.has(u.get("id",-1)): continue
+				var ud: Dictionary = B.CARDS.get(u.kind,{})
+				var u_speed: float = maxf(1.0,u.get("speed",ud.get("speed",40.0)))
+				var u_range: float = u.get("range",ud.get("range",0.0))
+				var ahead: float = (u.pos.x-b.pos.x)*forward
+				var edge_now: float = B.point_edge_distance(b.pos,u)
+				if ahead < -(u_range+r_nest+B.actor_radius(u)): continue
+				var dist_at_trig: float = edge_now+u_speed*t_trigger if ahead < 0.0 else maxf(0.0,edge_now-u_speed*t_trigger)
+				var stop_edge: float = u_range+r_nest
+				var min_range: float = ud.get("min_range",0.0)
+				if dist_at_trig >= min_range:
+					var walk_time: float = maxf(0.0,dist_at_trig-stop_edge)/u_speed
+					if walk_time < windup_dur:
+						var active: float = windup_dur-walk_time
+						var first_delay: float = maxf(0.0,u.get("cd",0.0)-walk_time) if winding else 0.0
+						if first_delay < active:
+							var u_interval: float = maxf(0.1,u.get("interval",ud.get("interval",1.0)))
+							var hits: int = 1+int(floor((active-first_delay)/u_interval))
+							var base_dmg := unit_building_damage(u,ud,false)
+							var first_dmg := unit_building_damage(u,ud,true)
+							windup_damage += first_dmg+maxf(0,hits-1)*base_dmg
+				if edible_unit(u) and ahead >= -d.trigger_radius and (winding or edge_now <= max_approach):
+					var dist_at_bite: float = maxf(minf(dist_at_trig,stop_edge),dist_at_trig-u_speed*windup_dur)
+					if dist_at_bite <= d.radius:
+						will_eat.append(u)
+						if winding or edge_now <= 2.5*L.CELL_SIZE.x or t_trigger <= 5.0: close_approach = true
+			if windup_damage < b.hp and not will_eat.is_empty():
+				var cap: float = d.get("bite_cap",500.0)
+				for u: Dictionary in will_eat:
+					var uid: int = u.get("id",-1)
+					if uid >= 0 and u.hp <= cap:
+						covered[uid] = true
+						claimed[uid] = true
+				if close_approach:
+					bait_lanes[lane] = true
+					if is_inf(bait_pos[lane]) or (b.pos.x-bait_pos[lane])*forward > 0:
+						bait_pos[lane] = b.pos.x
+	return {"covered":covered,"bait_lanes":bait_lanes,"bait_pos":bait_pos}
+
+static func ai_score(c: Dictionary, s: Dictionary, _target_lane: int, defend: int, covered: Dictionary = {}) -> float:
 	var d: Dictionary = B.CARDS.glutton_nest
 	var team: int = s.team
 	var forward := 1.0 if team == 0 else -1.0
@@ -123,18 +219,21 @@ static func ai_score(c: Dictionary, s: Dictionary, _target_lane: int, defend: in
 	var ally_behind := 0.0
 	var min_foe_dist := INF
 	var min_ally_dist := INF
+	var cap: float = d.get("bite_cap",500.0)
 	for u: Dictionary in s.units:
 		if u.hp <= 0 or u.get("kind","") == "lord" or u.has("cell") or u.get("phased",false) or B.CARDS.get(u.kind,{}).get("flying",false): continue
-		var dist: float = u.pos.distance_to(c.pos)
+		var dist: float = B.point_edge_distance(c.pos,u)
+		var bite_hp: float = minf(u.hp,cap)
 		if u.team != team:
-			if u.get("spawn_delay",0.0) <= 0 and dist <= d.radius: foe_eat += u.hp
+			if covered.has(u.get("id",-1)): continue
+			if u.get("spawn_delay",0.0) <= 0 and dist <= d.radius: foe_eat += bite_hp
 			if u.lane == lane and u.get("fear_left",0.0) <= 0:
 				var ahead: float = (u.pos.x-c.pos.x)*forward
 				if ahead >= -d.trigger_radius and ahead <= 150.0:
-					foe_ahead += u.hp
+					foe_ahead += bite_hp
 					min_foe_dist = minf(min_foe_dist,maxf(0.0,ahead-d.trigger_radius))
 		else:
-			if dist <= d.radius: ally_eat += u.hp
+			if dist <= d.radius: ally_eat += bite_hp
 			if u.lane == lane:
 				var behind: float = (c.pos.x-u.pos.x)*forward
 				if behind > -d.trigger_radius and behind <= 200.0:

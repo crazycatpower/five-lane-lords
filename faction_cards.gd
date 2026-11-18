@@ -1,10 +1,11 @@
 extends RefCounted
-# Cards from docs/三陣營各補四張.md (2026-11-05): four new cards for each faction.
+# Cards from the retired design note 三陣營各補四張 (2026-11-05; git history): four new cards for each faction.
 # Battle hooks: spell casts (cast), extra play limits (play_error), damage (absorb),
 # speed / interval multipliers, per-step update and deaths. Drawing lives in draw().
 const B = preload("res://balance.gd")
 const L = preload("res://layout.gd")
 const Arcane = preload("res://arcane_mechanics.gd")
+const GluttonNest = preload("res://glutton_nest.gd")
 
 const SPELLS := ["mana_spring","chain_lightning","arcane_shield","time_field","charge_horn","levy","sacrifice","dread_howl"]
 const DEFENSIVE := ["chain_lightning","time_field","levy","dread_howl"] # worth more in the lane the AI is defending
@@ -14,25 +15,30 @@ const DEFENSIVE := ["chain_lightning","time_field","levy","dread_howl"] # worth 
 # True when this module handled the spell.
 static func cast(m, s: Dictionary) -> bool:
 	if not s.kind in SPELLS: return false
-	var data: Dictionary = B.CARDS[s.kind]
-	m.event("spell",s.pos,s.team,{"card":s.kind,"radius":data.get("radius",0.0)})
+	var data: Dictionary = m.spell_card_data(s.team,s.kind)
+	var rect: Rect2 = B.spell_rect(s.pos,data)
+	m.event("spell",s.pos,s.team,{"card":s.kind,"radius":data.get("radius",0.0),"rect":rect})
 	match s.kind:
 		"mana_spring":
-			for b: Dictionary in crystals_in(m,s.team,s.pos,data.radius):
+			for b: Dictionary in crystals_in(m,s.team,s.pos,data):
 				m.gain_ink(s.team,B.CARDS.crystal.income)
 				b.hp = minf(b.max_hp,b.hp+b.max_hp*data.heal_fraction)
 				m.event("ink",b.pos,s.team)
 				m.link(s.pos,b.pos,s.team,"mana")
-		"chain_lightning": chain(m,s,data)
+		"chain_lightning": chain(m,s,data,rect)
 		"arcane_shield":
 			for u: Dictionary in m.units:
-				if u.hp > 0 and u.team == s.team and u.pos.distance_to(s.pos) <= data.radius:
-					# Stacks: a recast adds to what is left and restarts the clock.
-					var left: float = u.get("shield",0.0) if u.get("shield_until",0.0) > m.elapsed else 0.0
+				if u.hp > 0 and u.team == s.team and B.rect_hits_actor(rect,u):
+					# Stacks onto existing active shield; endless when duration is absent/<= 0.
+					var left: float = u.get("shield",0.0) if shield_active(m,u) else 0.0
+					var endless: bool = float(data.get("duration",-1.0)) <= 0.0
 					u.shield = left+data.shield
-					u.shield_until = m.elapsed+data.duration
+					if endless or u.get("shield_until",0.0) < 0.0:
+						u.shield_until = -1.0
+					else:
+						u.shield_until = m.elapsed+float(data.duration)
 		"time_field":
-			m.fields.append({"pos":s.pos,"team":s.team,"radius":data.radius,"left":data.duration,"duration":data.duration})
+			m.fields.append({"pos":rect.get_center(),"team":s.team,"radius":data.radius,"rect":rect,"left":data.duration,"duration":data.duration})
 		"charge_horn":
 			m.horns.append({"team":s.team,"lane":lane_of(s.pos),"until":m.elapsed+data.duration})
 		"levy":
@@ -43,16 +49,26 @@ static func cast(m, s: Dictionary) -> bool:
 				var u: Dictionary = m.spawn_unit(s.team,foe.lane,"militia",Vector2(x,L.cell_center(Vector2i(0,foe.lane)).y))
 				u.card = "levy"
 				u.levy = true
+				m.has_levy = true
 				m.event("summoned",u.pos,u.team)
 		"sacrifice":
-			var victims: Array = m.units.filter(func(u: Dictionary) -> bool: return u.hp > 0 and u.team == s.team and u.get("spawn_delay",0.0) <= 0 and u.pos.distance_to(s.pos) <= data.radius)
+			var victims: Array = m.units.filter(func(u: Dictionary) -> bool: return u.hp > 0 and u.team == s.team and u.get("spawn_delay",0.0) <= 0 and B.rect_hits_actor(rect,u))
+			var cap: float = float(data.get("bite_cap",500.0))
+			var health := 0.0
 			for u: Dictionary in victims:
+				var dealt: float = cap if u.hp > cap else u.hp
+				health += dealt
 				m.link(u.pos,s.pos,s.team,"devour")
-				m.damage(u,u.hp,s.team,"sacrifice",{},true)
-			m.gain_ink(s.team,victims.size()*data.gold_per_unit)
+				m.damage(u,dealt,s.team,"sacrifice",{},true)
+			var gold: int = GluttonNest.gold_for_health(health,data)
+			if gold > 0:
+				m.gain_ink(s.team,gold)
+				m.event("ink",s.pos,s.team)
 		"dread_howl":
 			for u: Dictionary in m.units:
-				if u.hp > 0 and u.team != s.team and u.pos.distance_to(s.pos) <= data.radius: u.fear_left = data.duration
+				if u.hp <= 0 or not B.rect_hits_actor(rect,u): continue
+				if u.team != s.team: u.fear_left = data.duration
+				else: u.expansion_haste_until = maxf(u.get("expansion_haste_until",0.0),m.elapsed+3.0)
 	return true
 
 static func lane_of(pos: Vector2) -> int:
@@ -62,17 +78,18 @@ static func lane_of(pos: Vector2) -> int:
 static func intruders(m, team: int) -> Array:
 	return m.units.filter(func(u: Dictionary) -> bool: return u.hp > 0 and u.team != team and not u.get("flying",false) and u.get("spawn_delay",0.0) <= 0 and m.territory_owner(m.cell_at(u.pos)) == team)
 
-static func crystals_in(m, team: int, pos: Vector2, radius: float) -> Array:
-	return m.buildings.filter(func(b: Dictionary) -> bool: return b.hp > 0 and b.team == team and b.kind == "crystal" and b.pos.distance_to(pos) <= radius)
+static func crystals_in(m, team: int, pos: Vector2, data: Dictionary) -> Array:
+	var rect: Rect2 = B.spell_rect(pos,data)
+	return m.buildings.filter(func(b: Dictionary) -> bool: return b.hp > 0 and b.team == team and b.kind == "crystal" and B.rect_hits_actor(rect,b))
 
-# Hits the enemy nearest the drop point, then hops to the nearest not-yet-hit enemy within
-# hop_radius of the last one. Each hop is one damage tier lower (SS -> S -> A -> B -> C).
-static func chain(m, s: Dictionary, data: Dictionary) -> void:
+# Hits the enemy in the cast grid box nearest its center, then hops to nearest enemies within hop_radius.
+static func chain(m, s: Dictionary, data: Dictionary, rect: Rect2 = Rect2()) -> void:
 	var pool: Array = []
 	for u: Dictionary in m.units:
 		if u.hp > 0 and u.team != s.team and u.get("spawn_delay",0.0) <= 0: pool.append(u)
 	for b: Dictionary in m.buildings:
 		if b.hp > 0 and b.team != s.team: pool.append(b)
+	var use_rect: Rect2 = rect if rect.size != Vector2.ZERO else B.spell_rect(s.pos,data)
 	var at: Vector2 = s.pos
 	var reach: float = data.radius
 	var tier: int = B.TIERS.damage.find(data.bolt_damage)
@@ -82,8 +99,9 @@ static func chain(m, s: Dictionary, data: Dictionary) -> void:
 		var best_d := INF
 		for t: Dictionary in pool:
 			if t in hit or t.hp <= 0: continue
-			var d: float = t.pos.distance_to(at)
-			if d <= reach and d < best_d:
+			if i == 0 and not B.rect_hits_actor(use_rect,t): continue
+			var d: float = B.point_edge_distance(at,t)
+			if (i == 0 or d <= reach) and d < best_d:
 				best = t
 				best_d = d
 		if best.is_empty(): break
@@ -95,25 +113,43 @@ static func chain(m, s: Dictionary, data: Dictionary) -> void:
 
 # Extra placement limits ("" = fine). Called from play_check for these spells.
 static func play_error(m, team: int, kind: String, pos: Vector2) -> String:
-	if kind == "mana_spring" and crystals_in(m,team,pos,B.CARDS.mana_spring.radius).is_empty(): return "no crystal"
+	if kind == "mana_spring" and crystals_in(m,team,pos,B.CARDS.mana_spring).is_empty(): return "no crystal"
 	if kind == "levy" and (intruders(m,team).is_empty() or m.territory_owner(m.cell_at(pos)) != team): return "no intruders"
-	if kind == "sacrifice" and not m.units.any(func(u: Dictionary) -> bool: return u.hp > 0 and u.team == team and u.pos.distance_to(pos) <= B.CARDS.sacrifice.radius): return "no troops"
+	if kind == "sacrifice" and not m.units.any(func(u: Dictionary) -> bool: return u.hp > 0 and u.team == team and B.spell_hits_actor(pos,B.CARDS.sacrifice,u)): return "no troops"
 	return ""
 
 # ---------- ongoing effects ----------
 
 static func update(m, dt: float) -> void:
-	for f: Dictionary in m.fields: f.left -= dt
-	m.fields = m.fields.filter(func(f: Dictionary) -> bool: return f.left > 0.000001)
-	m.horns = m.horns.filter(func(h: Dictionary) -> bool: return h.until > m.elapsed)
-	# Levy militia only exist inside our territory (they vanish, no death effects).
-	m.units = m.units.filter(func(u: Dictionary) -> bool: return not (u.get("levy",false) and u.hp > 0 and m.territory_owner(m.cell_at(u.pos)) != u.team))
-	# Watchtowers reveal stealthed enemies in reach.
-	for b: Dictionary in m.buildings:
-		if b.hp <= 0 or b.kind != "watchtower": continue
+	if not m.fields.is_empty():
+		var field_expired := false
+		for f: Dictionary in m.fields:
+			f.left -= dt
+			if f.left <= 0.000001: field_expired = true
+		if field_expired:
+			m.fields = m.fields.filter(func(f: Dictionary) -> bool: return f.left > 0.000001)
+	if not m.horns.is_empty():
+		var horn_expired := false
+		for h: Dictionary in m.horns:
+			if h.until <= m.elapsed:
+				horn_expired = true
+				break
+		if horn_expired:
+			m.horns = m.horns.filter(func(h: Dictionary) -> bool: return h.until > m.elapsed)
+	if m.has_levy:
+		var levy_left := false
 		for u: Dictionary in m.units:
-			if u.team != b.team and u.get("stealthed",false) and u.pos.distance_to(b.pos) <= B.CARDS.watchtower.radius:
-				Arcane.reveal(m, u)
+			if u.get("levy",false) and u.hp > 0 and m.territory_owner(m.cell_at(u.pos)) != u.team:
+				levy_left = true
+				break
+		if levy_left:
+			m.units = m.units.filter(func(u: Dictionary) -> bool: return not (u.get("levy",false) and u.hp > 0 and m.territory_owner(m.cell_at(u.pos)) != u.team))
+	if m.has_watchtower[0] or m.has_watchtower[1]:
+		for b: Dictionary in m.buildings:
+			if b.hp <= 0 or b.kind != "watchtower": continue
+			for u: Dictionary in m.units:
+				if u.team != b.team and u.get("stealthed",false) and B.edge_distance(b,u) <= B.CARDS.watchtower.radius:
+					Arcane.reveal(m, u)
 
 static func horn_active(m, u: Dictionary) -> bool:
 	return horn_count(m,u) > 0
@@ -126,8 +162,9 @@ static func horn_count(m, u: Dictionary) -> int:
 
 # A troop that shoots, or a tower, inside our watchtower's reach: one range tier further.
 static func watched(m, actor: Dictionary) -> bool:
+	if not m.has_watchtower[actor.team]: return false
 	for b: Dictionary in m.buildings:
-		if b.hp > 0 and b.kind == "watchtower" and b.team == actor.team and b.pos.distance_to(actor.pos) <= B.CARDS.watchtower.radius: return true
+		if b.hp > 0 and b.kind == "watchtower" and b.team == actor.team and B.edge_distance(b,actor) <= B.CARDS.watchtower.radius: return true
 	return false
 
 static func longer(r: float) -> float:
@@ -149,7 +186,7 @@ static func flee(m, u: Dictionary, dt: float) -> bool:
 	u.fear_left = maxf(0.0,u.fear_left-dt)
 	var home := L.gate_stop(u.team)
 	u.face = signf(home-u.pos.x)
-	u.pos.x = move_toward(u.pos.x,home,m.movement_speed(u)*dt)
+	u.pos.x = move_toward(u.pos.x,home,m.movement_speed(u)*0.85*dt)
 	if u.fear_left <= 0: u.face = 1.0 if u.team == 0 else -1.0 # fear over: turn back toward the enemy
 	return true
 
@@ -211,8 +248,11 @@ static func on_death(m, dead: Dictionary) -> void:
 			b.blood = minf(B.CARDS.blood_tower.blood_max,b.get("blood",0.0)+B.CARDS.blood_tower.blood_per_death)
 
 static func in_time_field(m, target: Dictionary) -> bool:
+	if m.fields.is_empty(): return false
 	for f: Dictionary in m.fields:
-		if f.team != target.team and target.pos.distance_to(f.pos) <= f.radius: return true
+		if f.team != target.team:
+			var hit: bool = B.rect_hits_actor(f.rect,target) if f.has("rect") else (B.point_edge_distance(f.pos,target) <= f.radius)
+			if hit: return true
 	return false
 
 static func speed_factor(m, u: Dictionary) -> float:
@@ -224,25 +264,34 @@ static func interval_factor(m, u: Dictionary) -> float:
 static func building_factor(m, b: Dictionary) -> float:
 	return 0.5 if in_time_field(m,b) else 1.0
 
+static func shield_active(m, target: Dictionary) -> bool:
+	if target.get("shield",0.0) <= 0.0: return false
+	var until: float = float(target.get("shield_until",0.0))
+	return until < 0.0 or until > m.elapsed
+
 # Shield soaks damage first (after armour). Returns what is left for hp.
 static func absorb(m, target: Dictionary, amount: float) -> float:
-	if target.get("shield",0.0) <= 0 or target.get("shield_until",0.0) <= m.elapsed: return amount
+	if not shield_active(m,target): return amount
 	var soak := minf(amount,target.shield)
 	target.shield -= soak
+	if target.shield <= 0.0: target.shield_until = 0.0
 	return amount-soak
 
 # ---------- AI ----------
 
 # Score for the new cards (-INF = no opinion). Plays >= 600 are deliberate (see enemy_ai.gd).
-static func ai_score(c: Dictionary, s: Dictionary) -> float:
+static func ai_score(c: Dictionary, s: Dictionary, covered: Dictionary = {}) -> float:
+	var is_spell: bool = c.kind in SPELLS
+	if not is_spell and not c.kind in ["watchtower","mass_grave","blood_tower"]: return -INF
 	var team: int = s.team
 	var data: Dictionary = B.CARDS[c.kind]
+	var rect: Rect2 = B.spell_rect(c.pos,data) if is_spell else Rect2()
 	match c.kind:
 		"mana_spring":
 			var n := 0
 			var worn := false
 			for b: Dictionary in s.buildings:
-				if b.hp > 0 and b.team == team and b.kind == "crystal" and b.pos.distance_to(c.pos) <= data.radius:
+				if b.hp > 0 and b.team == team and b.kind == "crystal" and B.rect_hits_actor(rect,b):
 					n += 1
 					if b.hp < b.max_hp*0.5: worn = true
 			if n >= 2 or worn: return 660.0+n*10
@@ -250,18 +299,19 @@ static func ai_score(c: Dictionary, s: Dictionary) -> float:
 			var foes := 0
 			var heavy := false
 			for u: Dictionary in s.units:
-				if u.hp > 0 and u.team != team and u.pos.distance_to(c.pos) <= data.radius+data.hop_radius:
+				var in_box: bool = B.rect_hits_actor(rect,u)
+				if u.hp > 0 and u.team != team and not covered.has(u.get("id",-1)) and (in_box or u.pos.distance_to(c.pos) <= data.radius+data.hop_radius):
 					foes += 1
-					if u.max_hp >= B.tier_value("hp","A") and u.pos.distance_to(c.pos) <= data.radius: heavy = true
+					if u.max_hp >= B.tier_value("hp","A") and in_box: heavy = true
 			for b: Dictionary in s.buildings:
-				if b.hp > 0 and b.team != team and b.pos.distance_to(c.pos) <= data.radius+data.hop_radius:
+				if b.hp > 0 and b.team != team and (B.rect_hits_actor(rect,b) or b.pos.distance_to(c.pos) <= data.radius+data.hop_radius):
 					foes += 1
 			if foes >= 3 or heavy: return 700.0+foes*15
 		"arcane_shield":
 			var allies := 0
 			var engaged := false
 			for u: Dictionary in s.units:
-				if u.hp <= 0 or u.pos.distance_to(c.pos) > data.radius: continue
+				if u.hp <= 0 or not B.rect_hits_actor(rect,u): continue
 				if u.team == team: allies += 1
 				else: engaged = true
 			if allies >= 3 and engaged: return 690.0+allies*10
@@ -269,9 +319,9 @@ static func ai_score(c: Dictionary, s: Dictionary) -> float:
 			var near := 0
 			var forward := 1.0 if team == 0 else -1.0
 			for u: Dictionary in s.units:
-				if u.hp > 0 and u.team != team and u.pos.distance_to(c.pos) <= data.radius and (u.pos.x-L.GRID_ORIGIN.x-L.GRID_SIZE.x*0.5)*forward < 0: near += 1
+				if u.hp > 0 and u.team != team and not covered.has(u.get("id",-1)) and B.rect_hits_actor(rect,u) and (u.pos.x-L.GRID_ORIGIN.x-L.GRID_SIZE.x*0.5)*forward < 0: near += 1
 			for b: Dictionary in s.buildings:
-				if b.hp > 0 and b.team != team and b.pos.distance_to(c.pos) <= data.radius: near += 1
+				if b.hp > 0 and b.team != team and B.rect_hits_actor(rect,b): near += 1
 			if near >= 4: return 710.0+near*10
 		"charge_horn":
 			var lane := lane_of(c.pos)
@@ -282,21 +332,26 @@ static func ai_score(c: Dictionary, s: Dictionary) -> float:
 		"levy":
 			var n := 0
 			for u: Dictionary in s.units:
-				if u.hp > 0 and u.team != team and not u.get("flying",false) and u.lane == c.cell.y and (u.pos.x-c.pos.x)*(1.0 if team == 0 else -1.0) >= 0: n += 1
+				if u.hp > 0 and u.team != team and not covered.has(u.get("id",-1)) and not u.get("flying",false) and u.lane == c.cell.y and (u.pos.x-c.pos.x)*(1.0 if team == 0 else -1.0) >= 0: n += 1
 			if n >= 3: return 720.0+n*10
 		"sacrifice":
+			var cap: float = float(data.get("bite_cap",500.0))
+			var sacrifice_hp := 0.0
 			var mine := 0
 			var cheap := 0
 			for u: Dictionary in s.units:
-				if u.hp <= 0 or u.team != team or u.pos.distance_to(c.pos) > data.radius: continue
+				if u.hp <= 0 or u.team != team or not B.rect_hits_actor(rect,u): continue
 				mine += 1
-				if u.kind == "skeleton" or u.hp < u.max_hp*0.3: cheap += 1
-			if mine >= 3 and cheap == mine: return 650.0+mine*10
+				sacrifice_hp += minf(cap,u.hp)
+				if u.kind == "skeleton" or u.get("borrowed_until",-1.0) > 0 or u.hp < u.max_hp*0.45: cheap += 1
+			if mine >= 2 and cheap == mine:
+				var gain: int = GluttonNest.gold_for_health(sacrifice_hp,data)
+				if gain >= int(data.cost)+2: return 650.0+gain*10.0
 		"dread_howl":
 			var near := 0
 			var gate_x := L.gate_stop(team)
 			for u: Dictionary in s.units:
-				if u.hp > 0 and u.team != team and u.pos.distance_to(c.pos) <= data.radius and absf(u.pos.x-gate_x) <= L.CELL_SIZE.x*2: near += 1
+				if u.hp > 0 and u.team != team and not covered.has(u.get("id",-1)) and B.rect_hits_actor(rect,u) and absf(u.pos.x-gate_x) <= L.CELL_SIZE.x*2: near += 1
 			if near >= 3: return 760.0+near*10
 		"watchtower", "mass_grave", "blood_tower":
 			var col: int = c.cell.x if team == 0 else 8-c.cell.x
@@ -306,7 +361,7 @@ static func ai_score(c: Dictionary, s: Dictionary) -> float:
 			for b: Dictionary in s.buildings:
 				if b.hp > 0 and b.team == team and b.kind == c.kind and b.cell.y == c.cell.y: same += 1
 			for u: Dictionary in s.units:
-				if u.hp > 0 and u.lane == c.cell.y: fight += 1
+				if u.hp > 0 and u.lane == c.cell.y and not (u.team != team and covered.has(u.get("id",-1))): fight += 1
 			if same >= (2 if c.kind == "mass_grave" else 1): return -INF
 			if c.kind == "watchtower":
 				var shooters := 0
@@ -314,7 +369,7 @@ static func ai_score(c: Dictionary, s: Dictionary) -> float:
 				for u: Dictionary in s.units:
 					if u.hp <= 0 or u.lane != c.cell.y: continue
 					if u.team == team and B.CARDS[u.kind].get("projectile",false): shooters += 1
-					if u.team != team and B.CARDS[u.kind].get("stealth",false): sneaky = true
+					if u.team != team and not covered.has(u.get("id",-1)) and B.CARDS[u.kind].get("stealth",false): sneaky = true
 				return 650.0-col*8 if shooters >= 2 or sneaky else -INF
 			if fight >= 4: return 640.0+fight*4-col*8
 	return -INF
@@ -354,11 +409,20 @@ static func draw(g) -> void:
 	for f: Dictionary in g.model.fields:
 		var fade := clampf(f.left/0.5,0,1)
 		var spin: float = g.model.elapsed*0.6
-		g.draw_circle(f.pos,f.radius,Color(0.45,0.55,0.85,0.16*fade))
-		g.draw_arc(f.pos,f.radius,0,TAU,48,Color(0.35,0.45,0.80,0.65*fade),2,true)
-		for i: int in range(12): # clock ticks turning slowly
-			var a := spin+i*TAU/12
-			g.draw_line(f.pos+Vector2.from_angle(a)*(f.radius-10),f.pos+Vector2.from_angle(a)*(f.radius-2),Color(0.30,0.40,0.75,0.7*fade),2)
+		var frect: Rect2 = f.get("rect",Rect2())
+		if frect.size != Vector2.ZERO:
+			g.draw_rect(frect,Color(0.45,0.55,0.85,0.16*fade))
+			g.draw_rect(frect,Color(0.35,0.45,0.80,0.72*fade),false,2.5)
+			var fc: Vector2 = frect.get_center()
+			for i: int in range(12):
+				var a := spin+i*TAU/12
+				g.draw_line(fc+Vector2.from_angle(a)*48.0,fc+Vector2.from_angle(a)*58.0,Color(0.30,0.40,0.75,0.7*fade),2)
+		else:
+			g.draw_circle(f.pos,f.radius,Color(0.45,0.55,0.85,0.16*fade))
+			g.draw_arc(f.pos,f.radius,0,TAU,48,Color(0.35,0.45,0.80,0.65*fade),2,true)
+			for i: int in range(12): # clock ticks turning slowly
+				var a := spin+i*TAU/12
+				g.draw_line(f.pos+Vector2.from_angle(a)*(f.radius-10),f.pos+Vector2.from_angle(a)*(f.radius-2),Color(0.30,0.40,0.75,0.7*fade),2)
 
 # Drawn after the troops so the shield bubble sits on top of them.
 static func draw_over(g) -> void:
@@ -376,7 +440,7 @@ static func draw_over(g) -> void:
 			g.draw_rect(Rect2(head+Vector2(-3,3),Vector2(6,5)),Color("e8dcc0"))
 			for x: float in [-2.2,2.2]: g.draw_circle(head+Vector2(x,-1),1.6,Color("352632"))
 			g.draw_line(head+Vector2(0,5),head+Vector2(0,8),Color("352632"),1)
-		if u.hp > 0 and u.get("shield",0.0) > 0 and u.get("shield_until",0.0) > g.model.elapsed:
+		if u.hp > 0 and shield_active(g.model,u):
 			var k: float = clampf(u.shield/B.CARDS.arcane_shield.shield,0.25,1.0) # stacked shields stay at full glow
 			var c: Vector2 = u.get("draw",u.pos)+Vector2(0,-22)
 			g.draw_circle(c,30,Color(0.55,0.80,1.0,0.12*k))

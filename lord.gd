@@ -4,7 +4,7 @@ const L = preload("res://layout.gd")
 const AI = preload("res://lord_ai.gd")
 static func create(team: int, lord_kind: String = "lion") -> Dictionary:
 	var data: Dictionary = B.lord_data(lord_kind)
-	return {"kind":"lord","lord":lord_kind,"team":team,"max_hp":data.hp,"damage":data.damage,"speed":data.speed,"pos":home(team),"hp":data.hp,"respawn":0.0,"cd":0.0,"last_hit":-10.0,"think":0.0,"target":L.spawn_position(team,2),"changed":-10.0,"retreating":false,"flash":0.0}
+	return {"kind":"lord","lord":lord_kind,"team":team,"max_hp":data.hp,"damage":data.damage,"speed":data.speed,"range":B.lord_attack_range(lord_kind),"ranged":B.lord_is_ranged(lord_kind),"body_radius":B.kind_radius(lord_kind),"pos":home(team),"hp":data.hp,"respawn":0.0,"cd":0.0,"last_hit":-10.0,"think":0.0,"target":L.spawn_position(team,2),"changed":-10.0,"retreating":false,"flash":0.0}
 # Patrol on the castle side of the visible gate, mirrored for both teams.
 static func zone(team: int) -> Vector2:
 	var gate := L.gate_icon_x(team)
@@ -27,15 +27,18 @@ static func step(m: RefCounted, lord: Dictionary, dt: float) -> void:
 	if m.elapsed-lord.last_hit >= B.LORD_REGEN_DELAY: lord.hp = minf(lord.max_hp,lord.hp+B.LORD_REGEN*dt)
 	# Respond immediately without lane scores, low-health retreat or switch delay.
 	lord.retreating = false
-	lord.target = AI.destination(lord,m.units,m.gates).pos
+	lord.target = AI.target_pos(lord,m.foe_units[lord.team] if not m.foe_units[lord.team].is_empty() else m.units)
 	# Pursuit never crosses the gate, including after a breach.
-	var min_x: float = zone(lord.team).x
-	var max_x: float = zone(lord.team).y
+	var z := zone(lord.team)
+	var min_x: float = z.x
+	var max_x: float = z.y
 	lord.target.x = clampf(lord.target.x,min_x,max_x)
 	lord.pos = lord.pos.move_toward(lord.target,lord.speed*dt)
 	lord.pos.x = clampf(lord.pos.x,min_x,max_x)
 	lord.cd -= dt
-	var foe: Dictionary = m.lord_target(lord)
-	if not foe.is_empty() and lord.cd <= 0:
-		m.damage(foe,lord.damage,lord.team,"lord")
-		lord.cd = B.LORD_INTERVAL
+	if lord.cd <= 0:
+		var foe: Dictionary = m.lord_target(lord)
+		if not foe.is_empty():
+			if B.lord_is_ranged(lord.lord): m.shoot_lord(lord,foe,lord.damage)
+			else: m.damage(foe,lord.damage,lord.team,"lord")
+			lord.cd = B.lord_attack_interval(lord.lord)

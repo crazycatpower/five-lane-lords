@@ -18,6 +18,7 @@ var first_seed := 1
 var games := 4
 var difficulty := 1
 var cap := 900.0
+var step_dt := 1.0 / 60.0
 var deck_a := ""
 var deck_b := ""
 var output := "user://simulation.json"
@@ -32,6 +33,7 @@ func _initialize() -> void:
 		elif arg.begins_with("--deck-a="): deck_a = value
 		elif arg.begins_with("--deck-b="): deck_b = value
 		elif arg.begins_with("--output="): output = value
+		elif arg.begins_with("--hz="): step_dt = 1.0 / maxf(1.0, float(value))
 	call_deferred("run")
 
 func parse_deck(value: String) -> Array:
@@ -55,7 +57,7 @@ func play_match(a: Array, b: Array, seed_value: int) -> Dictionary:
 	var samples: Array = []
 	var next_sample := 30.0
 	while not m.ended and m.elapsed < cap:
-		m.step(1.0/60.0)
+		m.step(step_dt)
 		for e: Dictionary in m.events:
 			if e.kind == "breach" and first_breach < 0: first_breach = m.elapsed
 		m.events.clear()

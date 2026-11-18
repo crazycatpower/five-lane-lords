@@ -53,3 +53,39 @@ static func random_deck(rng: RandomNumberGenerator, lord: String = "") -> Array:
 	var rest: Array = units+others
 	while deck.size() < 8: deck.append(rest.pop_at(rng.randi_range(0,rest.size()-1)))
 	return deck
+
+# 4 selectable 8-card compositions matching B.card_group (3:building, 0:melee, 1:ranged, 2:spell).
+const PRACTICE_RATIO := {3: 2, 0: 3, 1: 2, 2: 1}
+const PRACTICE_RATIOS := [
+	{"id":"balanced","name":"均衡陣型","ratio":{3: 2, 0: 3, 1: 2, 2: 1}},
+	{"id":"rush","name":"強攻推線","ratio":{3: 1, 0: 4, 1: 2, 2: 1}},
+	{"id":"ranged","name":"遠程火力","ratio":{3: 2, 0: 2, 1: 3, 2: 1}},
+	{"id":"spell","name":"砲法控制","ratio":{3: 2, 0: 2, 1: 2, 2: 2}},
+]
+
+static func practice_ratio_ids() -> Array:
+	return PRACTICE_RATIOS.map(func(entry: Dictionary) -> String: return entry.id)
+
+static func practice_ratio_entry(id: String) -> Dictionary:
+	for entry: Dictionary in PRACTICE_RATIOS:
+		if entry.id == id: return entry
+	return PRACTICE_RATIOS[0]
+
+static func practice_ratio_label(ratio: Dictionary) -> String:
+	return "建築 %d · 近戰 %d · 遠程 %d · 法術 %d" % [int(ratio.get(3, 0)), int(ratio.get(0, 0)), int(ratio.get(1, 0)), int(ratio.get(2, 0))]
+
+static func balanced_random_deck(rng: RandomNumberGenerator, lord: String = "", ratio: Dictionary = PRACTICE_RATIO) -> Array:
+	var buckets := {0: [], 1: [], 2: [], 3: []}
+	var all_cards: Array = pool(lord)
+	for kind: String in all_cards:
+		buckets[B.card_group(kind)].append(kind)
+	var deck: Array = []
+	for group_id: int in [3, 0, 1, 2]:
+		var bucket: Array = buckets[group_id]
+		var need := mini(int(ratio.get(group_id, 0)), bucket.size())
+		for _i: int in range(need):
+			deck.append(bucket.pop_at(rng.randi_range(0, bucket.size() - 1)))
+	var spare: Array = all_cards.filter(func(k: String) -> bool: return not k in deck)
+	while deck.size() < 8 and not spare.is_empty():
+		deck.append(spare.pop_at(rng.randi_range(0, spare.size() - 1)))
+	return B.menu_sorted(deck)
