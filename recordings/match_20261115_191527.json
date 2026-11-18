@@ -1,0 +1,36 @@
+{
+	"commands": [],
+	"duration": 332.983333333359,
+	"setup": {
+		"blue_deck": [
+			"ox",
+			"axe_thrower",
+			"bandit",
+			"manor_retainer",
+			"mule_cart",
+			"charge_horn",
+			"ram",
+			"disgraced_lancer"
+		],
+		"blue_lord": "adventure",
+		"difficulty": 1,
+		"me": 0,
+		"mirror_view": false,
+		"red_deck": [
+			"gatebreaker",
+			"counter_charge",
+			"twin_gambler",
+			"disgraced_lancer",
+			"mule_cart",
+			"hook_collector",
+			"vampire_hunter",
+			"old_witch"
+		],
+		"red_lord": "adventure",
+		"seed": 1794741030,
+		"spectating": true
+	},
+	"total_ticks": 19978,
+	"version": 1,
+	"winner": 0
+}

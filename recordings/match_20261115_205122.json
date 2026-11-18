@@ -1,0 +1,36 @@
+{
+	"commands": [],
+	"duration": 331.233333333361,
+	"setup": {
+		"blue_deck": [
+			"spellbreaker",
+			"mule_cart",
+			"rune_workshop",
+			"gravity_well",
+			"chronomancer",
+			"prism_mage",
+			"twin_gambler",
+			"astrolabe_surveyor"
+		],
+		"blue_lord": "rune",
+		"difficulty": 1,
+		"me": 0,
+		"mirror_view": false,
+		"red_deck": [
+			"vampire_hunter",
+			"axe_thrower",
+			"rolling_boulder",
+			"beekeeper",
+			"old_witch",
+			"macebreaker",
+			"catapult",
+			"guard"
+		],
+		"red_lord": "lion",
+		"seed": 1794746762,
+		"spectating": true
+	},
+	"total_ticks": 19873,
+	"version": 1,
+	"winner": 0
+}

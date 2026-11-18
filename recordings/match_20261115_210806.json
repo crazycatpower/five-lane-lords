@@ -1,0 +1,221 @@
+{
+	"commands": [
+		{
+			"cmd": "play",
+			"slot": 4,
+			"t": 111,
+			"team": 0,
+			"x": 442.0,
+			"y": 443.0
+		},
+		{
+			"cmd": "play",
+			"slot": 0,
+			"t": 237,
+			"team": 0,
+			"x": 582.0,
+			"y": 523.0
+		},
+		{
+			"cmd": "play",
+			"slot": 1,
+			"t": 398,
+			"team": 0,
+			"x": 565.0,
+			"y": 343.0
+		},
+		{
+			"cmd": "play",
+			"slot": 0,
+			"t": 1504,
+			"team": 0,
+			"x": 468.0,
+			"y": 388.0
+		},
+		{
+			"cmd": "play",
+			"slot": 4,
+			"t": 1764,
+			"team": 0,
+			"x": 465.0,
+			"y": 518.0
+		},
+		{
+			"cmd": "skill",
+			"slot": -1,
+			"t": 3803,
+			"team": 0,
+			"x": 0.0,
+			"y": 0.0
+		},
+		{
+			"cmd": "play",
+			"slot": 4,
+			"t": 3948,
+			"team": 0,
+			"x": 647.001647949219,
+			"y": 419.999725341797
+		},
+		{
+			"cmd": "play",
+			"slot": 1,
+			"t": 4339,
+			"team": 0,
+			"x": 702.0,
+			"y": 517.0
+		},
+		{
+			"cmd": "play",
+			"slot": 1,
+			"t": 5469,
+			"team": 0,
+			"x": 669.0,
+			"y": 520.0
+		},
+		{
+			"cmd": "play",
+			"slot": 2,
+			"t": 5560,
+			"team": 0,
+			"x": 701.0,
+			"y": 502.0
+		},
+		{
+			"cmd": "play",
+			"slot": 4,
+			"t": 6042,
+			"team": 0,
+			"x": 560.0,
+			"y": 167.0
+		},
+		{
+			"cmd": "skill",
+			"slot": -1,
+			"t": 6386,
+			"team": 0,
+			"x": 0.0,
+			"y": 0.0
+		},
+		{
+			"cmd": "play",
+			"slot": 1,
+			"t": 6619,
+			"team": 0,
+			"x": 781.000122070313,
+			"y": 655.998413085938
+		},
+		{
+			"cmd": "play",
+			"slot": 2,
+			"t": 6828,
+			"team": 0,
+			"x": 813.0,
+			"y": 640.0
+		},
+		{
+			"cmd": "play",
+			"slot": 1,
+			"t": 7903,
+			"team": 0,
+			"x": 779.232116699219,
+			"y": 625.092468261719
+		},
+		{
+			"cmd": "play",
+			"slot": 4,
+			"t": 7976,
+			"team": 0,
+			"x": 675.002563476563,
+			"y": 149.00505065918
+		},
+		{
+			"cmd": "play",
+			"slot": 2,
+			"t": 8377,
+			"team": 0,
+			"x": 719.0,
+			"y": 529.0
+		},
+		{
+			"cmd": "play",
+			"slot": 0,
+			"t": 8472,
+			"team": 0,
+			"x": 614.0,
+			"y": 461.0
+		},
+		{
+			"cmd": "play",
+			"slot": 1,
+			"t": 8802,
+			"team": 0,
+			"x": 663.0,
+			"y": 418.0
+		},
+		{
+			"cmd": "play",
+			"slot": 2,
+			"t": 8926,
+			"team": 0,
+			"x": 675.0,
+			"y": 281.0
+		},
+		{
+			"cmd": "play",
+			"slot": 3,
+			"t": 9045,
+			"team": 0,
+			"x": 719.0,
+			"y": 271.0
+		},
+		{
+			"cmd": "skill",
+			"slot": -1,
+			"t": 9228,
+			"team": 0,
+			"x": 0.0,
+			"y": 0.0
+		},
+		{
+			"cmd": "play",
+			"slot": 2,
+			"t": 9439,
+			"team": 0,
+			"x": 825.999206542969,
+			"y": 619.993469238281
+		}
+	],
+	"duration": 162.383333333355,
+	"setup": {
+		"blue_deck": [
+			"bonewall",
+			"necromancer",
+			"necromancer",
+			"hunter",
+			"curse",
+			"skeleton",
+			"skeleton",
+			"bonewall"
+		],
+		"blue_lord": "card_enemy_bonewall",
+		"difficulty": 1,
+		"me": 0,
+		"mirror_view": false,
+		"red_deck": [
+			"arcane_archer",
+			"ox",
+			"ox",
+			"field_smithy",
+			"ox",
+			"teleport_trap",
+			"levy",
+			"arcane_archer"
+		],
+		"red_lord": "harvest",
+		"seed": 227882,
+		"spectating": false
+	},
+	"total_ticks": 9742,
+	"version": 1,
+	"winner": 0
+}

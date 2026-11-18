@@ -1,0 +1,36 @@
+{
+	"commands": [],
+	"duration": 171.200000000028,
+	"setup": {
+		"blue_deck": [
+			"catapult",
+			"gatebreaker",
+			"granary",
+			"hunter",
+			"vampire_hunter",
+			"spellbreaker",
+			"spearbow",
+			"old_witch"
+		],
+		"blue_lord": "harvest",
+		"difficulty": 1,
+		"me": 0,
+		"mirror_view": false,
+		"red_deck": [
+			"knight",
+			"halberdier",
+			"counter_charge",
+			"ox",
+			"catapult",
+			"macebreaker",
+			"gatebreaker",
+			"mob"
+		],
+		"red_lord": "harvest",
+		"seed": 1794741428,
+		"spectating": true
+	},
+	"total_ticks": 10271,
+	"version": 1,
+	"winner": 1
+}

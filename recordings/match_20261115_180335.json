@@ -1,0 +1,213 @@
+{
+	"commands": [
+		{
+			"cmd": "play",
+			"slot": 4,
+			"t": 193,
+			"team": 0,
+			"x": 477.0,
+			"y": 393.0
+		},
+		{
+			"cmd": "play",
+			"slot": 0,
+			"t": 874,
+			"team": 0,
+			"x": 589.0,
+			"y": 263.0
+		},
+		{
+			"cmd": "play",
+			"slot": 3,
+			"t": 1005,
+			"team": 0,
+			"x": 657.0,
+			"y": 274.0
+		},
+		{
+			"cmd": "play",
+			"slot": 4,
+			"t": 1713,
+			"team": 0,
+			"x": 696.0,
+			"y": 385.0
+		},
+		{
+			"cmd": "play",
+			"slot": 3,
+			"t": 2032,
+			"team": 0,
+			"x": 309.0,
+			"y": 513.0
+		},
+		{
+			"cmd": "play",
+			"slot": 0,
+			"t": 2515,
+			"team": 0,
+			"x": 440.0,
+			"y": 667.0
+		},
+		{
+			"cmd": "play",
+			"slot": 3,
+			"t": 3067,
+			"team": 0,
+			"x": 735.0,
+			"y": 398.0
+		},
+		{
+			"cmd": "play",
+			"slot": 2,
+			"t": 3201,
+			"team": 0,
+			"x": 703.058288574219,
+			"y": 164.0
+		},
+		{
+			"cmd": "play",
+			"slot": 4,
+			"t": 3621,
+			"team": 0,
+			"x": 794.0,
+			"y": 483.0
+		},
+		{
+			"cmd": "play",
+			"slot": 3,
+			"t": 4003,
+			"team": 0,
+			"x": 940.0,
+			"y": 368.0
+		},
+		{
+			"cmd": "skill",
+			"slot": -1,
+			"t": 5091,
+			"team": 0,
+			"x": 0.0,
+			"y": 0.0
+		},
+		{
+			"cmd": "play",
+			"slot": 4,
+			"t": 5386,
+			"team": 0,
+			"x": 676.000061035156,
+			"y": 192.000030517578
+		},
+		{
+			"cmd": "play",
+			"slot": 1,
+			"t": 5778,
+			"team": 0,
+			"x": 1046.0,
+			"y": 267.0
+		},
+		{
+			"cmd": "play",
+			"slot": 3,
+			"t": 6827,
+			"team": 0,
+			"x": 1006.0,
+			"y": 562.0
+		},
+		{
+			"cmd": "play",
+			"slot": 0,
+			"t": 6906,
+			"team": 0,
+			"x": 884.0,
+			"y": 601.0
+		},
+		{
+			"cmd": "play",
+			"slot": 1,
+			"t": 6976,
+			"team": 0,
+			"x": 953.047424316406,
+			"y": 562.0
+		},
+		{
+			"cmd": "play",
+			"slot": 0,
+			"t": 7982,
+			"team": 0,
+			"x": 909.0,
+			"y": 668.0
+		},
+		{
+			"cmd": "play",
+			"slot": 3,
+			"t": 8026,
+			"team": 0,
+			"x": 945.0,
+			"y": 641.0
+		},
+		{
+			"cmd": "play",
+			"slot": 1,
+			"t": 8122,
+			"team": 0,
+			"x": 1048.59252929688,
+			"y": 403.665405273438
+		},
+		{
+			"cmd": "play",
+			"slot": 3,
+			"t": 8524,
+			"team": 0,
+			"x": 960.0,
+			"y": 636.0
+		},
+		{
+			"cmd": "play",
+			"slot": 1,
+			"t": 8612,
+			"team": 0,
+			"x": 945.0,
+			"y": 643.0
+		},
+		{
+			"cmd": "skill",
+			"slot": -1,
+			"t": 9009,
+			"team": 0,
+			"x": 0.0,
+			"y": 0.0
+		}
+	],
+	"duration": 152.81666666668,
+	"setup": {
+		"blue_deck": [
+			"ox",
+			"militia",
+			"arquebusier",
+			"hunter",
+			"knight",
+			"farmer",
+			"shieldguard",
+			"arquebusier"
+		],
+		"blue_lord": "card_enemy_arquebusier",
+		"difficulty": 0,
+		"me": 0,
+		"mirror_view": false,
+		"red_deck": [
+			"teleport_trap",
+			"arcane_archer",
+			"arcane_archer",
+			"levy",
+			"ox",
+			"ox",
+			"arcane_archer",
+			"ox"
+		],
+		"red_lord": "harvest",
+		"seed": 212044,
+		"spectating": false
+	},
+	"total_ticks": 9168,
+	"version": 1,
+	"winner": 0
+}

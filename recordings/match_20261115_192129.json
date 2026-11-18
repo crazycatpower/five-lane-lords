@@ -1,0 +1,36 @@
+{
+	"commands": [],
+	"duration": 393.866666666637,
+	"setup": {
+		"blue_deck": [
+			"catapult",
+			"gatebreaker",
+			"granary",
+			"hunter",
+			"vampire_hunter",
+			"spellbreaker",
+			"spearbow",
+			"old_witch"
+		],
+		"blue_lord": "harvest",
+		"difficulty": 1,
+		"me": 0,
+		"mirror_view": false,
+		"red_deck": [
+			"tusk_boar",
+			"hive_nest",
+			"monster_hatchery",
+			"long_dragon",
+			"fishbeak",
+			"imp_bomb_runner",
+			"mimic_egg",
+			"web_spinner"
+		],
+		"red_lord": "beast",
+		"seed": 1794741428,
+		"spectating": true
+	},
+	"total_ticks": 23631,
+	"version": 1,
+	"winner": 1
+}

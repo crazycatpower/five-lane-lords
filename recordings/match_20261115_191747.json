@@ -1,0 +1,36 @@
+{
+	"commands": [],
+	"duration": 204.583333333388,
+	"setup": {
+		"blue_deck": [
+			"catapult",
+			"gatebreaker",
+			"granary",
+			"hunter",
+			"vampire_hunter",
+			"spellbreaker",
+			"spearbow",
+			"old_witch"
+		],
+		"blue_lord": "harvest",
+		"difficulty": 1,
+		"me": 0,
+		"mirror_view": false,
+		"red_deck": [
+			"mule_cart",
+			"observatory",
+			"blink_blade",
+			"blast_trap",
+			"astrolabe_surveyor",
+			"gatebreaker",
+			"arcane_archer",
+			"phase_rider"
+		],
+		"red_lord": "mage",
+		"seed": 1794741428,
+		"spectating": true
+	},
+	"total_ticks": 12274,
+	"version": 1,
+	"winner": 1
+}

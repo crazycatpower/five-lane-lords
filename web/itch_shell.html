@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0" />
+  <title>$GODOT_PROJECT_NAME</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: radial-gradient(circle at 50% 42%, #2a2015 0%, #17110b 70%, #0d0906 100%);
+      color: #f3e2bc;
+      font-family: "Noto Serif TC", "PMingLiU", Georgia, serif;
+      user-select: none;
+      touch-action: none;
+    }
+    #canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+    #canvas:focus {
+      outline: none;
+    }
+    #status {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      background: radial-gradient(circle at 50% 45%, rgba(44, 32, 21, 0.96), rgba(16, 11, 7, 0.99));
+      z-index: 10;
+      transition: opacity 0.45s ease;
+    }
+    #status.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+    .crest {
+      width: 58px;
+      height: 58px;
+      border-radius: 50%;
+      border: 2px solid #d5b16e;
+      background: radial-gradient(circle, #963f30 0%, #5e2218 75%);
+      box-shadow: 0 0 28px rgba(213, 177, 110, 0.25);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 26px;
+      color: #fff0ca;
+    }
+    .title {
+      font-size: clamp(24px, 3.6vw, 38px);
+      letter-spacing: 0.12em;
+      color: #f6e7c4;
+      text-shadow: 0 2px 10px rgba(0, 0, 0, 0.65);
+    }
+    .subtitle {
+      font-size: 14px;
+      color: #c8b288;
+      letter-spacing: 0.08em;
+    }
+    .bar-wrap {
+      width: min(440px, 78vw);
+      height: 10px;
+      border-radius: 999px;
+      border: 1px solid #8c6c3f;
+      background: rgba(255, 240, 202, 0.08);
+      overflow: hidden;
+    }
+    .bar-fill {
+      width: 0%;
+      height: 100%;
+      background: linear-gradient(90deg, #8e3b2d, #d5b16e);
+      transition: width 0.18s ease-out;
+    }
+    .tip {
+      font-size: 14px;
+      color: #b79f77;
+      min-height: 20px;
+      text-align: center;
+      padding: 0 16px;
+    }
+    #start-gate {
+      display: none;
+      margin-top: 8px;
+      padding: 12px 34px;
+      font-size: 18px;
+      font-family: inherit;
+      letter-spacing: 0.1em;
+      color: #fff0ca;
+      background: #963f30;
+      border: 1.5px solid #d5b16e;
+      border-radius: 6px;
+      cursor: pointer;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+    }
+    #start-gate:hover {
+      background: #b1533b;
+    }
+  </style>
+  $GODOT_HEAD_INCLUDE
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <div id="status">
+    <div class="crest">⚔</div>
+    <div class="title">羊皮紙戰記</div>
+    <div class="subtitle">FIVE LANE LORDS · WEB EDITION</div>
+    <div class="bar-wrap"><div id="bar-fill" class="bar-fill"></div></div>
+    <div id="tip" class="tip">正在展開古戰卷軸…</div>
+    <button id="start-gate" type="button">點擊展開戰局</button>
+  </div>
+
+  <script src="$GODOT_URL"></script>
+  <script>
+    (function () {
+      const statusEl = document.getElementById("status");
+      const barEl = document.getElementById("bar-fill");
+      const tipEl = document.getElementById("tip");
+      const startBtn = document.getElementById("start-gate");
+      const canvas = document.getElementById("canvas");
+
+      const tips = [
+        "提示：破除敵方任意一路城牆並送進主堡即可獲勝。",
+        "提示：搜尋對手超過 12 秒時，系統可自動為你配對合適的 AI 對手。",
+        "提示：善用領主專屬戰技與常駐軍備，能逆轉五路戰局。"
+      ];
+      let tipIdx = 0;
+      const tipTimer = setInterval(() => {
+        if (startBtn.style.display === "inline-block") return;
+        tipIdx = (tipIdx + 1) % tips.length;
+        tipEl.textContent = tips[tipIdx];
+      }, 3200);
+
+      const GODOT_CONFIG = $GODOT_CONFIG;
+      const engine = new Engine(GODOT_CONFIG);
+
+      engine.startGame({
+        onProgress: function (current, total) {
+          if (total > 0) {
+            const pct = Math.min(100, Math.round((current / total) * 100));
+            barEl.style.width = pct + "%";
+            tipEl.textContent = "正在載入軍備與羊皮紙插畫… " + pct + "%";
+          }
+        }
+      }).then(() => {
+        clearInterval(tipTimer);
+        barEl.style.width = "100%";
+        tipEl.textContent = "準備完成 — 點擊進入以啟用音效與戰場";
+        startBtn.style.display = "inline-block";
+        const enterGame = () => {
+          statusEl.classList.add("hidden");
+          canvas.focus();
+          setTimeout(() => { statusEl.style.display = "none"; }, 500);
+        };
+        startBtn.addEventListener("click", enterGame, { once: true });
+      }).catch((err) => {
+        clearInterval(tipTimer);
+        tipEl.textContent = "載入失敗：" + (err && err.message ? err.message : String(err));
+      });
+    })();
+  </script>
+</body>
+</html>

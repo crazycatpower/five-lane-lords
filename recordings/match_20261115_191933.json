@@ -1,0 +1,36 @@
+{
+	"commands": [],
+	"duration": 240.66666666675,
+	"setup": {
+		"blue_deck": [
+			"catapult",
+			"gatebreaker",
+			"granary",
+			"hunter",
+			"vampire_hunter",
+			"spellbreaker",
+			"spearbow",
+			"old_witch"
+		],
+		"blue_lord": "harvest",
+		"difficulty": 1,
+		"me": 0,
+		"mirror_view": false,
+		"red_deck": [
+			"hook_collector",
+			"twin_gambler",
+			"monster_hunter",
+			"oathless_imp",
+			"mule_cart",
+			"gatebreaker",
+			"assassin",
+			"catapult"
+		],
+		"red_lord": "beast",
+		"seed": 1794741428,
+		"spectating": true
+	},
+	"total_ticks": 14439,
+	"version": 1,
+	"winner": 1
+}

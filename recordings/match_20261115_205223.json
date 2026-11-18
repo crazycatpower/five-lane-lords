@@ -1,0 +1,36 @@
+{
+	"commands": [],
+	"duration": 341.016666666685,
+	"setup": {
+		"blue_deck": [
+			"parasite_mite",
+			"bramble_wall",
+			"assassin",
+			"blood_cauldron",
+			"bog_troll",
+			"long_dragon",
+			"monster_hunter",
+			"sky_scavenger"
+		],
+		"blue_lord": "beast",
+		"difficulty": 1,
+		"me": 0,
+		"mirror_view": false,
+		"red_deck": [
+			"vampire_hunter",
+			"axe_thrower",
+			"rolling_boulder",
+			"beekeeper",
+			"old_witch",
+			"macebreaker",
+			"catapult",
+			"guard"
+		],
+		"red_lord": "lion",
+		"seed": 1794746762,
+		"spectating": true
+	},
+	"total_ticks": 20460,
+	"version": 1,
+	"winner": 1
+}

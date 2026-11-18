@@ -1,0 +1,36 @@
+{
+	"commands": [],
+	"duration": 103.383333333329,
+	"setup": {
+		"blue_deck": [
+			"catapult",
+			"gatebreaker",
+			"granary",
+			"hunter",
+			"vampire_hunter",
+			"spellbreaker",
+			"spearbow",
+			"old_witch"
+		],
+		"blue_lord": "harvest",
+		"difficulty": 1,
+		"me": 0,
+		"mirror_view": false,
+		"red_deck": [
+			"skeleton",
+			"twin_gambler",
+			"monster_hunter",
+			"corpse_stitcher",
+			"pallbearer",
+			"bellbearer",
+			"funeral_cottage",
+			"catapult"
+		],
+		"red_lord": "vampire",
+		"seed": 1794741428,
+		"spectating": true
+	},
+	"total_ticks": 6202,
+	"version": 1,
+	"winner": 0
+}
