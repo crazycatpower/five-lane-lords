@@ -134,7 +134,7 @@
 	"blood_cauldron": {
 		"revision": "team-material-v2",
 		"sha256": "92ca2a087985be3e1abe28e12d7e6a1418d723737bf2f16316fb31d930154b8d",
-		"size": 384,
+		"size": 384.0,
 		"source": "res://assets/manuscript-v1/blood_cauldron.png"
 	},
 	"blood_tower": {
@@ -260,7 +260,7 @@
 	"devouring_maw": {
 		"revision": "team-material-v2",
 		"sha256": "e462dd090b0306c810425adf4e69c5fef3da01797fc7d2d07f62a7aea950ebc3",
-		"size": 384,
+		"size": 384.0,
 		"source": "res://assets/manuscript-v1/devouring_maw.png"
 	},
 	"dire_hydra": {
@@ -271,7 +271,7 @@
 	},
 	"disgraced_lancer": {
 		"revision": "team-material-v2",
-		"sha256": "2ee8b31dec5289c472ccf65b0fa05d58b809ea20955f4f6d6f9a369df99ca45a",
+		"sha256": "541b8fb120dd7b0c334343300f896ce601db509b189961ee0b43e1982236b3d9",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/disgraced_lancer.png"
 	},
@@ -289,7 +289,7 @@
 	},
 	"drummer": {
 		"revision": "team-material-v2",
-		"sha256": "f2ccb18793983c4adc8b0d1e29658f96ec52e46fab48eab375de110abb28d6a1",
+		"sha256": "ea314f81c7fdda287611181ab87b3ae2a9e15b6a56b6d6b44c1199c58478a4a1",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/drummer.png"
 	},
@@ -302,7 +302,7 @@
 	"feral_mutation": {
 		"revision": "team-material-v2",
 		"sha256": "b2a9e14279a3b04a06b51f53b55b9a6655f0ff31289d170a46c0b4146ee26279",
-		"size": 384,
+		"size": 384.0,
 		"source": "res://assets/manuscript-v1/feral_mutation.png"
 	},
 	"field_smithy": {
@@ -338,7 +338,7 @@
 	"funeral_monk": {
 		"revision": "team-material-v2",
 		"sha256": "bcea91ca9cdd2ecb0925d03a29f08c36fb926f4dda387f088df12ed57d47c594",
-		"size": 384,
+		"size": 384.0,
 		"source": "res://assets/manuscript-v1/funeral_monk.png"
 	},
 	"gate": {
@@ -380,7 +380,7 @@
 	"gold_monster": {
 		"revision": "team-material-v2",
 		"sha256": "f1f8ef3c0b364ebddadce9b4d5ac687f5ed0325aaa704030ce5e7812d7ec9f09",
-		"size": 384,
+		"size": 384.0,
 		"source": "res://assets/manuscript-v1/gold_monster.png"
 	},
 	"granary": {
@@ -421,14 +421,14 @@
 	},
 	"healer": {
 		"revision": "team-material-v2",
-		"sha256": "25f38d2748ca89cd2c648d93d2a1f16f81b7bf5be6ab92ca806be344f58bdbd9",
+		"sha256": "57af40d16b7018d193e7db66f2e781637926e1b097899621045dd84824e2032e",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/healer.png"
 	},
 	"hive_nest": {
 		"revision": "team-material-v2",
 		"sha256": "6a5b7cc8d32f0daa83e0355df19f5b6ee53aec38cf5844f879eae7cc91f3abd1",
-		"size": 384,
+		"size": 384.0,
 		"source": "res://assets/manuscript-v1/hive_nest.png"
 	},
 	"hook_collector": {
@@ -445,7 +445,7 @@
 	},
 	"hunter": {
 		"revision": "team-material-v2",
-		"sha256": "1e90cf682f13ff80f4ca8dd9360ecfd67bb62d97885fdf964ca81cc2837d5c73",
+		"sha256": "997031b4de17e6d1d36e7fe97f027ead323d9824431f1bcfd2599b1e150245d6",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/hunter.png"
 	},
@@ -470,7 +470,7 @@
 	"leech_vine": {
 		"revision": "team-material-v2",
 		"sha256": "1fe85d18340a4d95145328aeb19b14f5f9edeac43cf32f533a68d061df778781",
-		"size": 384,
+		"size": 384.0,
 		"source": "res://assets/manuscript-v1/leech_vine.png"
 	},
 	"levy": {
@@ -487,7 +487,7 @@
 	},
 	"lord_adventure": {
 		"revision": "team-material-v2",
-		"sha256": "f7f619c8d47b7a04351802b1b1746f0a37e2e2d366ec805e52ad24c736c41681",
+		"sha256": "d0d5c8a2164f2960b7aeb38bed1200da3520281416edb4f40cdaf9b45f0d5c25",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/lord-adventure.png"
 	},
@@ -620,7 +620,7 @@
 	"lord_card_enemy_blood_cauldron": {
 		"revision": "team-material-v2",
 		"sha256": "92ca2a087985be3e1abe28e12d7e6a1418d723737bf2f16316fb31d930154b8d",
-		"size": 384,
+		"size": 384.0,
 		"source": "res://assets/manuscript-v1/blood_cauldron.png"
 	},
 	"lord_card_enemy_bog_troll": {
@@ -710,7 +710,7 @@
 	"lord_card_enemy_devouring_maw": {
 		"revision": "team-material-v2",
 		"sha256": "e462dd090b0306c810425adf4e69c5fef3da01797fc7d2d07f62a7aea950ebc3",
-		"size": 384,
+		"size": 384.0,
 		"source": "res://assets/manuscript-v1/devouring_maw.png"
 	},
 	"lord_card_enemy_dire_hydra": {
@@ -721,7 +721,7 @@
 	},
 	"lord_card_enemy_disgraced_lancer": {
 		"revision": "team-material-v2",
-		"sha256": "2ee8b31dec5289c472ccf65b0fa05d58b809ea20955f4f6d6f9a369df99ca45a",
+		"sha256": "541b8fb120dd7b0c334343300f896ce601db509b189961ee0b43e1982236b3d9",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/disgraced_lancer.png"
 	},
@@ -758,7 +758,7 @@
 	"lord_card_enemy_feral_mutation": {
 		"revision": "team-material-v2",
 		"sha256": "b2a9e14279a3b04a06b51f53b55b9a6655f0ff31289d170a46c0b4146ee26279",
-		"size": 384,
+		"size": 384.0,
 		"source": "res://assets/manuscript-v1/feral_mutation.png"
 	},
 	"lord_card_enemy_field_smithy": {
@@ -794,7 +794,7 @@
 	"lord_card_enemy_funeral_monk": {
 		"revision": "team-material-v2",
 		"sha256": "bcea91ca9cdd2ecb0925d03a29f08c36fb926f4dda387f088df12ed57d47c594",
-		"size": 384,
+		"size": 384.0,
 		"source": "res://assets/manuscript-v1/funeral_monk.png"
 	},
 	"lord_card_enemy_gatebreaker": {
@@ -812,7 +812,7 @@
 	"lord_card_enemy_gold_monster": {
 		"revision": "team-material-v2",
 		"sha256": "f1f8ef3c0b364ebddadce9b4d5ac687f5ed0325aaa704030ce5e7812d7ec9f09",
-		"size": 384,
+		"size": 384.0,
 		"source": "res://assets/manuscript-v1/gold_monster.png"
 	},
 	"lord_card_enemy_granary": {
@@ -860,7 +860,7 @@
 	"lord_card_enemy_hive_nest": {
 		"revision": "team-material-v2",
 		"sha256": "6a5b7cc8d32f0daa83e0355df19f5b6ee53aec38cf5844f879eae7cc91f3abd1",
-		"size": 384,
+		"size": 384.0,
 		"source": "res://assets/manuscript-v1/hive_nest.png"
 	},
 	"lord_card_enemy_hook_collector": {
@@ -890,7 +890,7 @@
 	"lord_card_enemy_leech_vine": {
 		"revision": "team-material-v2",
 		"sha256": "1fe85d18340a4d95145328aeb19b14f5f9edeac43cf32f533a68d061df778781",
-		"size": 384,
+		"size": 384.0,
 		"source": "res://assets/manuscript-v1/leech_vine.png"
 	},
 	"lord_card_enemy_levy": {
@@ -950,7 +950,7 @@
 	"lord_card_enemy_mimic_egg": {
 		"revision": "team-material-v2",
 		"sha256": "82cd357532bd4af1f7795deaffd1293efd2700497fc0e60fe65b5e628c4f39aa",
-		"size": 384,
+		"size": 384.0,
 		"source": "res://assets/manuscript-v1/mimic_egg.png"
 	},
 	"lord_card_enemy_mirror_clone": {
@@ -1052,7 +1052,7 @@
 	"lord_card_enemy_plague_bishop": {
 		"revision": "team-material-v2",
 		"sha256": "f0a9a3fdff552b26571e8df771ad0cf99efa499ad5f3a7a6c2c97be935fe7a18",
-		"size": 384,
+		"size": 384.0,
 		"source": "res://assets/manuscript-v1/plague_bishop.png"
 	},
 	"lord_card_enemy_pouch_beast": {
@@ -1130,7 +1130,7 @@
 	"lord_card_enemy_seal_altar": {
 		"revision": "team-material-v2",
 		"sha256": "dcad1a1a44740257bfde744d342ffe1a406f326eab1e6ff42c625b1e8c756b00",
-		"size": 384,
+		"size": 384.0,
 		"source": "res://assets/manuscript-v1/seal_altar.png"
 	},
 	"lord_card_enemy_seal_bearer": {
@@ -1177,7 +1177,7 @@
 	},
 	"lord_card_enemy_spearbow": {
 		"revision": "team-material-v2",
-		"sha256": "a3493881af632dc739f5f904dd78c0cd47e7b60e56cf37a4ce6ce3cb9fd23a07",
+		"sha256": "ac8957b5cd3131b72706f0fca591d26f23cd1391c2ef7755c9dca3fb51a4c9a6",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/militia-red.png"
 	},
@@ -1186,6 +1186,12 @@
 		"sha256": "e68d6c947fd8f9580bc325cba495ceeee554234e3ab3c06f1180f3e50eb67c88",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/spell_mirror.png"
+	},
+	"lord_card_enemy_spell_tide_magus": {
+		"revision": "team-material-v2",
+		"sha256": "2ac087117fa3287a1845859a2ef75d926bba48eff2101464fe7e0aa0f1086fa4",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/spell_tide_magus.png"
 	},
 	"lord_card_enemy_spellbreaker": {
 		"revision": "team-material-v2",
@@ -1201,14 +1207,14 @@
 	},
 	"lord_card_enemy_supply_depot": {
 		"revision": "team-material-v2",
-		"sha256": "8f56d796d947d201f958f9a6b760b28ef4d9fab3ec6bafab6e0f7a4057c17bcc",
+		"sha256": "2817af7cc02d5be784df6ad5a15e8e1f9cdb02541630e26756a608ef36ab03b0",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/supply_depot.png"
 	},
 	"lord_card_enemy_swarm_eruption": {
 		"revision": "team-material-v2",
 		"sha256": "78a5b34c4639fa899d49cec69cfb77a1b54f90363045b7579547328b9165807a",
-		"size": 384,
+		"size": 384.0,
 		"source": "res://assets/manuscript-v1/swarm_eruption.png"
 	},
 	"lord_card_enemy_teleport_trap": {
@@ -1222,6 +1228,12 @@
 		"sha256": "10addad8e4e1eb37ea44f766a5bc7623328ff958938326fe7f47b59e245a5f65",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/thorn_hound.png"
+	},
+	"lord_card_enemy_thorn_mother": {
+		"revision": "team-material-v2",
+		"sha256": "2ec2f79dea07f4ebb3d3d6ab3134efc833a88ff51b696e4a90a74a120273183e",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/thorn_mother.png"
 	},
 	"lord_card_enemy_time_field": {
 		"revision": "team-material-v2",
@@ -1274,7 +1286,7 @@
 	"lord_card_enemy_wing_gust": {
 		"revision": "team-material-v2",
 		"sha256": "b885be26791dec2fd9326e1f93e597c99baa241b76c1e743699bf5b34bd5cdc3",
-		"size": 384,
+		"size": 384.0,
 		"source": "res://assets/manuscript-v1/wing_gust.png"
 	},
 	"lord_catapult_engineer": {
@@ -1297,13 +1309,13 @@
 	},
 	"lord_drummer_major": {
 		"revision": "team-material-v2",
-		"sha256": "f2ccb18793983c4adc8b0d1e29658f96ec52e46fab48eab375de110abb28d6a1",
+		"sha256": "ea314f81c7fdda287611181ab87b3ae2a9e15b6a56b6d6b44c1199c58478a4a1",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/drummer.png"
 	},
 	"lord_field_prior": {
 		"revision": "team-material-v2",
-		"sha256": "25f38d2748ca89cd2c648d93d2a1f16f81b7bf5be6ab92ca806be344f58bdbd9",
+		"sha256": "57af40d16b7018d193e7db66f2e781637926e1b097899621045dd84824e2032e",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/healer.png"
 	},
@@ -1327,13 +1339,13 @@
 	},
 	"lord_harvest": {
 		"revision": "team-material-v2",
-		"sha256": "fcbfae5357965af9afce29202f9292912ce9d41403e3d112109f1c32fc9a958a",
+		"sha256": "91a058c8285bddccf663e2ea89783da3451ec62917162904e667c392ca329c1e",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/lord-harvest.png"
 	},
 	"lord_hunter_master": {
 		"revision": "team-material-v2",
-		"sha256": "1e90cf682f13ff80f4ca8dd9360ecfd67bb62d97885fdf964ca81cc2837d5c73",
+		"sha256": "997031b4de17e6d1d36e7fe97f027ead323d9824431f1bcfd2599b1e150245d6",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/hunter.png"
 	},
@@ -1345,7 +1357,7 @@
 	},
 	"lord_iron": {
 		"revision": "team-material-v2",
-		"sha256": "6aac8bcb953794ad7d16af304b8c8ffaa430c63da699c3a88ee0a90adb513044",
+		"sha256": "affb6aa72b4e9227b1a2c144228a596cd40990ceffa0ad592863898d10b9a732",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/lord-iron.png"
 	},
@@ -1357,19 +1369,19 @@
 	},
 	"lord_lion": {
 		"revision": "team-material-v2",
-		"sha256": "74f5b6468418940aa8d414e014ff01830235b4ab55137b61ad2af60d5f6c6079",
+		"sha256": "8f49b6a9e29b489a08526d95cd0c52570e9ad8db3909d0ca02fa70aba94f36ec",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/lord-lion.png"
 	},
 	"lord_mage": {
 		"revision": "team-material-v2",
-		"sha256": "cea6a61c05d7e19b3298a08ac437ab2ed26085212f7e3e474882a920d3b8dd29",
+		"sha256": "5764c3566b0747c30466a6aedcd854871dd8e55741e0c36cc3617a330852afbe",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/lord-mage.png"
 	},
 	"lord_militia_captain": {
 		"revision": "team-material-v2",
-		"sha256": "a3493881af632dc739f5f904dd78c0cd47e7b60e56cf37a4ce6ce3cb9fd23a07",
+		"sha256": "ac8957b5cd3131b72706f0fca591d26f23cd1391c2ef7755c9dca3fb51a4c9a6",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/militia-red.png"
 	},
@@ -1405,7 +1417,7 @@
 	},
 	"lord_ram_marshal": {
 		"revision": "team-material-v2",
-		"sha256": "e532d53758029867ebcb4f93f5d297195d38e7ea26adbe4eca3c825516a043be",
+		"sha256": "b9899f4ed21c5998160f3120a9130e48b5f848134080f6b2b2f944d25b4b48f8",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/ram.png"
 	},
@@ -1495,7 +1507,7 @@
 	},
 	"militia": {
 		"revision": "team-material-v2",
-		"sha256": "a3493881af632dc739f5f904dd78c0cd47e7b60e56cf37a4ce6ce3cb9fd23a07",
+		"sha256": "ac8957b5cd3131b72706f0fca591d26f23cd1391c2ef7755c9dca3fb51a4c9a6",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/militia-red.png"
 	},
@@ -1508,7 +1520,7 @@
 	"mimic_egg": {
 		"revision": "team-material-v2",
 		"sha256": "82cd357532bd4af1f7795deaffd1293efd2700497fc0e60fe65b5e628c4f39aa",
-		"size": 384,
+		"size": 384.0,
 		"source": "res://assets/manuscript-v1/mimic_egg.png"
 	},
 	"mirror_clone": {
@@ -1640,7 +1652,7 @@
 	"plague_bishop": {
 		"revision": "team-material-v2",
 		"sha256": "f0a9a3fdff552b26571e8df771ad0cf99efa499ad5f3a7a6c2c97be935fe7a18",
-		"size": 384,
+		"size": 384.0,
 		"source": "res://assets/manuscript-v1/plague_bishop.png"
 	},
 	"pouch_beast": {
@@ -1663,7 +1675,7 @@
 	},
 	"ram": {
 		"revision": "team-material-v2",
-		"sha256": "e532d53758029867ebcb4f93f5d297195d38e7ea26adbe4eca3c825516a043be",
+		"sha256": "b9899f4ed21c5998160f3120a9130e48b5f848134080f6b2b2f944d25b4b48f8",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/ram.png"
 	},
@@ -1724,7 +1736,7 @@
 	"seal_altar": {
 		"revision": "team-material-v2",
 		"sha256": "dcad1a1a44740257bfde744d342ffe1a406f326eab1e6ff42c625b1e8c756b00",
-		"size": 384,
+		"size": 384.0,
 		"source": "res://assets/manuscript-v1/seal_altar.png"
 	},
 	"seal_bearer": {
@@ -1783,7 +1795,7 @@
 	},
 	"spearbow": {
 		"revision": "team-material-v2",
-		"sha256": "a3493881af632dc739f5f904dd78c0cd47e7b60e56cf37a4ce6ce3cb9fd23a07",
+		"sha256": "ac8957b5cd3131b72706f0fca591d26f23cd1391c2ef7755c9dca3fb51a4c9a6",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/militia-red.png"
 	},
@@ -1792,6 +1804,12 @@
 		"sha256": "e68d6c947fd8f9580bc325cba495ceeee554234e3ab3c06f1180f3e50eb67c88",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/spell_mirror.png"
+	},
+	"spell_tide_magus": {
+		"revision": "team-material-v2",
+		"sha256": "2ac087117fa3287a1845859a2ef75d926bba48eff2101464fe7e0aa0f1086fa4",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/spell_tide_magus.png"
 	},
 	"spellbreaker": {
 		"revision": "team-material-v2",
@@ -1807,14 +1825,14 @@
 	},
 	"supply_depot": {
 		"revision": "team-material-v2",
-		"sha256": "8f56d796d947d201f958f9a6b760b28ef4d9fab3ec6bafab6e0f7a4057c17bcc",
+		"sha256": "2817af7cc02d5be784df6ad5a15e8e1f9cdb02541630e26756a608ef36ab03b0",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/supply_depot.png"
 	},
 	"swarm_eruption": {
 		"revision": "team-material-v2",
 		"sha256": "78a5b34c4639fa899d49cec69cfb77a1b54f90363045b7579547328b9165807a",
-		"size": 384,
+		"size": 384.0,
 		"source": "res://assets/manuscript-v1/swarm_eruption.png"
 	},
 	"teleport_trap": {
@@ -1834,6 +1852,12 @@
 		"sha256": "10addad8e4e1eb37ea44f766a5bc7623328ff958938326fe7f47b59e245a5f65",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/thorn_hound.png"
+	},
+	"thorn_mother": {
+		"revision": "team-material-v2",
+		"sha256": "2ec2f79dea07f4ebb3d3d6ab3134efc833a88ff51b696e4a90a74a120273183e",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/thorn_mother.png"
 	},
 	"time_field": {
 		"revision": "team-material-v2",
@@ -1892,7 +1916,7 @@
 	"wing_gust": {
 		"revision": "team-material-v2",
 		"sha256": "b885be26791dec2fd9326e1f93e597c99baa241b76c1e743699bf5b34bd5cdc3",
-		"size": 384,
+		"size": 384.0,
 		"source": "res://assets/manuscript-v1/wing_gust.png"
 	}
 }
