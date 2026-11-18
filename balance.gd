@@ -47,7 +47,7 @@ const DAWN := 540.0 # 9:00
 const ARROW_TIME := 0.35
 const AI_SPELL_LEAD := 24.0 # Fixed lead; no target tracking or velocity estimation.
 const SPELL_DELAY := 0.4
-const LORD_RANGE := 140.0 # range tier C (up from D 100, 2026-11-17)
+const LORD_RANGE := 180.0 # range tier B (D 100 -> C 140 on 2026-11-17, -> B 180 on 2026-11-18)
 # Lords stay behind the farms (producer 2026-10-29): they only move within this many px of the
 # grid's back edge (the back farm column is centred 59 px in), so raids on farms are not free to stop.
 const LORD_ZONE_DEPTH := 40.0
