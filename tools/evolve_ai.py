@@ -8,7 +8,7 @@ and every seed is played twice, the candidate once as red and once as blue, so o
 differs. The next parent is the average of the best three (robust to lucky scores). The final parent
 is then checked on fresh seeds.
 
-Writes tools/evolved_ai.json (the weights) and docs/AI演化報告.md. Game files are not changed.
+Writes tools/evolved_ai.json (the weights) and tools/evolve_runs/report.md (not committed). Game files are not changed.
 """
 import argparse, json, math, os, random, subprocess, time
 from concurrent.futures import ThreadPoolExecutor
@@ -17,7 +17,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RUNS = os.path.join(ROOT, "tools", "evolve_runs")
 PROJECT = ROOT  # where the Godot workers run; --project points them at a frozen copy
 OUT = os.path.join(ROOT, "tools", "evolved_ai.json")
-REPORT = os.path.join(ROOT, "docs", "AI演化報告.md")
+REPORT = os.path.join(ROOT, "tools", "evolve_runs", "report.md")
 
 # name: (default, low, high, mutation sigma, integer, description). Defaults must match enemy_ai.gd
 # (normal difficulty), so the first parent is exactly the hand-written AI.

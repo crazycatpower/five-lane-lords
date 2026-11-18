@@ -18,6 +18,10 @@
 | 開戰橫幅、結算頁 | `battle_ceremony.gd` |
 | 城牆畫法 | `wall_art.gd`（`game.gd` 的 `draw_wall_section()` 只是一行呼叫） |
 | 配樂、音量、設定頁 | `music_player.gd`、`settings_screen.gd`、`tools/make_music.py` |
+| 建築攻擊範圍（`reach` 格子形狀、優先打部隊再打建築）、多路陣型（`footprint`）、放置預覽站位 | `grid_rules.gd` |
+| 金幣怪物（花光金幣、階段表 `B.GOLD_MONSTER_STAGES`） | `gold_monster.gd` |
+| 封印祭壇、瘟疫主教（收魂、封印、腐土） | `seal_altar.gd` |
+| 陣營核心收益卡：咒潮法師、荊棘母獸 | `core_cards.gd` |
 
 ## 規則與陷阱
 
@@ -36,6 +40,8 @@
 - 冒險的領地資料用 `Catalog.stages()` 取得（不是常數）；敵方領主可以是 `B.MINION_LORDS`。能否進攻看 `adventure.unlocked(i)`：鄰居已征服，王都另需四座首府。出征領主是 `adventure.lord`，可選的牌用 `adventure.card_pool()`，不要寫死 `"adventure"`。
 - 畫面演出（轉場、音樂、結算動畫）走 `game.gd` 的 `present()`，用真實時間 `clock`，不讀也不改對局狀態。
 - 僅保留 `quick_test.gd`、`test_art_palette.gd`、`test_startup.gd`、`test_net_match.gd` 四支核心測試；`test_art_palette.gd` 為 `extends RefCounted` 模組，由 `quick_test.gd` 載入，不可直接以 `-s` 執行。勿再為單一改動新增 `test_*.gd` 檔案。
+- `quick_test.gd` 上限 50 項（2026-11-18 從 1493 項精簡，舊版備份在 `.runtime/quick-test-before/`）。素材檢查把比對過的原圖／衍生圖雜湊快取在 `user://art_palette_verified.json`，圖沒變就跳過解碼；第一次執行較慢。
+- 新卡的接法：規則放新模組，`balance.gd`、`battle.gd`、`game.gd` 只加一行掛鉤；收益卡與陣型以資料欄位驅動（`pay_all`、`unique`、`no_opening`、`hold_cooldown`、`spell_stacks`、`thorns_aura`、`reach`、`footprint`）。
 - 兩個人同時改同一個檔會互相覆蓋。新功能放新模組，`game.gd`、`battle.gd`、`balance.gd` 只留掛鉤。
 
 ## 文件與工具
@@ -43,8 +49,8 @@
 - [新增卡牌指南](新增卡牌指南.md)、[數值檔次](數值檔次.md)、[資料結構](資料結構.md)。
 - [美術驗收](美術驗收.md)：風格、朝向與素材準備。
 - [Windows 打包](Windows打包.md)：可玩版本與發布驗收限制。
-- [下一步計畫](下一步計畫.md)：目前的分工與待辦。
-- `tools/autobalance.py --dry-run` 只量測；不加此參數會改費用。
+- `tools/autobalance.py --dry-run` 只量測；不加此參數會改費用。報告寫到 `tools/autobalance_runs/report.md`（不提交）。
+- 定價以成對 AI 對局為準（同領主、一方必帶目標卡、交換紅藍各打一場）：約 1 金幣 ≈ 1% 勝率；`autobalance.py` 的理論費用公式實測誤差大於直接沿用現行費用，只作新卡初估。
 - 報告的日期、版本、種子與牌組決定適用範圍，舊勝率不是目前強度。
 
 測試分級以根目錄 `AGENTS.md` 為準。已完成待辦及逐次驗收流水帳已刪減，需要時查 Git 歷史。

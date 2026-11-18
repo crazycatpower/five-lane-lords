@@ -22,4 +22,4 @@ Windows 玩家版請到此倉庫的 **Releases** 下載 `FiveLaneLords-Windows.z
 
 配樂與介面音由 `python tools/make_music.py` 合成（原創、原聲樂器音色），圖示由 `python tools/make_icon.py` 產生。
 
-測試：日常只跑相關專用測試；共用資料修改可跑 `godot_console --headless --path . -s tools/quick_test.gd`。詳見 `AGENTS.md`。
+測試：`godot_console --headless --path . -s tools/quick_test.gd`（核心檢查，最多 50 項）；改動啟動或連線時另跑 `tools/test_startup.gd`、`tools/test_net_match.gd`。詳見 `AGENTS.md`。
