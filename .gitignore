@@ -15,3 +15,9 @@ export_templates/
 # Documentation and reference images are not runtime resources.
 docs/**/*.import
 art-direction/**/*.import
+
+# Recording outputs: videos, raw captures and render logs are large and regenerable.
+recordings/*.mp4
+recordings/*.avi
+recordings/*.log
+recordings/daily_yt/
