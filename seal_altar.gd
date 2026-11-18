@@ -1,7 +1,6 @@
 extends RefCounted
 # 封印祭壇 → 瘟疫主教 (2026-11-18): the dark faction's payoff for its death engines.
-# One altar per side. Every troop that dies (either side) feeds it souls: soul_lane in the altar's own
-# lane, soul_other elsewhere. Each seal that breaks makes nearby foes flee for seal_fear seconds; the
+# One altar per side. Every troop that dies (either side, any lane) feeds it soul_per_death souls. Each seal that breaks makes nearby foes flee for seal_fear seconds; the
 # last one shatters the altar and the heretic bishop walks out with his hooded funeral monks.
 # The bishop's bell (support "slow"), the monks' healing (support "heal") and his arrival roar
 # (roar_fear) reuse the existing data-driven rules; only the rotting trail lives here.
@@ -30,7 +29,7 @@ static func on_death(m, dead: Dictionary) -> void:
 		var b: Dictionary = m.buildings[i]
 		if b.hp <= 0 or b.kind != "seal_altar": continue
 		var before: float = b.get("souls",0.0)
-		b.souls = before+(float(d.soul_lane) if b.cell.y == dead.lane else float(d.soul_other))
+		b.souls = before+float(d.soul_per_death)
 		m.link(dead.pos,b.pos,b.team,"soul")
 		var seals: Array = d.seals
 		for s: int in range(seals.size()):
@@ -40,17 +39,17 @@ static func on_death(m, dead: Dictionary) -> void:
 					break
 				seal_break(m,b,s)
 
-# enemy_ai: raise the altar early, at the back of the busiest lane (own-lane deaths count double);
+# enemy_ai: raise the altar at the back of the quietest lane (souls come from every lane, so keep it safe);
 # top up an existing one only when it is badly hurt. -INF = leave it to the normal rules.
 static func ai_score(c: Dictionary, s: Dictionary, team: int, col: int) -> float:
 	if c.kind != "seal_altar": return -INF
 	for b: Dictionary in s.buildings:
 		if b.team == team and b.kind == "seal_altar" and b.hp > 0:
 			return 720.0 if b.cell == c.cell and b.hp < b.max_hp*0.4 else -INF
-	var busy := 0
+	var foes := 0
 	for u: Dictionary in s.units:
-		if u.hp > 0 and u.lane == c.cell.y: busy += 1
-	return 760.0-col*40.0+busy*4.0
+		if u.hp > 0 and u.team != team and u.lane == c.cell.y: foes += 1
+	return 760.0-col*40.0-foes*6.0
 
 static func seals_broken(b: Dictionary) -> int:
 	var n := 0
@@ -111,7 +110,7 @@ static func describe(kind: String) -> Array[String]:
 	if kind == "seal_altar":
 		var d: Dictionary = B.CARDS.seal_altar
 		var bishop: Dictionary = B.CARDS[d.summon]
-		lines.append("不會出現在起手牌；每方只能有一座。本路每死 1 名部隊（敵我皆算）得 %s 魂，其他路得 %s 魂。" % [B.number(d.soul_lane),B.number(d.soul_other)])
+		lines.append("不會出現在起手牌；每方只能有一座。任何一路每死 1 名部隊（敵我皆算）得 %s 魂。" % B.number(d.soul_per_death))
 		lines.append("%s 魂時封印依序碎裂，每破一道使半徑 %s 內敵兵恐懼 %s 秒；集滿 %s 魂祭壇碎裂，召喚%s與 %d 名%s。祭壇被拆則靈魂散去。" % ["／".join(d.seals.map(func(x) -> String: return str(x))),B.number(d.radius),B.number(d.seal_fear),str(d.seals[-1]),bishop.name,int(d.escort[1]),B.CARDS[d.escort[0]].name])
 	elif kind == "plague_bishop":
 		var p: Dictionary = B.CARDS.plague_bishop

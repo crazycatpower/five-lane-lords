@@ -130,7 +130,7 @@ func run() -> void:
 		sa.resolve_deaths()
 	sa_kill.call(2, 6)
 	sa_kill.call(0, 6)
-	check(is_equal_approx(sa_altar.get("souls", 0.0), 3.0), "seal_altar: a death in its lane gives 2 souls, elsewhere 1")
+	check(is_equal_approx(sa_altar.get("souls", 0.0), 2.0), "seal_altar: every death gives 1 soul, in its lane or elsewhere")
 	var sa_scared: Dictionary = sa.spawn_unit(1, 2, "militia", sa_altar.pos + Vector2(60, 0))
 	sa_scared.spawn_delay = 0.0
 	sa_altar.souls = 19.0

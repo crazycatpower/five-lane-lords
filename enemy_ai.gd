@@ -155,7 +155,7 @@ static func decide(s: Dictionary) -> Dictionary:
 						break
 				if eaten_on_spawn: continue
 			if GoldMonster.ai_wait(c.kind,s.ink,defend >= 0 and lane == defend): continue # 金幣怪物 waits for a real purse
-			if c.kind == "seal_altar": # 封印祭壇: back of the busiest lane, never while defending
+			if c.kind == "seal_altar": # 封印祭壇: back of the quietest lane, never while defending
 				var altar_score: float = SealAltar.ai_score(c,s,team,col)
 				if defend < 0 and altar_score > best_score:
 					best_score = altar_score
