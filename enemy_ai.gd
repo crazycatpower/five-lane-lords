@@ -28,8 +28,8 @@ static func weights(s: Dictionary) -> Dictionary:
 	if pr.is_empty() and s.get("difficulty",1) == 2: return EVOLVED
 	return pr
 
-# Lord skill: {"cast": bool, "save": bool}. While saving, the AI only defends and repairs, so its
-# purse can reach the full SKILL_COST.
+# Lord skill: {"cast": bool, "save": bool}. "save" is always false now: the skill is paid by its
+# charge meter, not by gold.
 #
 # Every tunable weight is read as pr.get(name, default); an empty params dictionary (the normal
 # game) gives exactly the hand-written AI. tools/evolve_ai.py searches these weights.
@@ -37,18 +37,15 @@ static func skill_plan(k: Dictionary) -> Dictionary:
 	if not k.ready: return {"cast":false,"save":false}
 	var pr: Dictionary = weights(k)
 	var wanted := false
-	var hoard: bool = pr.get("hoard",1.0) >= 0.5
 	match k.lord:
 		"rune": wanted = k.get("rune_lanes",0) > 0 and k.elapsed >= 30
 		"vampire": wanted = k.get("troops",0) >= 2
-		"mage": wanted = k.get("troops",0) >= pr.get("mage_min_troops",10)
+		"mage": wanted = k.get("enemy_troops",0) >= pr.get("mage_min_troops",4) # freezes only enemies (2026-11-19): cast when there are enemies to freeze
 		"underworld": wanted = k.get("graves",0) >= 2
 		"adventure": wanted = k.get("slash_targets",0) >= 2
 		"lion", "beast": wanted = k.elapsed >= pr.get("skill_after",45.0)
 		"harvest": wanted = k.elapsed >= pr.get("skill_after",45.0) and k.farms <= pr.get("harvest_max_farms",7.0)
-		"iron":
-			wanted = k.broken > 0 or k.gate_share < pr.get("iron_gate_share",0.92)
-			hoard = false
+		"iron": wanted = k.elapsed >= pr.get("iron_after",20.0) # 箭樓築城: towers pay off the earlier they stand
 		_:
 			if B.is_minion(k.lord):
 				var ms: Dictionary = B.minion_skill(k.lord)
@@ -59,11 +56,8 @@ static func skill_plan(k: Dictionary) -> Dictionary:
 						if ms.skill_card == "harvest": wanted = k.farms > 0
 						elif ms.skill_card in B.FRIENDLY_SPELLS: wanted = k.get("troops",0) >= 2
 						else: wanted = k.get("enemy_troops",0) >= 2 or k.broken > 0 or k.elapsed >= 45.0
-	# Hoard only once the purse is fairly full, so the AI keeps attacking while it saves up.
-	var cost: float = B.skill_cost(k.lord)
-	var default_save := 18.0 if k.lord == "beast" else 30.0
-	var save_at: float = maxf(18.0, minf(pr.get("save_from",default_save), cost - 5.0))
-	return {"cast":wanted and k.ink >= cost,"save":wanted and hoard and cost > 20.0 and k.ink >= save_at}
+	# The skill costs no gold since the charge meter (2026-11-19), so the AI never hoards for it.
+	return {"cast":wanted and k.get("charge",0.0) >= k.get("need",INF)-0.00001,"save":false}
 
 static func decide(s: Dictionary) -> Dictionary:
 	var pr: Dictionary = weights(s)

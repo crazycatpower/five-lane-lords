@@ -383,6 +383,8 @@ const MINIONS := {
 	"card_enemy_counter_charge":{"tier":1,"deck":["counter_charge","counter_charge","knight","halberdier","arquebusier","healer","ox","barricade"]},
 	"card_enemy_flaming_pitch":{"tier":2,"deck":["flaming_pitch","flaming_pitch","scarecrow","shieldguard","net_hunter","hunter","barricade","militia"]},
 	"card_enemy_rune_sentinel":{"tier":1,"deck":["rune_sentinel","rune_sentinel","arcane_shield","chronomancer","prism_mage","sigil_weaver","mana_spring","arcane_tower"]},
+	"card_enemy_ward_guard":{"tier":1,"deck":["ward_phalanx","spell_tide_magus","rune_sentinel","arcane_shield","prism_mage","sigil_weaver","mana_spring","arcane_tower"]},
+	"card_enemy_ward_phalanx":{"tier":2,"deck":["ward_phalanx","ward_phalanx","arcane_archer","seal_bearer","arcane_shield","time_field","chronomancer","artificer"]},
 	"card_enemy_prism_mage":{"tier":2,"deck":["prism_mage","prism_mage","observatory","arcane_golem","arcane_shield","time_field","chronomancer","artificer"]},
 	"card_enemy_aether_hound":{"tier":2,"deck":["aether_hound","aether_hound","arcane_shield","phase_shift","blink_blade","chronomancer","prism_mage","time_field"]},
 	"card_enemy_spell_mirror":{"tier":3,"deck":["spell_mirror","spell_mirror","chain_lightning","gravity_well","time_field","mana_battery","arcane_golem","arcane_archer"]},

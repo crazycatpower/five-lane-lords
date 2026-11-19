@@ -40,7 +40,7 @@ static func repair(m, u: Dictionary, dt: float = 0.0) -> bool:
 	var distance: float = d.repair_range+1.0
 	var missing := 0.0
 	for ally: Dictionary in m.units:
-		if ally.team == u.team and ally.kind == "arcane_golem" and ally.hp > 0 and ally.max_hp-ally.hp > missing and B.edge_distance(u,ally) <= d.repair_range:
+		if ally.team == u.team and B.CARDS[ally.kind].get("construct",false) and ally.hp > 0 and ally.max_hp-ally.hp > missing and B.edge_distance(u,ally) <= d.repair_range:
 			target = ally
 			missing = ally.max_hp-ally.hp
 	if not target.is_empty():

@@ -56,7 +56,7 @@ const KEYWORDS := {
 		"fill": Color("d3dde3"),
 		"fx": Color("8fa8b8"),
 		"desc": "減少每次受到的傷害（最低仍受 1 點傷害），或構築高耐久防線。",
-		"terms": ["護甲","受到傷害減少","重築城牆","減傷"]
+		"terms": ["護甲","受到傷害減少","減傷"]
 	},
 	"破甲": {
 		"color": Color("9e4b16"),
@@ -69,7 +69,7 @@ const KEYWORDS := {
 		"color": Color("7d591e"),
 		"fill": Color("efe0c2"),
 		"fx": Color("d9a74a"),
-		"desc": "修補受損的友方建築或魔像，恢復其生命與運作效率。",
+		"desc": "修補受損的友方建築或構裝（奧術魔像、結界護衛），恢復其生命與運作效率。",
 		"terms": ["維修","修復友方建築","修補"]
 	},
 	"反傷": {
@@ -330,6 +330,8 @@ const CARD_OVERRIDES := {
 	"astrolabe_surveyor": ["偵查","遠射"],
 	"belly_eye": ["偵查","重裝"],
 	"prism_mage": ["偵查","爆破"],
+	"ward_guard": ["護盾","維修"],
+	"ward_phalanx": ["護盾","爆破"],
 	"aether_hound": ["相位","獵殺"],
 	"blink_blade": ["相位"],
 	"phase_shift": ["相位"],
@@ -388,7 +390,7 @@ const CARD_OVERRIDES := {
 	"bearded_imp": ["偷金"],
 	"imp_burrow": ["召喚","偷金"],
 	"mana_drain": ["偷金","爆破"],
-	"devouring_maw": ["偷金","獵殺"],
+	"devouring_maw": ["獵殺"],
 	"vampire_hunter": ["獵殺","遠射"],
 	"monster_hunter": ["獵殺"],
 	"runaway_thrall": ["獵殺","人海"],

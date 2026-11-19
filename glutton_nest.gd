@@ -39,7 +39,7 @@ static func update(m, b: Dictionary, dt: float) -> bool:
 		return true
 	if b.get("nest_windup",0.0) <= 0:
 		for u: Dictionary in m.units:
-			if edible(u) and B.point_edge_distance(b.pos,u) <= d.trigger_radius:
+			if u.team != b.team and edible(u) and B.point_edge_distance(b.pos,u) <= d.trigger_radius: # only foes (2026-11-19)
 				b.nest_windup = d.windup
 				m.event("nest_windup",b.pos,b.team)
 				m.build_lookups()
@@ -50,7 +50,13 @@ static func update(m, b: Dictionary, dt: float) -> bool:
 	# Recheck at impact: units can flee or enter the mouth during the tell.
 	var victims: Array[Dictionary] = []
 	for u: Dictionary in m.units:
-		if edible(u) and B.point_edge_distance(b.pos,u) <= d.radius: victims.append(u)
+		if u.team != b.team and edible(u) and B.point_edge_distance(b.pos,u) <= d.radius: victims.append(u)
+	# One mouthful holds at most bite_max troops (2026-11-19): the nearest ones, ties by id.
+	victims.sort_custom(func(a: Dictionary, c: Dictionary) -> bool:
+		var da: float = B.point_edge_distance(b.pos,a)
+		var dc: float = B.point_edge_distance(b.pos,c)
+		return da < dc or (da == dc and a.id < c.id))
+	victims = victims.slice(0,int(d.get("bite_max",victims.size())))
 	var cap: float = d.get("bite_cap",500.0)
 	var health := 0.0
 	for u: Dictionary in victims:
@@ -149,7 +155,7 @@ static func safe_coverage(s: Dictionary) -> Dictionary:
 			var close_approach := winding
 			if not winding:
 				for u: Dictionary in s.units:
-					if not edible_unit(u) or u.lane != lane: continue
+					if u.team == team or not edible_unit(u) or u.lane != lane: continue
 					var u_speed: float = maxf(1.0,u.get("speed",B.CARDS.get(u.kind,{}).get("speed",40.0)))
 					var edge_now: float = B.point_edge_distance(b.pos,u)
 					if u.team != team:
@@ -232,13 +238,7 @@ static func ai_score(c: Dictionary, s: Dictionary, _target_lane: int, defend: in
 				if ahead >= -d.trigger_radius and ahead <= 150.0:
 					foe_ahead += bite_hp
 					min_foe_dist = minf(min_foe_dist,maxf(0.0,ahead-d.trigger_radius))
-		else:
-			if dist <= d.radius: ally_eat += bite_hp
-			if u.lane == lane:
-				var behind: float = (c.pos.x-u.pos.x)*forward
-				if behind > -d.trigger_radius and behind <= 200.0:
-					ally_behind += u.hp
-					min_ally_dist = minf(min_ally_dist,maxf(0.0,behind-d.trigger_radius))
+		# Our own troops are never eaten (2026-11-19), so they no longer count against a spot.
 	var net_eat: float = foe_eat-ally_eat*2.0
 	if defend >= 0:
 		if lane != defend: return -INF

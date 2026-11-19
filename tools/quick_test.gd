@@ -227,9 +227,13 @@ func combat_checks() -> void:
 	gn.buildings.clear()
 	var mouth := gn.add_building(0, Vector2i(2, 2), "glutton_nest")
 	var tank := ready_unit(gn, 1, 2, "knight", mouth.pos)
+	var swarm: Array = []
+	for i: int in range(4): swarm.append(ready_unit(gn, 1, 2, "militia", mouth.pos + Vector2(30.0 + i * 20.0, 0.0)))
+	var own := ready_unit(gn, 0, 2, "militia", mouth.pos + Vector2(10.0, 0.0)) # nearest of all, but ours
 	Nest.update(gn, mouth, 0.01)
 	Nest.update(gn, mouth, B.CARDS.glutton_nest.windup)
-	check(is_equal_approx(tank.hp, 400.0), "glutton_nest deals at most 500 to a big body (900 -> 400)")
+	var eaten: int = ([tank] + swarm).filter(func(u: Dictionary) -> bool: return u.hp < u.max_hp).size()
+	check(is_equal_approx(tank.hp, 400.0) and eaten == int(B.CARDS.glutton_nest.bite_max) and swarm[3].hp == swarm[3].max_hp and own.hp == own.max_hp, "glutton_nest deals at most 500 to a big body (900 -> 400) and bites only the nearest bite_max foes, never our own")
 
 	# Damage buildings hit enemy buildings only when no enemy troop is in range.
 	var tw := quiet(35)
@@ -295,7 +299,7 @@ func combat_checks() -> void:
 	pv.ai_enabled = [false, false]
 	pv.lord_active = [false, false]
 	var mismatched: Array = []
-	for pc: Array in [["militia", Vector2i(1, 1)], ["shieldguard", Vector2i(1, 2)], ["skeleton", Vector2i(1, 3)], ["guard", Vector2i(1, 2)], ["ram", Vector2i(1, 1)], ["mob", Vector2i(1, 2)], ["gold_monster", Vector2i(1, 2)], ["necromancer", Vector2i(1, 2)], ["pallbearer", Vector2i(1, 2)], ["blink_blade", Vector2i(1, 2)], ["aether_hound", Vector2i(1, 2)], ["raven", Vector2i(1, 2)], ["dark_wizard", Vector2i(1, 2)], ["thorn_mother", Vector2i(1, 2)]]:
+	for pc: Array in [["aether_hound", Vector2i(1, 1)], ["dog_cannon", Vector2i(1, 3)], ["ward_phalanx", Vector2i(1, 2)], ["orrery_walker", Vector2i(1, 1)], ["militia", Vector2i(1, 1)], ["shieldguard", Vector2i(1, 2)], ["skeleton", Vector2i(1, 3)], ["guard", Vector2i(1, 2)], ["ram", Vector2i(1, 1)], ["mob", Vector2i(1, 2)], ["gold_monster", Vector2i(1, 2)], ["necromancer", Vector2i(1, 2)], ["pallbearer", Vector2i(1, 2)], ["blink_blade", Vector2i(1, 2)], ["aether_hound", Vector2i(1, 2)], ["raven", Vector2i(1, 2)], ["dark_wizard", Vector2i(1, 2)], ["thorn_mother", Vector2i(1, 2)]]:
 		pv.units.clear()
 		pv.decks[0][0] = pc[0]
 		pv.hand_cd[0][0] = 0.0
@@ -308,7 +312,21 @@ func combat_checks() -> void:
 		var got: Dictionary = {}
 		for u: Dictionary in pv.units: got[[u.kind, u.pos]] = int(got.get([u.kind, u.pos], 0)) + 1
 		if got != expect: mismatched.append(pc[0])
-	check(mismatched.is_empty(), "placement preview matches where every squad really stands (mismatch: %s)" % str(mismatched))
+	# 結界護衛 takes half of what a nearby ally suffers, and an artificer repairs it (construct).
+	var wd := Battle.new(39, [], [], "mage", "lion")
+	wd.ai_enabled = [false, false]
+	wd.lord_active = [false, false]
+	wd.units.clear()
+	var ward: Dictionary = wd.spawn_unit(0, 2, "ward_guard", L.cell_center(Vector2i(2, 2)))
+	var warded: Dictionary = wd.spawn_unit(0, 2, "prism_mage", ward.pos - Vector2(40, 0))
+	var smith: Dictionary = wd.spawn_unit(0, 2, "artificer", ward.pos - Vector2(60, 0))
+	for x: Dictionary in [ward, warded, smith]: x.spawn_delay = 0.0
+	wd.build_lookups()
+	wd.damage(warded, 100.0, 1, "militia")
+	var ward_ok: bool = is_equal_approx(warded.hp, warded.max_hp - 50.0) and is_equal_approx(ward.hp, ward.max_hp - 50.0)
+	for i: int in range(90): wd.step(1.0 / 30.0)
+	ward_ok = ward_ok and is_equal_approx(ward.hp, ward.max_hp)
+	check(mismatched.is_empty() and ward_ok, "placement preview matches where every squad really stands, and 結界護衛 shares damage and is repaired by an artificer (mismatch: %s, ward %s)" % [str(mismatched), ward_ok])
 
 	# Grid spells hit exactly their tiles.
 	var g := quiet(63, "mage", "lion")
@@ -339,12 +357,14 @@ func lord_checks() -> void:
 	ml.ai_enabled = [false, false]
 	ml.lord_active = [false, true]
 	ready_unit(ml, 0, 2, "knight", ml.lords[1].pos - Vector2(B.LORD_RANGE + 80.0, 0.0))
+	var side_lane: int = (ml.lord_lane(ml.lords[1]) + 1) % L.GRID_ROWS
+	ready_unit(ml, 0, side_lane, "knight", Vector2(ml.lords[1].pos.x - 40.0, L.cell_center(Vector2i(0, side_lane)).y))
 	ml.build_lookups()
-	check(ml.lord_target(ml.lords[1]).is_empty(), "a melee lord does not reach beyond B.LORD_RANGE")
+	check(ml.lord_target(ml.lords[1]).is_empty(), "a melee lord does not reach beyond B.LORD_RANGE nor into another lane")
 	var ms := Battle.new(51, B.DEFAULT_DECK, B.DEFAULT_DECK, "lion", "shield_sergeant")
 	ms.ai_enabled = [false, false]
 	ms.skill_cd[1] = 0.0
-	ms.ink[1] = 60.0
+	ms.skill_charge[1] = ms.skill_need(1)
 	ready_unit(ms, 0, 1, "militia", L.cell_center(Vector2i(6, 1)))
 	var planned: bool = EnemyAI.skill_plan(ms.skill_state(1)).cast
 	var before: int = ms.units.size()
@@ -354,9 +374,22 @@ func lord_checks() -> void:
 	pack.ink[0] = B.MAX_INK
 	pack.units.clear()
 	pack.skill_cd[0] = 0.0
-	pack.cast_skill(0)
+	pack.gain_ink(0, 7.0) # a full purse: the overflow charges the skill instead
+	var overflow_charged: bool = is_equal_approx(pack.skill_charge[0], 7.0) and not pack.cast_skill(0)
+	pack.skill_charge[0] = pack.skill_need(0) - 0.5
+	pack.ink[0] = 0.0
+	pack.add_skill_charge(0, 3.0) # stands in for gold spent on a card; capped at the need
+	var cast_free: bool = pack.cast_skill(0) and pack.ink[0] == 0.0 and pack.skill_charge[0] == 0.0
+	pack.ink[0] = B.MAX_INK
+	pack.gain_ink(0, 5.0)
+	cast_free = cast_free and pack.skill_charge[0] == 0.0 # cooling down: overflow does not charge
 	var beasts: Array = pack.units.filter(func(u: Dictionary) -> bool: return u.team == 0 and u.kind == "pouch_beast")
-	check(beasts.size() == pack.active_lanes.size() * int(B.LORDS.beast.pack_count), "the beast lord's skill summons pouch beasts in every lane")
+	var iron := Battle.new(8, [], [], "iron", "lion")
+	iron.record_events = false
+	iron.skill_charge[0] = iron.skill_need(0)
+	iron.skill_cd[0] = 0.0
+	var towers_up: bool = iron.cast_skill(0) and iron.buildings.filter(func(b: Dictionary) -> bool: return b.team == 0 and b.kind == "tower" and iron.territory_owner(b.cell) == 0).size() == int(B.LORDS.iron.tower_count)
+	check(towers_up and overflow_charged and cast_free and is_equal_approx(B.skill_charge_need("beast"), B.skill_cost("beast") * 2.0 + 10.0) and beasts.size() == pack.active_lanes.size() * int(B.LORDS.beast.pack_count), "overflow and spent gold charge the lord skill (not while it cools down), which casts free; 獸群號角 summons pouch beasts in every lane and 箭樓築城 builds two towers on our land")
 	var freeze := Battle.new(17, [], [], "mage", "lion")
 	freeze.time_stop_team = 0
 	freeze.time_stop_left = 3.5

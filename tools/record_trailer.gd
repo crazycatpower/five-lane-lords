@@ -74,7 +74,7 @@ func _process(_delta: float) -> bool:
 	if not ready: return false
 	frame += 1
 	if frame == cast_at:
-		game.model.ink[0] = B.skill_cost(game.model.lords[0].lord)
+		game.model.skill_charge[0] = game.model.skill_need(0)
 		game.model.skill_cd[0] = 0.0
 		game.model.lords[0].hp = maxf(game.model.lords[0].hp,1.0)
 		game.model.cast_skill(0)

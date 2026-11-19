@@ -515,9 +515,8 @@ func _physics_process(dt: float) -> void:
 			recorder.observe_tick(model, self)
 			recorder.tick += 1
 		consume_events()
-		if not model.time_stopped():
-			adventure.update(self)
-			rogue.update(self)
+		adventure.update(self)
+		rogue.update(self)
 
 func consume_events() -> void:
 	review.observe(model)
@@ -1164,10 +1163,11 @@ func _draw() -> void:
 	elif screen == "help": draw_help()
 	elif screen == "settings": preload("res://settings_screen.gd").paint(self)
 	else: draw_title()
-	if ui_time_locked(): draw_time_stop()
+	if screen == "battle" and model != null and model.time_stopped(): draw_time_stop()
 
+# 時空凝滯 no longer stops the player's hands (2026-11-19): only the caster's enemies freeze.
 func ui_time_locked() -> bool:
-	return model != null and model.time_stopped()
+	return false
 
 # Handle before GUI controls, so mouse, keyboard and hotkeys all remain frozen.
 func _input(event: InputEvent) -> void:
@@ -1181,14 +1181,14 @@ func _input(event: InputEvent) -> void:
 func draw_time_stop() -> void:
 	var age: float = B.LORDS.mage.freeze_duration-model.time_stop_left
 	var fade: float = minf(1.0,model.time_stop_left*2.0)
-	draw_rect(Rect2(Vector2.ZERO,L.VIEWPORT_SIZE),Color(0.16,0.19,0.34,0.16*fade))
+	draw_rect(Rect2(Vector2.ZERO,L.VIEWPORT_SIZE),Color(0.16,0.19,0.34,0.08*fade))
 	# Concentric space ripples expand from the caster over the whole page, including UI.
 	for i: int in range(3):
 		var wave: float = age*1100-i*95
 		if wave > 0 and wave < 2100:
 			draw_arc(model.time_stop_origin,wave,0,TAU,128,Color(0.7,0.77,0.95,0.65*fade),4,true)
 	panel(Rect2(590,102,420,44),Color("d9d9df"),Color("666681"))
-	draw_string(font,Vector2(590,132),"時空凝滯 · %.1f 秒" % model.time_stop_left,HORIZONTAL_ALIGNMENT_CENTER,420,24,Color("46435f"))
+	draw_string(font,Vector2(590,132),("時空凝滯 · 敵軍凍結 %.1f 秒" if model.time_stop_team == me else "時空凝滯 · 我軍被凍結 %.1f 秒") % model.time_stop_left,HORIZONTAL_ALIGNMENT_CENTER,420,24,Color("46435f"))
 
 # Flat manuscript pigments over paper; deterministic strokes never consume battle RNG.
 static func scenery_noise(index: int, salt: int) -> float:
@@ -2027,12 +2027,13 @@ func draw_hud(single_lane: bool = false, hide_bottom: bool = false) -> void:
 		skill_mark(lord.team,Vector2(1500,y+6))
 	if not spectating: draw_cursor_hint(mouse)
 
-# Our lord's skill: Q or click. Lit when it can be cast; shows cost & cooldown otherwise.
+# Our lord's skill: Q or click. Lit when it can be cast; otherwise the bottom edge shows the
+# cooldown (grey) or the charge meter filling (gold).
 func draw_skill_button() -> void:
 	var lord_kind: String = model.lords[me].lord
 	var info: Dictionary = B.lord_data(lord_kind)
 	var has_sk: bool = B.has_skill(lord_kind)
-	var skill_cost: int = roundi(model.effective_skill_cost(me))
+	var skill_need: int = roundi(model.skill_need(me))
 	var ready: bool = model.skill_error(me).is_empty()
 	panel(SKILL_RECT,Color("f2e3c0") if ready else Color("bababa"),RED if ready else Color("5c5c5c"))
 	if ready: draw_rect(SKILL_RECT.grow(2),RED,false,3)
@@ -2041,13 +2042,14 @@ func draw_skill_button() -> void:
 	label_at(SKILL_RECT.position+Vector2(40,32),"領主技能：%s" % info.skill,17,RED if ready else Color("383838"))
 	if has_sk:
 		var badge_pos := SKILL_RECT.position + Vector2(SKILL_RECT.size.x - 24.0, 26.0)
-		Ornament.cost_medallion(self, badge_pos, 14.5, str(skill_cost), not ready)
-		label_at(SKILL_RECT.position+Vector2(SKILL_RECT.size.x-72.0,32.0),"金幣",13,Color("4f4f4f") if not ready else Color("5c442c"))
+		Ornament.cost_medallion(self, badge_pos, 14.5, str(skill_need), not ready)
+		label_at(SKILL_RECT.position+Vector2(SKILL_RECT.size.x-72.0,32.0),"充能",13,Color("4f4f4f") if not ready else Color("5c442c"))
 	# Keep the skill label legible in every state; cooldown occupies only the bottom edge.
 	if ready:
 		var glow := 0.5+0.5*sin(Time.get_ticks_msec()/260.0)
 		draw_rect(SKILL_RECT.grow(4+glow*2),Color(0.95,0.75,0.25,0.25+0.35*glow),false,3)
 	elif model.skill_cd[me] > 0: draw_rect(Rect2(SKILL_RECT.position+Vector2(4,SKILL_RECT.size.y-7),Vector2((SKILL_RECT.size.x-8)*clampf(model.skill_cd[me]/B.skill_cooldown(lord_kind),0,1),4)),Color("666666"))
+	elif has_sk and not model.skill_charged(me): draw_rect(Rect2(SKILL_RECT.position+Vector2(4,SKILL_RECT.size.y-7),Vector2((SKILL_RECT.size.x-8)*clampf(model.skill_charge[me]/maxf(1.0,model.skill_need(me)),0,1),4)),Color("d9a62e"))
 	else: draw_rect(SKILL_RECT.grow(-2),Color("757575"),false,2)
 	if skill_flash_left > 0.0:
 		var fp := 1.0 - clampf(skill_flash_left / 1.15, 0.0, 1.0)
@@ -2057,7 +2059,7 @@ func draw_skill_button() -> void:
 		draw_string(font, Vector2(SKILL_RECT.position.x, SKILL_RECT.position.y - 8.0 - fp * 10.0), "★ 領主大招發動！", HORIZONTAL_ALIGNMENT_CENTER, SKILL_RECT.size.x, 16, Color(0.95, 0.72, 0.12, fa))
 
 # A lord row's skill state as a small mark, no words: a glowing gem when it can be cast, a dial
-# filling up while it cools, a dull coin when gold is short, an empty ring when the lord is down.
+# filling up while it cools, a gold dial filling while it charges, an empty ring when the lord is down.
 func skill_mark(team: int, at: Vector2) -> void:
 	var state := skill_state_text(team)
 	var color: Color = RED if team == 0 else BLUE
@@ -2071,20 +2073,21 @@ func skill_mark(team: int, at: Vector2) -> void:
 			var done := 1.0-clampf(model.skill_cd[team]/B.skill_cooldown(model.lords[team].lord),0,1)
 			draw_circle(at,8,Color(0.30,0.30,0.31,0.8))
 			if done > 0: draw_colored_polygon(PackedVector2Array([at]+range(25).map(func(i: int) -> Vector2: return at+Vector2.from_angle(-PI/2+TAU*done*i/24.0)*8)),Color(color,0.85))
-		"金幣不足":
-			draw_texture_rect(preload("res://economy_hud.gd").coin_texture(),Rect2(at-Vector2(9,9),Vector2(18,18)),false,Color(0.45,0.45,0.45,0.8))
+		"充能中":
+			var charged := clampf(model.skill_charge[team]/maxf(1.0,model.skill_need(team)),0,1)
+			draw_circle(at,8,Color(0.30,0.30,0.31,0.8))
+			if charged > 0: draw_colored_polygon(PackedVector2Array([at]+range(25).map(func(i: int) -> Vector2: return at+Vector2.from_angle(-PI/2+TAU*charged*i/24.0)*8)),Color("d9a62e"))
 		_:
 			draw_arc(at,7,0,TAU,16,Color(0.35,0.35,0.35,0.8),2,true)
 
 # The skill's state in words only (producer 2026-11-03: no countdowns or gold numbers on screen).
-# Hovering the button lights the coins it costs in the purse.
 func skill_state_text(team: int) -> String:
 	var lord: Dictionary = model.lords[team]
 	if not B.has_skill(lord.lord): return "沒有技能"
 	if lord.hp <= 0: return "領主倒下中"
 	if model.skill_cd[team] > 0: return "冷卻中"
 	if lord.lord == "underworld" and model.count_buildings(team,"grave") == 0: return "沒有墓碑"
-	if model.ink[team] < model.effective_skill_cost(team): return "金幣不足"
+	if not model.skill_charged(team): return "充能中"
 	return "可發動"
 
 func try_skill() -> bool:
@@ -2100,10 +2103,8 @@ func try_skill() -> bool:
 	skill_shake = 0.45
 	if model.skill_cd[me] > 0.00001:
 		show_cursor_hint("技能冷卻 %.1f秒" % model.skill_cd[me], Color("7d4f1c"))
-	elif model.ink[me] < model.effective_skill_cost(me):
-		purse_alarm = 0.9
-		purse_need = model.effective_skill_cost(me)
-		show_cursor_hint("金幣不足（還差 %d）" % ceili(purse_need - model.ink[me]), RED)
+	elif not model.skill_charged(me):
+		show_cursor_hint("充能不足（還差 %d）" % ceili(model.skill_need(me) - model.skill_charge[me]), Color("7d4f1c"))
 	else:
 		show_cursor_hint(reason, Color("7d4f1c"))
 	if sound != null: sound.cue("fail")
@@ -2138,9 +2139,8 @@ func cursor_status_hint(mouse: Vector2) -> Dictionary:
 	if SKILL_RECT.has_point(mouse) and B.has_skill(model.lords[me].lord):
 		if model.skill_cd[me] > 0.00001:
 			return {"text": "技能冷卻 %.1f秒" % model.skill_cd[me], "color": Color("7d4f1c")}
-		var scost: float = model.effective_skill_cost(me)
-		if model.ink[me] < scost:
-			return {"text": "金幣不足（還差 %d）" % ceili(scost - model.ink[me]), "color": RED}
+		if not model.skill_charged(me):
+			return {"text": "充能 %d / %d（花費或溢出金幣時充能）" % [int(model.skill_charge[me]), roundi(model.skill_need(me))], "color": Color("7d4f1c")}
 	if cursor_hint_left > 0.0 and not cursor_hint_text.is_empty():
 		return {"text": cursor_hint_text, "color": cursor_hint_color}
 	return {}
@@ -2624,7 +2624,7 @@ func draw_lord_card(kind: String, r: Rect2, chosen: bool) -> void:
 	draw_fitted(lord_art(kind),Rect2(r.position+Vector2(8,24),Vector2(r.size.x-16,r.size.y-86)),Color.WHITE,true)
 	draw_string(font,Vector2(r.position.x,r.end.y-44),info.name,HORIZONTAL_ALIGNMENT_CENTER,r.size.x,21,INK)
 	draw_string(font,Vector2(r.position.x,r.end.y-27),info.role,HORIZONTAL_ALIGNMENT_CENTER,r.size.x,16,Color("5a4a36"))
-	draw_string(font,Vector2(r.position.x,r.end.y-10),"%s %d" % [info.skill,int(B.skill_cost(kind))],HORIZONTAL_ALIGNMENT_CENTER,r.size.x,16,RED)
+	draw_string(font,Vector2(r.position.x,r.end.y-10),"%s 充能%d" % [info.skill,int(B.skill_charge_need(kind))],HORIZONTAL_ALIGNMENT_CENTER,r.size.x,16,RED)
 	var faction: String = B.lord_faction(kind)
 	var tag := Rect2(r.position+Vector2(9,7),Vector2(36,17))
 	preload("res://interface_ornament.gd").ribbon_tag(self,tag,B.FACTIONS[faction],preload("res://command_style.gd").TAGS.get(faction,Color("7d7466")),12)
@@ -2922,7 +2922,7 @@ func draw_watch() -> void:
 		panel(portrait,Color("f6e9c8"),color)
 		draw_fitted(lord_art(lord,team),portrait.grow(-10),Color.WHITE,true)
 		draw_string(font,Vector2(portrait.position.x,portrait.end.y+30),B.LORDS[lord].name,HORIZONTAL_ALIGNMENT_CENTER,portrait.size.x,22,INK)
-		draw_string(font,Vector2(portrait.position.x,portrait.end.y+54),"%s %d 金幣" % [B.LORDS[lord].skill,int(B.skill_cost(lord))],HORIZONTAL_ALIGNMENT_CENTER,portrait.size.x,14,color)
+		draw_string(font,Vector2(portrait.position.x,portrait.end.y+54),"%s 充能 %d" % [B.LORDS[lord].skill,int(B.skill_charge_need(lord))],HORIZONTAL_ALIGNMENT_CENTER,portrait.size.x,14,color)
 		var shown: Array = B.menu_sorted(watch_decks[team])
 		for i: int in range(shown.size()): draw_card(shown[i],watch_card_rect(team,i))
 		var hover := army.has_point(get_global_mouse_position())

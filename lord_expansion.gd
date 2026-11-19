@@ -8,7 +8,7 @@ static func rune_cells(m, team: int) -> Array[Vector2i]:
 		for offset: int in range(L.GRID_COLUMNS):
 			var col := L.GRID_COLUMNS-1-offset if team == 0 else offset
 			var cell := Vector2i(col,lane)
-			if m.territory_owner(cell) == team and m.building_at(cell).is_empty():
+			if m.territory_owner(cell) == team and m.building_at(cell).is_empty() and not m.is_water_cell(cell): # no runes on 河道 water cells
 				cells.append(cell)
 				break
 	return cells

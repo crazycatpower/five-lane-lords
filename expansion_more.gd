@@ -374,6 +374,12 @@ static func cast_effects(m, s: Dictionary, d: Dictionary, lane: int, rect: Rect2
 	var execs := 0
 	var killed_foes: Array = []
 	var split_idx := 0
+	# 吞噬巨口 (2026-11-19): only the maw_targets healthiest enemy ground troops in the area are bitten.
+	var maw_ids := {}
+	if d.has("maw_targets"):
+		var prey: Array = m.units.filter(func(u: Dictionary) -> bool: return u.hp > 0 and u.team != s.team and not u.get("flying",false) and B.rect_hits_actor(rect,u))
+		prey.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.hp > b.hp or (a.hp == b.hp and a.id < b.id))
+		for u: Dictionary in prey.slice(0,int(d.maw_targets)): maw_ids[u.id] = true
 	for u: Dictionary in m.units.duplicate():
 		if u.hp <= 0 or not B.rect_hits_actor(rect,u): continue
 		if u.team == s.team:
@@ -438,6 +444,11 @@ static func cast_effects(m, s: Dictionary, d: Dictionary, lane: int, rect: Rect2
 				u.hex_damage = 20.0
 				u.hex_team = s.team
 				u.hex_kind = s.kind
+			if d.has("maw_targets"):
+				if maw_ids.has(u.id):
+					m.damage(u,d.maw_damage,s.team,s.kind)
+					hits += 1
+				continue
 			if d.has("execute_hp") and not u.get("flying",false) and u.hp <= d.execute_hp and execs < int(d.get("execute_max",3)):
 				execs += 1
 				m.damage(u,u.hp,s.team,s.kind,{},true)
@@ -748,6 +759,7 @@ static func ai_score(c: Dictionary, s: Dictionary, covered: Dictionary = {}) -> 
 		var allies := 0
 		var foes := 0
 		var exec_foes := 0
+		var foe_hp: Array = []
 		var best_ally_hp := 0.0
 		for u: Dictionary in s.units:
 			if u.hp <= 0 or u.get("spawn_delay",0.0) > 0 or not B.rect_hits_actor(rect,u): continue
@@ -757,6 +769,7 @@ static func ai_score(c: Dictionary, s: Dictionary, covered: Dictionary = {}) -> 
 			elif not covered.has(u.get("id",-1)):
 				foes += 1
 				if data.has("execute_hp") and not u.get("flying",false) and u.hp <= data.execute_hp: exec_foes += 1
+				if data.has("maw_targets") and not u.get("flying",false): foe_hp.append(minf(u.hp,float(data.maw_damage)))
 		if c.kind == "mirror_clone":
 			if best_ally_hp >= 350.0: return 685.0+minf(best_ally_hp,1500.0)*0.04
 			return -INF
@@ -767,7 +780,12 @@ static func ai_score(c: Dictionary, s: Dictionary, covered: Dictionary = {}) -> 
 			if allies >= 2: return 680.0+allies*15.0
 			return -INF
 		if c.kind == "devouring_maw":
-			if exec_foes >= 1 or foes >= 2: return 695.0+exec_foes*25.0+foes*12.0
+			# Worth it when the bites land on real bodies: the damage actually dealt by the top bites.
+			foe_hp.sort()
+			foe_hp.reverse()
+			var bitten := 0.0
+			for hp: float in foe_hp.slice(0,int(data.maw_targets)): bitten += hp
+			if bitten >= 600.0: return 695.0+bitten*0.02
 			return -INF
 		if foes >= 2: return 685.0+foes*16.0
 	return -INF

@@ -1,5 +1,6 @@
 extends RefCounted
 const Windup = preload("res://attack_windup.gd")
+const WardRules = preload("res://ward_rules.gd")
 const Frontier = preload("res://frontier_cards.gd")
 const Faction = preload("res://faction_cards.gd")
 const GluttonNest = preload("res://glutton_nest.gd")
@@ -53,24 +54,22 @@ func time_stopped() -> bool:
 func actor_time(actor: Dictionary) -> float:
 	return elapsed+float(actor.get("extra_time",0.0))
 
-func step_time_stop(dt: float) -> void:
-	var active_dt := minf(dt,time_stop_left)
-	if not ended:
-		build_lookups()
-		var caster: Dictionary = lords[time_stop_team]
-		caster.extra_time = caster.get("extra_time",0.0)+active_dt
-		if lord_active[time_stop_team]: Lord.step(self,caster,active_dt)
-		for u: Dictionary in units.duplicate():
-			if u.team != time_stop_team or u.hp <= 0: continue
-			u.extra_time = u.get("extra_time",0.0)+active_dt
-			if update_unit(u,active_dt): break
-		# Death reactions, buildings and all projectiles wait until normal time resumes.
-		remove_dead()
-	time_stop_left = maxf(0,time_stop_left-active_dt)
+# 時空凝滯 (producer 2026-11-19): the game keeps running; only the caster's enemies stop. Their
+# troops and lord stand still (animations too), their buildings (towers and economy) and base income
+# pause. Everything else, both sides' cards and cooldowns and the projectiles in flight, carries on.
+func frozen(team: int) -> bool:
+	return time_stop_left > 0.000001 and time_stop_team >= 0 and team != time_stop_team
+
+func tick_time_stop(dt: float) -> void:
+	if not time_stopped(): return
+	for u: Dictionary in units:
+		if frozen(u.team): u.extra_time = u.get("extra_time",0.0)-dt # hold the pose: actor_time stands still
+	for lord: Dictionary in lords:
+		if frozen(lord.team): lord.extra_time = lord.get("extra_time",0.0)-dt
+	time_stop_left = maxf(0,time_stop_left-dt)
 	if not time_stopped():
 		time_stop_left = 0.0
 		time_stop_team = -1
-		if dt > active_dt: step(dt-active_dt)
 var last_dt := 0.0
 var ended := false
 # Challenge objectives can hold attackers at the far gate; normal matches keep both sides enabled.
@@ -104,6 +103,7 @@ var lane_foe_taunts: Array = []
 var lane_mill: Array = [] # lane_mill[team][lane]: number of living mills boosting that lane's farms
 var has_watchtower: Array = [false,false]
 var has_taunt: Array = [false,false]
+var wards: Array = [[],[]] # living 結界護衛 per team (ward_rules.gd)
 var has_trap := false
 var has_poisoned_unit := false
 var has_levy := false
@@ -122,8 +122,9 @@ var field_mutators: Array[Dictionary] = []
 const FARM_SLOT := 4
 var farm_cd: Array = [0.0,0.0]
 var home_cards: Array = ["farm","farm"] # each side's F-slot card, fixed by its lord at the start
-var skill_cd: Array = [B.SKILL_OPENING_COOLDOWN,B.SKILL_OPENING_COOLDOWN] # lord skill cooldown per side
-var ai_save: Array = [false,false] # the AI is holding gold for its lord's skill
+var skill_cd: Array = [0.0,0.0] # lord skill cooldown per side; starts ready (2026-11-19), the empty charge meter gates the first cast
+var skill_charge: Array = [0.0,0.0] # lord skill charge: gold spent on cards and gold lost to a full purse
+var ai_save: Array = [false,false] # the AI is holding gold for its lord's skill (unused since the charge meter)
 var ai_params: Array = [{},{}] # per-side AI strategy weights (enemy_ai.gd; {} = the hand-written defaults)
 var team_drum_until: Array = [0.0,0.0] # latest end of any drum on this team (kept for tools/tests)
 var team_drums: Array = [[],[]] # end time of every drum beat still sounding; each one is a speed tier
@@ -147,8 +148,6 @@ func _init(seed_value: int = 1, deck_a: Array = [], deck_b: Array = [], lord_a: 
 		var lord_kind: String = lord_a if team == 0 else lord_b
 		if lord_kind.is_empty(): lord_kind = "lion" # neutral default when no lord is chosen
 		lords.append(Lord.create(team,lord_kind))
-		if B.is_minion(lord_kind): skill_cd[team] = B.MINION_SKILL_COOLDOWN
-		else: skill_cd[team] = maxf(B.SKILL_OPENING_COOLDOWN,B.skill_cooldown(lord_kind))
 		home_cards[team] = B.home_card(lord_kind)
 		decks.append(deck)
 		gates.append([B.GATE_HP,B.GATE_HP,B.GATE_HP,B.GATE_HP,B.GATE_HP])
@@ -396,7 +395,9 @@ func gain_ink(team: int, amount: float) -> void:
 	var waste: float = maxf(0,ink[team]+amount-B.MAX_INK)
 	stats[team].wasted += waste
 	ink[team] = minf(B.MAX_INK,ink[team]+amount)
-	if waste > 0: event("overflow",L.GOLD_TEXT,team)
+	if waste > 0:
+		add_skill_charge(team,waste) # gold that does not fit the purse charges the lord's skill
+		event("overflow",L.GOLD_TEXT,team)
 
 # Every farm boost stacks (producer 2026-11-05): a cultivating farmer x2, 豐收 x2 and each mill in the
 # lane x MILL_BONUS, all multiplied together.
@@ -420,6 +421,7 @@ func build_lookups() -> void:
 	lane_mill = [[0,0,0,0,0],[0,0,0,0,0]]
 	has_watchtower = [false,false]
 	has_taunt = [false,false]
+	wards = [[],[]]
 	has_trap = false
 	has_poisoned_unit = false
 	has_levy = false
@@ -440,6 +442,7 @@ func build_lookups() -> void:
 			if u.get("has_monster_tick",false): has_monster_tick = true
 			if u.kind == "plague_bishop": has_plague_bishop = true
 			if u.get("has_thorns_aura",false): has_thorns_aura[u.team] = true
+			WardRules.collect(u,wards)
 			if u.get("has_expansion_tick",false): has_expansion_tick = true
 			if u.get("hex_ticks",0) > 0 and u.get("hex_team",-1) >= 0: has_hex_unit = true
 			if u.get("borrowed_until",-1.0) >= 0: has_borrowed_unit = true
@@ -477,7 +480,6 @@ func slot_cd(team: int, slot: int) -> float:
 enum Refusal {OK, ENDED, PAUSED, NO_CARD, COOLDOWN, GOLD, OFF_GRID, WATER, NOT_OURS, OCCUPIED, UNIQUE, FOOTPRINT}
 
 func play_check(team: int, slot: int, pos: Vector2) -> Refusal:
-	if time_stopped(): return Refusal.PAUSED
 	if ended: return Refusal.ENDED
 	if paused: return Refusal.PAUSED
 	if (slot < 0 or slot >= 4) and slot != FARM_SLOT: return Refusal.NO_CARD
@@ -537,6 +539,8 @@ func play(team: int, slot: int, pos: Vector2) -> bool:
 	var card: Dictionary = B.CARDS[kind]
 	var paid: float = GoldMonster.cost(self,team,kind) # card.cost, or the whole purse for 金幣怪物
 	ink[team] -= paid
+	add_skill_charge(team,paid) # every gold spent also charges the lord's skill
+	add_skill_charge(team,paid) # every gold spent also charges the lord's skill
 	if slot == FARM_SLOT: farm_cd[team] = card.cooldown # the farmland slot never rotates
 	else:
 		# Replace only the played slot; the other three cards and cooldowns stay put.
@@ -726,6 +730,7 @@ func damage(target: Dictionary, amount: float, team: int, kind: String, source: 
 		amount = Expansion.absorb(self,target,amount,source)
 		amount = ExpansionMore.absorb(target,amount,kind)
 		amount = Faction.absorb(self,target,amount)
+		amount = WardRules.share(self,target,amount,team,kind,source) # 結界護衛 takes a share
 		if amount <= 0: return
 	var dealt := minf(amount,target.hp)
 	target.hp -= amount
@@ -931,12 +936,20 @@ func reaper_target(u: Dictionary) -> Dictionary:
 		return nearest(u.pos,u.team,54.0,forward_lords,-1,true,B.actor_radius(u))
 	return found
 
-func effective_skill_cost(team: int) -> float:
-	return maxf(0.0,B.skill_cost(lords[team].lord)-float(lord_mod(team,"skill_discount",0.0)))
+# Lord skills cost no gold (2026-11-19): they cast free once the charge meter is full. Spending gold
+# and gold lost to a full purse both fill it.
+func skill_need(team: int) -> float:
+	return B.skill_charge_need(lords[team].lord,float(lord_mod(team,"skill_discount",0.0)))
+
+func add_skill_charge(team: int, amount: float) -> void:
+	if skill_cd[team] > 0.0: return # no charging while the skill cools down (producer 2026-11-19)
+	if amount > 0.0: skill_charge[team] = minf(skill_need(team),skill_charge[team]+amount)
+
+func skill_charged(team: int) -> bool:
+	return skill_charge[team] >= skill_need(team)-0.00001
 
 # Why the lord's skill cannot be cast now ("" = it can).
 func skill_error(team: int) -> String:
-	if time_stopped(): return "時間凍結中。"
 	if ended: return "戰局已經結束。"
 	if paused: return "暫停中。"
 	if not B.has_skill(lords[team].lord): return "這位領主沒有技能。"
@@ -944,10 +957,10 @@ func skill_error(team: int) -> String:
 	if lords[team].hp <= 0: return "領主倒下了，復活後才能發動%s。" % info.skill
 	if skill_cd[team] > 0.00001: return "%s還要冷卻 %d 秒。" % [info.skill,ceili(skill_cd[team])]
 	if lords[team].lord == "underworld" and count_buildings(team,"grave") == 0: return "沒有墓碑"
+	if lords[team].lord == "iron" and iron_tower_cells(team).is_empty(): return "領地內沒有空格可建箭樓。"
 	if lords[team].lord == "rune" and LordExpansion.rune_cells(self,team).is_empty(): return "領地內沒有可召喚法陣的空格。"
 	if B.is_minion(lords[team].lord) and info.get("skill_card","") == "levy" and Faction.intruders(self,team).is_empty(): return "領地內沒有敵軍。"
-	var cost := effective_skill_cost(team)
-	if ink[team] < cost: return "金幣不足：%s要 %d，還差 %d。" % [info.skill,int(cost),ceili(cost-ink[team])]
+	if not skill_charged(team): return "充能不足：%s還差 %d（花費金幣或金幣溢出時充能）。" % [info.skill,ceili(skill_need(team)-skill_charge[team])]
 	return ""
 
 func _minion_lane_priority(team: int) -> Array[int]:
@@ -1054,7 +1067,7 @@ func _cast_minion_skill(team: int, kind: String, visual_targets: Array[Vector2])
 
 func cast_skill(team: int) -> bool:
 	if not skill_error(team).is_empty(): return false
-	ink[team] -= effective_skill_cost(team)
+	skill_charge[team] = 0.0
 	skill_cd[team] = B.skill_cooldown(lords[team].lord)
 	var kind: String = lords[team].lord
 	stats[team].skills = stats[team].get("skills",0)+1
@@ -1116,29 +1129,24 @@ func cast_skill(team: int) -> bool:
 					b.hp = b.max_hp
 					if record_events: visual_targets.append(b.pos)
 		"iron":
-			# Rebuild each wall, repel attackers near the gates, and place a front-line barricade in each lane.
-			var forward := 1.0 if team == 0 else -1.0
-			var gate_line := L.gate_stop(team)
-			for u: Dictionary in units:
-				if u.team != team and u.hp > 0 and (u.pos.x - gate_line) * forward <= L.CELL_SIZE.x * 2.5:
-					knockback_unit(u, forward * L.CELL_SIZE.x * 1.5)
-					damage(u, 230.0, team, "skill")
-			for lane: int in active_lanes:
-				gates[team][lane] = B.GATE_HP
-				claim_around(team,Vector2i(-1 if team == 0 else L.GRID_COLUMNS,lane))
-				var placed := false
-				for offset: int in range(L.GRID_COLUMNS):
-					var col := L.GRID_COLUMNS-1-offset if team == 0 else offset
-					var cell := Vector2i(col,lane)
-					if territory_owner(cell) == team and building_at(cell).is_empty():
-						var bar: Dictionary = add_building(team,cell,"barricade")
-						if record_events: visual_targets.append(bar.pos)
-						placed = true
-						break
-				if not placed and record_events:
-					visual_targets.append(Vector2(L.gate_icon_x(team),L.cell_center(Vector2i(0,lane)).y))
+			# 箭樓築城 (producer 2026-11-19): two 箭樓 on random empty cells of our territory.
+			var free: Array[Vector2i] = iron_tower_cells(team)
+			for i: int in range(mini(int(B.LORDS.iron.tower_count),free.size())):
+				var cell: Vector2i = free[rng.randi_range(0,free.size()-1)]
+				free.erase(cell)
+				var tower: Dictionary = add_building(team,cell,"tower")
+				if record_events: visual_targets.append(tower.pos)
 	event("skill",lords[team].pos,team,{"lord":kind,"targets":visual_targets})
 	return true
+
+# Empty land cells we own, in a fixed order (the skill draws from them with the battle rng).
+func iron_tower_cells(team: int) -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	for lane: int in active_lanes:
+		for col: int in range(L.GRID_COLUMNS):
+			var cell := Vector2i(col,lane)
+			if territory_owner(cell) == team and building_at(cell).is_empty() and not is_water_cell(cell): cells.append(cell)
+	return cells
 
 func finish(side: int) -> void:
 	ended = true
@@ -1195,8 +1203,12 @@ func nearest(pos: Vector2, team: int, radius: float, candidates: Array, lane: in
 	return found
 
 # Movement and attacks share frontmost-then-nearest priority.
+# Lords only strike foes in the lane they stand in (producer 2026-11-19).
+func lord_lane(lord: Dictionary) -> int:
+	return clampi(floori((lord.pos.y-L.GRID_ORIGIN.y)/L.CELL_SIZE.y),0,L.GRID_ROWS-1)
+
 func lord_target(lord: Dictionary) -> Dictionary:
-	return Lord.AI.select_target(lord,foe_units[lord.team],B.lord_attack_range(lord.lord))
+	return Lord.AI.select_target(lord,lane_foes[lord.team][lord_lane(lord)],B.lord_attack_range(lord.lord))
 
 func shoot_lord(lord: Dictionary, target: Dictionary, amount: float) -> void:
 	shoot(lord,target,amount)
@@ -1344,15 +1356,11 @@ func cultivate(u: Dictionary, dt: float) -> bool:
 # lockstep depend on it): deaths, AI plays, clocks and income, buildings, spells and
 # clouds, arrows, lords, troops, then deaths again and cleanup.
 func step(dt: float) -> void:
-	if time_stopped():
-		step_time_stop(dt)
-		return
 	if paused or ended: return
 	elapsed += dt
 	last_dt = dt
 	resolve_deaths()
 	update_ai(dt)
-	if time_stopped(): return
 	tick_clocks(dt)
 	build_lookups()
 	Arcane.update_traps(self)
@@ -1367,12 +1375,13 @@ func step(dt: float) -> void:
 	ExpansionMore.update(self,dt)
 	update_projectiles(dt)
 	for lord: Dictionary in lords:
-		if lord_active[lord.team]:
+		if lord_active[lord.team] and not frozen(lord.team):
 			Lord.step(self,lord,dt)
 			if active_lanes.size() == 1:
 				lord.pos.y = L.cell_center(Vector2i(0,active_lanes[0])).y
 				lord.target.y = lord.pos.y
 	update_units(dt)
+	tick_time_stop(dt)
 	resolve_deaths()
 	remove_dead()
 	update_clock()
@@ -1398,7 +1407,7 @@ func tick_clocks(dt: float) -> void:
 			farm_cd[team] = maxf(0,farm_cd[team]-dt*home_speed*cd_mult)
 		if skill_cd[team] > 0.0:
 			skill_cd[team] = maxf(0,skill_cd[team]-dt*float(lord_mod(team,"skill_haste",1.0))*cd_mult)
-		base_clock[team] += dt*mult
+		if not frozen(team): base_clock[team] += dt*mult # 時空凝滯 pauses the enemy's base income
 		while base_clock[team] >= B.BASE_INTERVAL-0.000001:
 			base_clock[team] -= B.BASE_INTERVAL
 			gain_ink(team,lord_mod(team,"income_mult",1.0))
@@ -1442,6 +1451,7 @@ func update_buildings(dt: float) -> void:
 			refresh_territory()
 			event("death",b.pos,b.team,{"card":b.kind,"art_kind":b.kind,"face":1.0})
 			continue
+		if frozen(b.team): continue # 時空凝滯 pauses every enemy building: towers and economy alike
 		var b_factor: float = 1.0 if fields.is_empty() else Faction.building_factor(self,b)
 		var b_dt: float = dt * b_factor
 		if GluttonNest.update(self,b,b_dt): continue
@@ -1564,6 +1574,7 @@ func update_units(dt: float) -> void:
 	# Summons append to units; count snapshot prevents them acting in their birth step.
 	var count := units.size()
 	for idx: int in range(count):
+		if frozen(units[idx].team): continue # 時空凝滯
 		if update_unit(units[idx],dt): return # an invader just ended the match
 
 # One troop's turn: summon, heal, then fight, cultivate or march. True when it ends the match.
@@ -2067,11 +2078,11 @@ func skill_state(team: int) -> Dictionary:
 			enemy_troops += 1
 			if is_adv and Slash.contains(lpos,u.pos,team): slash_targets += 1
 	var has_open := _minion_open_cell(team).x >= 0 if B.is_minion(lord_kind) else false
-	return {"rune_lanes":LordExpansion.rune_cells(self,team).size() if lord_kind == "rune" else 0,"slash_targets":slash_targets,"troops":my_army_count,"troop_hp":my_army_hp,"enemy_troops":enemy_troops,"minion_open_cell":has_open,"minion_damaged_buildings":damaged_blds,"lord":lord_kind,"ready":lords[team].hp > 0 and skill_cd[team] <= 0,"ink":ink[team],"elapsed":elapsed,"farms":farms,"graves":graves,"gate_share":gate_total/(5*B.GATE_HP),"broken":broken,"difficulty":difficulty,"params":ai_params[team]}
+	return {"rune_lanes":LordExpansion.rune_cells(self,team).size() if lord_kind == "rune" else 0,"slash_targets":slash_targets,"troops":my_army_count,"troop_hp":my_army_hp,"enemy_troops":enemy_troops,"minion_open_cell":has_open,"minion_damaged_buildings":damaged_blds,"lord":lord_kind,"ready":lords[team].hp > 0 and skill_cd[team] <= 0,"ink":ink[team],"charge":skill_charge[team],"need":skill_need(team),"elapsed":elapsed,"farms":farms,"graves":graves,"gate_share":gate_total/(5*B.GATE_HP),"broken":broken,"difficulty":difficulty,"params":ai_params[team]}
 
 func snapshot(team: int) -> Dictionary:
 	var candidates: Array = []
-	var can_act := not ended and not paused and not time_stopped()
+	var can_act := not ended and not paused
 	var has_intruders := false
 	var checked_intruders := false
 	var has_ally_unit := false
@@ -2138,8 +2149,6 @@ func update_ai(dt: float) -> void:
 			ai_clock[team] = B.AI_TICK
 			var plan: Dictionary = AI.skill_plan(skill_state(team))
 			ai_save[team] = plan.save
-			if plan.cast and cast_skill(team):
-				if time_stopped(): return
-				continue
+			if plan.cast and cast_skill(team): continue
 			ai_pending[team] = AI.decide(snapshot(team))
 			ai_delay[team] = [1.2,0.6,0.2][difficulty]
