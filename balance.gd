@@ -454,7 +454,7 @@ const CLASSIC_UNDERWORLD_LORD := "underworld"
 # Lord health follows role: SS defender, S frontline, A support.
 # Lord speeds (2026-11-03 ten tiers): beast B 90, classic lords C 65, ranged casters D 50.
 const LORDS := {
-	"beast":{"name":"馴獸領主","role":"獸群型","faction":"beast","home_card":"glutton_nest","hp":560.0,"damage":50.0,"speed":90.0,"skill":"獸群號角","skill_cost":35.0,"skill_cooldown":110.0,"pack_count":2,"pack_kind":"pouch_beast","skill_desc":"每條開放路線在己方領地最前端各放出 %s 隻%s。"},
+	"beast":{"name":"馴獸領主","role":"獸群型","faction":"beast","home_card":"glutton_nest","hp":560.0,"damage":50.0,"speed":120.0,"skill":"獸群號角","skill_cost":35.0,"skill_cooldown":110.0,"pack_count":2,"pack_kind":"pouch_beast","skill_desc":"每條開放路線在己方領地最前端各放出 %s 隻%s。"},
 	"rune":{"name":"符文領主","role":"法陣型","faction":"magic","home_card":"crystal","hp":560.0,"damage":70.0,"speed":50.0,"ranged":true,"range":LORD_RANGED_RANGE_MED,"skill":"符文前線","skill_cost":40.0,"skill_desc":"在每條開放路線領地最前方的空格，各召喚一個隨機陷阱法陣；不覆蓋建築。"},
 	"vampire":{"name":"吸血領主","role":"血契型","faction":"dark","home_card":"grave","hp":1500.0,"damage":130.0,"speed":65.0,"skill":"鮮血盟約","skill_cost":15.0,"skill_cooldown":40.0,"blood_duration":16.0,"skill_desc":"所有友方部隊攻速、移速升一檔（最高 S），持續 %s 秒；造成實際傷害時等量增加自身目前及最大生命，已獲得生命保留。"},
 	"mage":{"name":"法師領主","role":"時空型","faction":"magic","home_card":"crystal","hp":560.0,"damage":50.0,"speed":50.0,"ranged":true,"range":LORD_RANGED_RANGE_FAR,"skill":"時空凝滯","skill_cost":40.0,"freeze_duration":3.5,"skill_desc":"空間波動後凍結時間 %s 秒，只有友方軍隊與施法領主可以行動；產金、冷卻、投射物與選單全部暫停。"},
