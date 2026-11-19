@@ -456,15 +456,15 @@ const CLASSIC_UNDERWORLD_LORD := "underworld"
 # Lord health follows role: SS defender, S frontline, A support.
 # Lord speeds (2026-11-03 ten tiers): beast B 90, classic lords C 65, ranged casters D 50.
 const LORDS := {
-	"beast":{"name":"馴獸領主","role":"獸群型","faction":"beast","home_card":"glutton_nest","hp":560.0,"damage":50.0,"speed":120.0,"skill":"獸群號角","skill_cost":15.0,"skill_cooldown":30.0,"pack_count":1,"pack_kind":"pouch_beast","skill_desc":"每條開放路線在己方領地最前端各放出 %s 隻%s。"},
-	"rune":{"name":"符文領主","role":"法陣型","faction":"magic","home_card":"crystal","hp":560.0,"damage":70.0,"speed":50.0,"ranged":true,"range":LORD_RANGED_RANGE_MED,"skill":"符文前線","skill_cost":20.0,"skill_cooldown":30.0,"skill_desc":"在每條開放路線領地最前方的空格，各召喚一個隨機陷阱法陣；不覆蓋建築。"},
-	"vampire":{"name":"吸血領主","role":"血契型","faction":"dark","home_card":"grave","hp":1500.0,"damage":130.0,"speed":65.0,"skill":"鮮血盟約","skill_cost":22.0,"skill_cooldown":80.0,"blood_duration":16.0,"skill_desc":"所有友方部隊攻速、移速升一檔（最高 S），持續 %s 秒；造成實際傷害時等量增加自身目前及最大生命，已獲得生命保留。"},
-	"mage":{"name":"法師領主","role":"時空型","faction":"magic","home_card":"crystal","hp":560.0,"damage":50.0,"speed":50.0,"ranged":true,"range":LORD_RANGED_RANGE_FAR,"skill":"時空凝滯","skill_cost":30.0,"skill_cooldown":35.0,"freeze_duration":6.0,"skill_desc":"空間波動凍結敵方所有部隊、領主與建築 %s 秒，期間敵方停止產金、箭塔停火；我方一切照常。"},
-	"adventure":{"name":"邊境領主","role":"主角型","faction":"normal","hp":1500.0,"damage":180.0,"speed":65.0,"skill":"破陣斬","skill_cost":5.0,"skill_cooldown":25.0,"skill_cells":5,"skill_damage":1200.0,"skill_desc":"向前斬出長 %s 格、寬三格的劍氣，對範圍內敵軍、建築與領主造成 %s 傷害。"},
-	"underworld":{"name":"冥府領主","role":"亡者型","faction":"dark","home_card":"grave","hp":560.0,"damage":70.0,"speed":50.0,"ranged":true,"range":LORD_RANGED_RANGE_MED,"skill":"亡者大軍","skill_cost":20.0,"skill_cooldown":45.0,"summon_count":4,"skill_desc":"我方每座墓碑各召喚 %s 隻骷髏兵；沒有墓碑時無法發動。"},
-	"lion":{"name":"紅獅領主","role":"進攻型","faction":"normal","hp":1500.0,"damage":130.0,"speed":65.0,"skill":"獅王號令","skill_cost":50.0,"skill_cooldown":90.0,"skill_desc":"每路從己方城牆各召喚一名騎士，緩步進軍。"},
-	"harvest":{"name":"豐收領主","role":"經濟型","faction":"normal","hp":1500.0,"damage":130.0,"speed":65.0,"skill":"豐年祭","skill_cost":35.0,"skill_cooldown":70.0,"skill_desc":"每路在己方領地空格種一塊農田，全部農田回滿血。"},
-	"iron":{"name":"鐵壁領主","role":"防守型","faction":"normal","hp":3000.0,"damage":180.0,"speed":65.0,"skill":"箭樓築城","skill_cost":35.0,"skill_cooldown":180.0,"tower_count":2,"skill_desc":"在我方領地隨機 %s 個空格各建造一座箭樓。"}
+	"beast":{"name":"馴獸領主","role":"獸群型","faction":"beast","home_card":"glutton_nest","hp":560.0,"damage":50.0,"speed":120.0,"skill":"獸群號角","skill_cost":40.0,"skill_cooldown":10.0,"pack_count":1,"pack_kind":"pouch_beast","skill_desc":"每條開放路線在己方領地最前端各放出 %s 隻%s。"},
+	"rune":{"name":"符文領主","role":"法陣型","faction":"magic","home_card":"crystal","hp":560.0,"damage":70.0,"speed":50.0,"ranged":true,"range":LORD_RANGED_RANGE_MED,"skill":"符文前線","skill_cost":55.0,"skill_cooldown":10.0,"skill_desc":"在每條開放路線領地最前方的空格，各召喚一個隨機陷阱法陣；不覆蓋建築。"},
+	"vampire":{"name":"吸血領主","role":"血契型","faction":"dark","home_card":"grave","hp":1500.0,"damage":130.0,"speed":65.0,"skill":"鮮血盟約","skill_cost":85.0,"skill_cooldown":15.0,"blood_duration":16.0,"skill_desc":"所有友方部隊攻速、移速升一檔（最高 S），持續 %s 秒；造成實際傷害時等量增加自身目前及最大生命，已獲得生命保留。"},
+	"mage":{"name":"法師領主","role":"時空型","faction":"magic","home_card":"crystal","hp":560.0,"damage":50.0,"speed":50.0,"ranged":true,"range":LORD_RANGED_RANGE_FAR,"skill":"時空凝滯","skill_cost":70.0,"skill_cooldown":15.0,"freeze_duration":6.0,"skill_desc":"空間波動凍結敵方所有部隊、領主與建築 %s 秒，期間敵方停止產金、箭塔停火；我方一切照常。"},
+	"adventure":{"name":"邊境領主","role":"主角型","faction":"normal","hp":1500.0,"damage":180.0,"speed":65.0,"skill":"破陣斬","skill_cost":45.0,"skill_cooldown":10.0,"skill_cells":5,"skill_damage":1200.0,"skill_desc":"向前斬出長 %s 格、寬三格的劍氣，對範圍內敵軍、建築與領主造成 %s 傷害。"},
+	"underworld":{"name":"冥府領主","role":"亡者型","faction":"dark","home_card":"grave","hp":560.0,"damage":70.0,"speed":50.0,"ranged":true,"range":LORD_RANGED_RANGE_MED,"skill":"亡者大軍","skill_cost":80.0,"skill_cooldown":15.0,"summon_count":4,"skill_desc":"我方每座墓碑各召喚 %s 隻骷髏兵；沒有墓碑時無法發動。"},
+	"lion":{"name":"紅獅領主","role":"進攻型","faction":"normal","hp":1500.0,"damage":130.0,"speed":65.0,"skill":"獅王號令","skill_cost":115.0,"skill_cooldown":20.0,"skill_desc":"每路從己方城牆各召喚一名騎士，緩步進軍。"},
+	"harvest":{"name":"豐收領主","role":"經濟型","faction":"normal","hp":1500.0,"damage":130.0,"speed":65.0,"skill":"豐年祭","skill_cost":115.0,"skill_cooldown":20.0,"skill_desc":"每路在己方領地空格種一塊農田，全部農田回滿血。"},
+	"iron":{"name":"鐵壁領主","role":"防守型","faction":"normal","hp":3000.0,"damage":180.0,"speed":65.0,"skill":"箭樓築城","skill_cost":185.0,"skill_cooldown":40.0,"tower_count":2,"skill_desc":"在我方領地隨機 %s 個空格各建造一座箭樓。"}
 }
 # 小怪領主 (roguelike, 2026-11-06): enemy-only lords themed on one card. They are not in LORDS, so
 # the deck screen, codex, watch mode and online play never offer them. Instead of a skill each

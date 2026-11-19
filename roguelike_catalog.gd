@@ -168,6 +168,78 @@ const EVENTS := {
 			{"label":"勒索保護費","desc":"獲得 155 金幣","cost":0,"effect":"bazaar_gold"},
 		]
 	},
+	"gambler_den":{
+		"name":"地窖骰局","art":"twin_gambler",
+		"story":"酒館地窖裡一張桌子擲著灌鉛骰子，莊家拍著一只鑲寶石的匣子：「領主大人，敢不敢賭上點血？」",
+		"choices":[
+			{"label":"孤注一擲","desc":"五五波：贏得 1 件未持有的 600 金遺物；輸了領主損耗 35% 當前生命","cost":0,"effect":"gamble_relic"},
+			{"label":"小賭怡情（30 金）","desc":"花費 30 金：五五波贏回 130 金幣，輸了分文不剩","cost":30,"effect":"gamble_gold"},
+			{"label":"冷眼旁觀","desc":"順手牽走桌上的賭注：獲得 60 金幣","cost":0,"effect":"walk_away"},
+		]
+	},
+	"quartermaster_pact":{
+		"name":"軍需官的密約","art":"supply_depot",
+		"story":"敵營的軍需官趁夜溜進你的帳篷，願意出賣情報或替你預支軍費——只是他兩邊都收錢。",
+		"choices":[
+			{"label":"預支軍費","desc":"獲得 200 金幣；但下一場戰鬥敵方開局金幣 +15","cost":0,"effect":"dark_pact"},
+			{"label":"買下佈陣圖（40 金）","desc":"花費 40 金：下一場戰鬥我方開局金幣 +15","cost":40,"effect":"war_chest"},
+			{"label":"策反敵營","desc":"下一場戰鬥敵方開局金幣 -10（最低 0），並獲得 40 金幣","cost":0,"effect":"scout_next"},
+		]
+	},
+	"veteran_drill":{
+		"name":"老兵操練場","art":"shieldguard",
+		"story":"退役百夫長願意替你操練新兵，只是他的操法出了名的狠：不流點血，練不出真本事。",
+		"choices":[
+			{"label":"地獄操練","desc":"隨機 3 張卡牌各升一階（+1）；領主損耗 20% 當前生命、城牆損耗 10%","cost":0,"effect":"drill"},
+			{"label":"穩紮穩打","desc":"隨機 1 張卡牌升一階（+1），領主回復 25% 生命","cost":0,"effect":"steady_drill"},
+			{"label":"變賣器械","desc":"獲得 110 金幣","cost":0,"effect":"sell_gear"},
+		]
+	},
+	"plague_village":{
+		"name":"染疫的村落","art":"plague",
+		"story":"村口掛著黑布，井水泛著腥味。倖存者跪在路旁求你帶他們走，村長卻偷偷指了指地窖裡的稅金。",
+		"choices":[
+			{"label":"焚村取金","desc":"獲得 170 金幣；疫火延燒，所有城牆損耗 12%","cost":0,"effect":"burn_village"},
+			{"label":"救治村民","desc":"恢復領主 45% 最大生命，並獲得 90 金幣","cost":0,"effect":"cleanse_altar"},
+			{"label":"收留倖存者","desc":"免費進入選卡獎勵挑選 1 張新卡替換入牌組，並獲得 80 金幣","cost":0,"effect":"free_draft"},
+		]
+	},
+	"hermit_seer":{
+		"name":"隱士占星師","art":"astrolabe_surveyor",
+		"story":"山頂的隱士轉動星盤，說星象已經寫好你下一場仗的結局——不過星象也收學費。",
+		"choices":[
+			{"label":"窺探敵勢","desc":"下一場戰鬥敵方開局金幣 -10（最低 0），並獲得 40 金幣","cost":0,"effect":"scout_next"},
+			{"label":"星象祝福（40 金）","desc":"花費 40 金：下一場戰鬥我方開局金幣 +15","cost":40,"effect":"war_chest"},
+			{"label":"討教陣法（40 金）","desc":"花費 40 金幣：將牌組第 1 張可強化卡牌連升兩階（+2）","cost":40,"effect":"focus_up_2"},
+		]
+	},
+	"bandit_toll":{
+		"name":"山賊關卡","art":"bandit",
+		"story":"峽谷口橫著一排拒馬，山賊頭子坐在箱子上數著過路費：「留下買路財，或者留下腦袋。」",
+		"choices":[
+			{"label":"強行突破","desc":"搶下山賊的財箱獲得 140 金幣；領主損耗 15% 當前生命","cost":0,"effect":"bandit_raid"},
+			{"label":"收編山賊","desc":"免費進入選卡獎勵挑選 1 張新卡替換入牌組，並獲得 80 金幣","cost":0,"effect":"free_draft"},
+			{"label":"繳費通行（40 金）","desc":"花費 40 金：山賊順道帶路，重置本層支援行動次數並修復城牆 20% 缺失血量","cost":40,"effect":"paid_passage"},
+		]
+	},
+	"ruined_chapel":{
+		"name":"廢棄禮拜堂","art":"mourning_shroud",
+		"story":"斷了頂的禮拜堂仍有燭火，祭壇上供著一只沒人敢碰的聖骸匣。",
+		"choices":[
+			{"label":"虔誠祈禱","desc":"免費修復所有城牆 35% 缺失血量，領主回復 30% 生命","cost":0,"effect":"mend_both"},
+			{"label":"獻上供奉（50 金）","desc":"花費 50 金：免費獲得 1 件未持有的 200～400 金階級遺物","cost":50,"effect":"caravan_relic"},
+			{"label":"搜刮燭台","desc":"獲得 130 金幣","cost":0,"effect":"sell_vials"},
+		]
+	},
+	"deserter_engineers":{
+		"name":"逃亡工兵隊","art":"renegade_artificer",
+		"story":"一隊帶著工具箱的逃兵躲在橋下，他們會築牆、會挖坑，也會替出價最高的人帶路。",
+		"choices":[
+			{"label":"加固城防（30 金）","desc":"花費 30 金幣：所有城牆回滿血量，且隨機 1 張卡 +1 強化","cost":30,"effect":"full_walls"},
+			{"label":"預埋工事","desc":"下一場戰鬥我方開局金幣 +15","cost":0,"effect":"war_chest"},
+			{"label":"雇用帶路","desc":"獲得 150 金幣，並重置本層支援行動次數","cost":0,"effect":"reset_march"},
+		]
+	},
 }
 # Path choice (2026-11-09): before each of floors 1-7 the player may pick an elite instead, a 小怪
 # from the next tier up (tier 3 stays tier 3) opening with more gold, for 1.5x the gold reward.
@@ -564,7 +636,44 @@ const ELITE_MUTATORS := {
 	"iron_barricade":{"id":"iron_barricade","name":"鋼鐵先鋒壁壘","desc":"敵方全 5 路前排預築木拒馬，城牆減傷 25%","enemy_buildings":[[2,0,"barricade"],[2,1,"barricade"],[2,2,"barricade"],[2,3,"barricade"],[2,4,"barricade"]],"mods":{"gate_armor":0.25}},
 	"swarm_surge":{"id":"swarm_surge","name":"兵海狂潮","desc":"敵方每張部隊卡額外多出 1 名單位","mods":{"swarm":{"*":1}}},
 	"blood_frenzy":{"id":"blood_frenzy","name":"狂暴突襲","desc":"敵軍全體移速與攻速升一檔，且開局金幣額外 +12","mods":{"haste":["*"]},"extra_ink":12.0},
+	"iron_hide":{"id":"iron_hide","name":"鐵皮重甲","desc":"敵軍全體生命升一檔","mods":{"toughen":["*"]}},
+	"arrow_storm":{"id":"arrow_storm","name":"箭雨覆蓋","desc":"每隔 20 秒，敵方朝我軍隨機降下一陣箭雨","periodic_spell":{"interval":20.0,"kind":"rain"}},
+	"plague_fog":{"id":"plague_fog","name":"瘟疫瘴氣","desc":"每隔 30 秒，敵方朝我軍隨機散播一團瘟疫","periodic_spell":{"interval":30.0,"kind":"plague"}},
+	"tower_line":{"id":"tower_line","name":"箭樓防線","desc":"敵方第 I、III、V 路後排各預築一座箭樓","enemy_buildings":[[1,0,"tower"],[1,2,"tower"],[1,4,"tower"]]},
+	"war_chest":{"id":"war_chest","name":"敵軍金庫","desc":"敵方基本產金 ×1.5，且開局金幣額外 +10","mods":{"income_mult":1.5},"extra_ink":10.0},
+	"rapid_muster":{"id":"rapid_muster","name":"急行徵兵","desc":"敵方出牌冷卻速度 ×1.5","mods":{"cd_speed_mult":1.5}},
+	"thorn_bastion":{"id":"thorn_bastion","name":"荊棘堡壘","desc":"敵方城牆減傷 25%，且攻城者每下反受 40 傷害","mods":{"gate_armor":0.25,"thorns_gate":40.0}},
+	"vanguard_wave":{"id":"vanguard_wave","name":"先鋒壓境","desc":"開局已有騎士自第 II、IV 路、民兵自第 III 路壓境，且開局金幣額外 +6","enemy_units":[[2,1,"knight"],[2,3,"knight"],[2,2,"militia"]],"extra_ink":6.0},
 }
+
+# Light twists for ordinary fights on floors 3-7 (2026-11-19): about 60% of them carry one.
+const BATTLE_MUTATORS := {
+	"scout_party":{"id":"scout_party","name":"斥候先行","desc":"開局已有兩隊民兵自第 II、IV 路出發","enemy_units":[[3,1,"militia"],[3,3,"militia"]]},
+	"lone_tower":{"id":"lone_tower","name":"孤塔哨站","desc":"敵方中路後排預築一座箭樓","enemy_buildings":[[1,2,"tower"]]},
+	"fat_purse":{"id":"fat_purse","name":"肥羊錢袋","desc":"敵方開局金幣額外 +8","extra_ink":8.0},
+	"quick_hands":{"id":"quick_hands","name":"手腳俐落","desc":"敵方出牌冷卻速度 ×1.25","mods":{"cd_speed_mult":1.25}},
+	"stone_gates":{"id":"stone_gates","name":"石砌城牆","desc":"敵方城牆減傷 15%","mods":{"gate_armor":0.15}},
+	"head_hunters":{"id":"head_hunters","name":"人頭懸賞","desc":"敵方每擊殺我方 1 名部隊得 1 金","mods":{"kill_bounty":1.0}},
+	"muddy_ford":{"id":"muddy_ford","name":"泥濘渡口","desc":"中央縱列化為水路（無法建築，除飛行單位外緩速 60%）","water_cols":[4]},
+	"barricade_line":{"id":"barricade_line","name":"拒馬陣地","desc":"敵方第 II、IV 路前排預築木拒馬","enemy_buildings":[[2,1,"barricade"],[2,3,"barricade"]]},
+}
+const BATTLE_MUTATOR_FROM_FLOOR := 2 # floor index: floors 3-7
+const BATTLE_MUTATOR_CHANCE := 0.6
+
+# Each boss also has a second face (2026-11-19); a run meets one of the two, fixed by its seed.
+const BOSS_VARIANTS := {
+	"harvest_ii":{"id":"harvest_ii","boss":"harvest","name":"饑荒征糧","desc":"魔王基本產金 ×1.4、開局金幣 +10，且每 30 秒對自家農田施放一次豐收","mods":{"income_mult":1.4},"extra_ink":10.0,"periodic_spell":{"interval":30.0,"kind":"harvest"}},
+	"iron_ii":{"id":"iron_ii","boss":"iron","name":"千塔要塞","desc":"開局五路後排共預築 5 座箭樓，城牆減傷 20%","enemy_buildings":[[1,0,"tower"],[1,2,"tower"],[1,4,"tower"],[2,1,"tower"],[2,3,"tower"]],"mods":{"gate_armor":0.2}},
+	"lion_ii":{"id":"lion_ii","boss":"lion","name":"王旗號角","desc":"每 25 秒魔王對自軍吹響一次衝鋒號令，開局金幣 +10","periodic_spell":{"interval":25.0,"kind":"charge_horn"},"extra_ink":10.0},
+	"underworld_ii":{"id":"underworld_ii","boss":"underworld","name":"瘟疫墓園","desc":"每 25 秒朝我軍散播一團瘟疫，開局第 II、IV 路先立墓碑","periodic_spell":{"interval":25.0,"kind":"plague"},"enemy_buildings":[[1,1,"grave"],[1,3,"grave"]]},
+	"beast_ii":{"id":"beast_ii","boss":"beast","name":"獸潮夜襲","desc":"魔王每張部隊卡多 1 名單位，每 40 秒在後方浮現一座巨獸孵巢","mods":{"swarm":{"*":1}},"periodic":{"interval":40.0,"kind":"monster_hatchery","min_col":6,"max_col":8}},
+	"mage_ii":{"id":"mage_ii","boss":"mage","name":"雷霆奧術","desc":"每 20 秒朝我軍降下一道連鎖閃電，開局金幣 +10","periodic_spell":{"interval":20.0,"kind":"chain_lightning"},"extra_ink":10.0},
+	"rune_ii":{"id":"rune_ii","boss":"rune","name":"祕法塔陣","desc":"開局後排預築 3 座祕法塔，每 30 秒戰場隨機浮現一座召喚法陣","enemy_buildings":[[1,0,"arcane_tower"],[1,2,"arcane_tower"],[1,4,"arcane_tower"]],"periodic":{"interval":30.0,"kind":"summon_trap","min_col":2,"max_col":6}},
+	"vampire_ii":{"id":"vampire_ii","boss":"vampire","name":"血債血償","desc":"魔王每擊殺我方 1 名部隊得 2 金，且每 25 秒朝我軍降下一道詛咒","mods":{"kill_bounty":2.0},"periodic_spell":{"interval":25.0,"kind":"curse"}},
+	"adventure_ii":{"id":"adventure_ii","boss":"adventure","name":"冒險者公會","desc":"開局獵戶、騎士與民兵各自三路出發，魔王出牌冷卻 ×1.3、開局金幣 +10","enemy_units":[[2,1,"hunter"],[2,2,"knight"],[2,3,"militia"]],"mods":{"cd_speed_mult":1.3},"extra_ink":10.0},
+}
+# Every event effect roguelike.gd event_action() handles; validate() catches typos.
+const EVENT_EFFECTS := ["upgrade_2","gold_and_up","mend_both","board_bounty","draft_plus","free_relic_low","blood_relic","wall_gold","cleanse_altar","board_all_elite","board_reroll_plus","tower_rest","caravan_gold","caravan_relic","upgrade_2_free","focus_up_2","board_blessing","sell_book","full_walls","full_lord","guild_gold","free_draft","armory_up","reset_march","transmute_bounty","elixir_up","sell_vials","mirror_upgrade","sanctuary_board","arcane_mend","double_bounty","fortify_up","buy_high_relic","bazaar_gold","gamble_relic","gamble_gold","walk_away","dark_pact","war_chest","scout_next","drill","steady_drill","sell_gear","burn_village","bandit_raid","paid_passage"]
 
 static func roll_elite_mutator(foe: String, seed_val: int, salt: int) -> String:
 	var keys: Array = ELITE_MUTATORS.keys()
@@ -592,10 +701,29 @@ static func mutator_data(slot: Dictionary) -> Dictionary:
 	var mid := String(slot.get("mutator",""))
 	if k == "boss":
 		var fk := String(slot.get("foe","")) if mid.is_empty() else mid
-		return BOSS_MUTATORS.get(fk,{})
+		return BOSS_VARIANTS.get(fk,BOSS_MUTATORS.get(fk,{}))
 	if k == "elite":
 		return ELITE_MUTATORS.get(mid,{})
+	if k == "battle":
+		return BATTLE_MUTATORS.get(mid,{})
 	return {}
+
+# The boss's face for this run: its classic mutator or its second variant, fixed by the seed.
+static func boss_mutator_id(boss: String, seed_val: int) -> String:
+	var variant := boss+"_ii"
+	if not BOSS_VARIANTS.has(variant): return boss
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_val*151+hash(boss)
+	return variant if rng.randf() < 0.5 else boss
+
+static func roll_battle_mutator(fl: int, seed_val: int, salt: int) -> String:
+	if fl < BATTLE_MUTATOR_FROM_FLOOR: return ""
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_val*59+salt*211+fl*7
+	if rng.randf() >= BATTLE_MUTATOR_CHANCE: return ""
+	var keys: Array = BATTLE_MUTATORS.keys()
+	keys.sort()
+	return String(keys[rng.randi_range(0,keys.size()-1)])
 
 static func make_slot(kind: String, r: Dictionary, salt: int = 0) -> Dictionary:
 	var fl := clampi(int(r.get("floor",0)),0,FLOORS-1)
@@ -609,11 +737,11 @@ static func make_slot(kind: String, r: Dictionary, salt: int = 0) -> Dictionary:
 			if not s.get("event_id","").is_empty(): used_events.append(s.event_id)
 	if kind == "boss" or (kind in ["battle","elite"] and fl >= FLOORS-1):
 		var b_foe: String = r.foes[FLOORS-1]
-		return {"kind":"boss","foe":b_foe,"mutator":b_foe,"event_id":"","bounty":0,"age":0}
+		return {"kind":"boss","foe":b_foe,"mutator":boss_mutator_id(b_foe,seed_val),"event_id":"","bounty":0,"age":0}
 	if kind == "battle":
 		var foe: String = r.foes[fl]
 		if foe in used_foes: foe = pick_minion(FLOOR_TIER[fl],seed_val,draws+salt+fl*11,used_foes)
-		return {"kind":"battle","foe":foe,"event_id":"","bounty":0,"age":0}
+		return {"kind":"battle","foe":foe,"mutator":roll_battle_mutator(fl,seed_val,draws+salt),"event_id":"","bounty":0,"age":0}
 	if kind == "elite":
 		var e_foe: String = r.elites[fl] if r.get("elites",[]).size() > fl else pick_minion(elite_tier(fl),seed_val,draws+salt,used_foes)
 		if e_foe in used_foes: e_foe = pick_minion(elite_tier(fl),seed_val,draws+salt+fl*19,used_foes)
@@ -711,4 +839,17 @@ static func validate() -> Array[String]:
 		if not B.CARDS.has(ed.get("art","")): problems.append("event %s uses unknown art card" % ev)
 		if ed.get("choices",[]).size() != 3: problems.append("event %s must have 3 choices" % ev)
 	if CONTRACTS.size() < 4: problems.append("fewer than 4 contracts")
+	for table: Dictionary in [BOSS_MUTATORS,BOSS_VARIANTS,ELITE_MUTATORS,BATTLE_MUTATORS]:
+		for id: String in table:
+			var mut: Dictionary = table[id]
+			if String(mut.get("name","")).is_empty() or String(mut.get("desc","")).is_empty(): problems.append("mutator %s needs a name and a description" % id)
+			for spec: Array in mut.get("enemy_buildings",[]) + mut.get("enemy_units",[]):
+				if not B.CARDS.has(String(spec[2])): problems.append("mutator %s places unknown %s" % [id,str(spec[2])])
+			for key: String in ["periodic","periodic_spell"]:
+				if mut.has(key) and not B.CARDS.has(String(mut[key].get("kind",""))): problems.append("mutator %s periodic kind is unknown" % id)
+	for id: String in BOSS_VARIANTS:
+		if not BOSSES.has(String(BOSS_VARIANTS[id].get("boss",""))): problems.append("boss variant %s names no boss" % id)
+	for ev: String in EVENTS:
+		for choice: Dictionary in EVENTS[ev].choices:
+			if not String(choice.get("effect","")) in EVENT_EFFECTS: problems.append("event %s uses unhandled effect %s" % [ev,str(choice.get("effect",""))])
 	return problems

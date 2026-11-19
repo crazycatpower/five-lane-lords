@@ -478,6 +478,21 @@ func shrine_action(choice: int) -> void:
 	consume_board_slot(false)
 	save_progress()
 
+# A seeded coin for gamble events: the same run, floor and board draw always roll the same.
+func event_roll(salt: int) -> float:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = int(run.get("seed",1))*389+int(run.get("floor",0))*97+int(run.get("draws",0))*53+salt
+	return rng.randf()
+
+# Event deals that change the next battle's opening gold (spent when that battle starts).
+func next_battle_note() -> String:
+	var parts: Array = []
+	var ours := float(run.get("next_our_ink",0.0))
+	var theirs := float(run.get("next_enemy_ink",0.0))
+	if ours != 0.0: parts.append("下一場我方開局金幣 %+d" % int(ours))
+	if theirs != 0.0: parts.append("下一場敵方開局金幣 %+d" % int(theirs))
+	return "、".join(parts)
+
 func event_choice_error(choice_index: int) -> String:
 	if run.is_empty() or run.phase != "event": return "現在不能選擇"
 	var ev_id: String = active_slot().get("event_id","wandering_smith")
@@ -496,6 +511,7 @@ func event_action(choice_index: int) -> void:
 	run.march_steps = maxi(0,int(run.get("march_steps",2))-1)
 	var eff: String = choice.get("effect","")
 	var mutation := ""
+	var notice := ""
 	var open_draft := false
 	match eff:
 		"upgrade_2": upgrade_random_cards(2)
@@ -612,7 +628,51 @@ func event_action(choice_index: int) -> void:
 			else:
 				grant_free_relic(600)
 		"bazaar_gold": run.gold += 155
+		"gamble_relic":
+			if event_roll(1) < 0.5:
+				var won_relic := grant_free_relic(600)
+				if won_relic.is_empty() or not Catalog.RELICS.has(won_relic):
+					notice = "骰子開出滿堂紅！"
+				else:
+					notice = "骰子開出滿堂紅！奪得遺物【%s】。" % Catalog.RELICS[won_relic].name
+			else:
+				run.lord_hp = maxf(1.0,float(run.get("lord_hp",lord_max_hp()))*0.65)
+				notice = "骰子出賣了你：領主在混戰中負傷，損耗 35% 生命。"
+		"gamble_gold":
+			if event_roll(2) < 0.5:
+				run.gold += 130
+				notice = "小賭得手，贏回 130 金幣。"
+			else:
+				notice = "莊家笑納了你的 30 金。"
+		"walk_away": run.gold += 60
+		"dark_pact":
+			run.gold += 200
+			run.next_enemy_ink = float(run.get("next_enemy_ink",0.0))+15.0
+		"war_chest": run.next_our_ink = float(run.get("next_our_ink",0.0))+15.0
+		"scout_next":
+			run.next_enemy_ink = float(run.get("next_enemy_ink",0.0))-10.0
+			run.gold += 40
+		"drill":
+			upgrade_random_cards(3)
+			run.lord_hp = maxf(1.0,float(run.get("lord_hp",lord_max_hp()))*0.80)
+			run.gates = run.gates.map(func(hp: float) -> float: return maxf(50.0,hp*0.90))
+		"steady_drill":
+			upgrade_random_cards(1)
+			mend_by_share(0.0,0.25)
+		"sell_gear": run.gold += 110
+		"burn_village":
+			run.gold += 170
+			run.gates = run.gates.map(func(hp: float) -> float: return maxf(50.0,hp*0.88))
+		"bandit_raid":
+			run.gold += 140
+			run.lord_hp = maxf(1.0,float(run.get("lord_hp",lord_max_hp()))*0.85)
+		"paid_passage":
+			run.march_steps = 2
+			mend_by_share(0.20,0.0)
 	consume_board_slot(false,mutation)
+	var pending := next_battle_note()
+	if not notice.is_empty() or not pending.is_empty():
+		run.board_notice = " · ".join([notice,pending].filter(func(s: String) -> bool: return not s.is_empty()))
 	if open_draft:
 		run.offer = Catalog.offer(run.lord,run.seed+run.draws*97,run.floor,run.deck)
 		run.last_elite = false
@@ -869,7 +929,10 @@ func make_battle() -> Battle:
 	var boss := is_boss()
 	var c_data: Dictionary = Catalog.CONTRACTS[clampi(int(run.get("contract",0)),0,Catalog.CONTRACTS.size()-1)]
 	var base_enemy_ink: float = Catalog.BOSS_START_INK if boss else (Catalog.ELITE_START_INK if run.get("elite",false) else Catalog.ENEMY_START_INK)
-	m.ink[1] = minf(B.MAX_INK,base_enemy_ink+float(c_data.get("enemy_ink",0.0)))
+	m.ink[1] = clampf(base_enemy_ink+float(c_data.get("enemy_ink",0.0))+float(run.get("next_enemy_ink",0.0)),0.0,B.MAX_INK)
+	m.ink[0] = clampf(m.ink[0]+float(run.get("next_our_ink",0.0)),0.0,B.MAX_INK)
+	run.erase("next_enemy_ink") # event deals last for exactly one battle
+	run.erase("next_our_ink")
 	m.difficulty = clampi(Catalog.AI_LEVEL[run.floor]+int(c_data.get("ai_boost",0)),0,2)
 	var enemy_scale: float = Catalog.enemy_floor_scale(run.floor)
 	var enemy_mods: Dictionary = {}
@@ -1137,7 +1200,7 @@ func slot_subtitle(slot: Dictionary) -> String:
 		"elite": return "賞金 %d 金%s · 掉遺物%s" % [win_gold(run.floor,true),b_tag,m_tag]
 		"battle":
 			var age_tag := " · 久置將升階" if int(slot.get("age",0)) >= 1 else ""
-			return "賞金 %d 金%s%s" % [win_gold(run.floor,false),b_tag,age_tag]
+			return "賞金 %d 金%s%s%s" % [win_gold(run.floor,false),b_tag,age_tag,m_tag]
 		"camp": return "免費修牆療傷 ／ 鍛造強化卡牌 ／ 徵集軍資"
 		"shrine": return "免費聖物匣 ／ 精煉主力卡牌 ／ 鮮血奉獻"
 		"event": return "手抄本奇遇抉擇 · 可強化或改變牌陣"
