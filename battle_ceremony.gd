@@ -35,7 +35,8 @@ static func intro(g) -> void:
 	if g.intro_left <= 0.0 or g.model.ended: return
 	var k: float = 1.0-g.intro_left/g.INTRO_TIME
 	var enter: float = 1.0-pow(1.0-clampf(k/0.16,0,1),3)
-	var alpha: float = 1.0-clampf((k-0.78)/0.22,0,1)
+	var fade_in: float = clampf(k/0.14,0,1)
+	var alpha: float = fade_in*(1.0-clampf((k-0.78)/0.22,0,1))
 	var band := Rect2(L.FIELD_FRAME.position.x+4,322,L.FIELD_FRAME.size.x-8,150)
 	g.draw_rect(band,Color(0.17,0.12,0.08,0.62*alpha))
 	g.draw_line(band.position+Vector2(0,5),Vector2(band.end.x,band.position.y+5),Color(0.84,0.69,0.43,alpha),2)
@@ -197,10 +198,14 @@ static func result(g) -> void:
 		var name: String = B.CARDS[kind].name
 		g.draw_string(g.font,cell+Vector2(42,27),name,HORIZONTAL_ALIGNMENT_LEFT,-1,13 if name.length() > 4 else 15,Color(g.INK,alpha))
 	if age >= PANEL_DELAY+PANEL_IN:
+		var btn_alpha: float = clampf((age-PANEL_DELAY-PANEL_IN)/0.24,0,1)
 		for item: Array in g.overlay_buttons():
 			var hover: bool = item[0].has_point(g.get_global_mouse_position())
-			g.panel(item[0],Color("fbf1d8") if hover else Color("f3e6c6"),accent if hover else g.INK)
-			g.draw_string(g.font,item[0].position+Vector2(0,27),item[1],HORIZONTAL_ALIGNMENT_CENTER,item[0].size.x,20,g.INK)
+			var fill := Color("fbf1d8",btn_alpha) if hover else Color("f3e6c6",btn_alpha)
+			var border := Color(accent,btn_alpha) if hover else Color(g.INK,btn_alpha)
+			g.panel(item[0],fill,border)
+			if hover: g.draw_rect(item[0].grow(2),Color(accent,0.45*btn_alpha),false,2)
+			g.draw_string(g.font,item[0].position+Vector2(0,27),item[1],HORIZONTAL_ALIGNMENT_CENTER,item[0].size.x,20,Color(g.INK,btn_alpha))
 	if feeling > 0: leaves(g,age-PANEL_DELAY)
 	elif feeling < 0: ash(g,age)
 

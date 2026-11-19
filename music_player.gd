@@ -7,15 +7,19 @@ extends Node
 const DIR := "res://assets/music/"
 const BUS := "Music"
 const FADE := 1.6 # seconds for a full cross-fade
+const FADE_SILENCE := 0.55 # quicker fade out when a match ends for victory/defeat stings
+const STING_FADE := 0.30
 const LAYERS := ["battle_lute","battle_drums","battle_tune"]
 const QUIET := -60.0
 
 var enabled := true
 var wanted := "" # the piece that should be heard now ("" = silence)
 var duck := 1.0 # 0..1 extra gain (the pause screen lowers the music)
+var pause_duck := 1.0
 var event_duck := 1.0 # brief dip for dramatic skills / breaches
 var event_duck_hold := 0.0
 var event_duck_target := 1.0
+var sting_fade_left := 0.0
 var players := {} # piece -> AudioStreamPlayer
 var gain := {} # piece -> current 0..1
 var layer_gain := [1.0,0.0,0.0]
@@ -83,12 +87,14 @@ func want(piece: String, day: int = 0) -> void:
 func play_sting(piece: String) -> void:
 	var path := DIR+piece+".ogg"
 	if not enabled or not ResourceLoader.exists(path) or DisplayServer.get_name() == "headless": return
+	sting_fade_left = 0.0
 	sting.stream = load(path)
 	sting.volume_db = -2.0
 	sting.play()
 
 func stop_sting() -> void:
-	if sting != null and sting.playing: sting.stop()
+	if sting != null and sting.playing and sting_fade_left <= 0.0:
+		sting_fade_left = STING_FADE
 
 func duck_pulse(level: float = 0.5, duration: float = 0.55) -> void:
 	event_duck_target = minf(event_duck_target, clampf(level, 0.15, 1.0))
@@ -96,16 +102,24 @@ func duck_pulse(level: float = 0.5, duration: float = 0.55) -> void:
 
 func _process(dt: float) -> void:
 	if DisplayServer.get_name() == "headless": return
+	if sting != null and sting.playing and sting_fade_left > 0.0:
+		sting_fade_left = maxf(0.0, sting_fade_left - dt)
+		var sk := sting_fade_left / STING_FADE
+		sting.volume_db = lerpf(QUIET, -2.0, sk * sk)
+		if sting_fade_left <= 0.0:
+			sting.stop()
+	pause_duck = move_toward(pause_duck, duck, dt * 3.2)
 	if event_duck_hold > 0.0:
 		event_duck_hold = maxf(0.0, event_duck_hold - dt)
 		event_duck = move_toward(event_duck, event_duck_target, dt * 8.0)
 	else:
 		event_duck_target = 1.0
 		event_duck = move_toward(event_duck, 1.0, dt * 1.8)
-	var step := dt/FADE
+	var fade_time := FADE_SILENCE if wanted.is_empty() else FADE
+	var step := dt/fade_time
 	for piece: String in players:
 		var player: AudioStreamPlayer = players[piece]
-		var target := duck * event_duck if enabled and piece == wanted else 0.0
+		var target := 1.0 if enabled and piece == wanted else 0.0
 		gain[piece] = move_toward(gain[piece],target,step)
 		if gain[piece] <= 0.0:
 			if player.playing: player.stop()
@@ -115,9 +129,10 @@ func _process(dt: float) -> void:
 				layer_gain = [1.0,0.0,0.0]
 				for i: int in range(LAYERS.size()): layers.set_sync_stream_volume(i,0.0 if i == 0 else QUIET)
 			player.play()
-		# Equal-power fade: two pieces crossing never dip or swell.
-		player.volume_db = linear_to_db(maxf(sin(gain[piece]*PI*0.5),0.001))
+		# Equal-power fade: two pieces crossing never dip or swell, while pause/event ducking stays responsive.
+		var cross := sin(gain[piece]*PI*0.5)
+		player.volume_db = linear_to_db(maxf(cross * pause_duck * event_duck, 0.001))
 	if players.has("battle") and players.battle.playing:
 		for i: int in range(LAYERS.size()):
 			layer_gain[i] = move_toward(layer_gain[i],layer_target[i],dt/3.0) # layers ease in over three seconds
-			layers.set_sync_stream_volume(i,linear_to_db(maxf(layer_gain[i],0.001)))
+			layers.set_sync_stream_volume(i,linear_to_db(maxf(sin(layer_gain[i]*PI*0.5),0.001)))

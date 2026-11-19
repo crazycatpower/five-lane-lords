@@ -92,11 +92,14 @@ func report(model, names: Array = []) -> String:
 func draw_charts(g) -> void:
 	var points: Array = economy_samples.duplicate()
 	points.append({"time":g.model.elapsed,"gold":[float(g.model.stats[0].produced),float(g.model.stats[1].produced)],"farms":[g.model.count_buildings(0,"farm"),g.model.count_buildings(1,"farm")]})
-	g.label_at(Vector2(1080,125),"紅方 ━　藍方 ┄",20)
+	g.label_at(Vector2(1080,125),"紅方 ━",20,g.RED)
+	g.label_at(Vector2(1176,125),"藍方 ┄",20,g.BLUE)
+	preload("res://interface_ornament.gd").rule(g,Vector2(140,468),Vector2(1460,468),g.INK)
 	for index: int in range(2):
 		var key: String = "gold" if index == 0 else "farms"
 		var r := Rect2(195+index*675,210,540,215)
-		g.label_at(Vector2(r.position.x-45,183),"累計產金（所有來源）" if index == 0 else "農田數量（座）",24)
+		g.panel(Rect2(r.position-Vector2(58,18),Vector2(r.size.x+78,r.size.y+54)),Color("f5ebd2"),Color("8a6f4a"))
+		g.label_at(Vector2(r.position.x-45,178),"累計產金（所有來源）" if index == 0 else "農田數量（座）",24)
 		var ceiling := 1.0
 		for point: Dictionary in points:
 			for value: float in point[key]: ceiling = maxf(ceiling,value)

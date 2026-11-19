@@ -170,13 +170,19 @@ static func crumble(g, team: int, lane: int, gate_rect: Rect2) -> void:
 	g.tf()
 
 # The moment night falls (and each later toll): the moon's rings on the track, a hush over the field.
-static func toll(g, e: Dictionary, progress: float) -> void:
-	var at := Vector2(TRACK.position.x+TRACK.size.x*clampf(e.time/day_end(g),0,1),TRACK.get_center().y)
-	g.draw_set_transform_matrix(Transform2D.IDENTITY) # the top bar is never mirrored (online guest)
-	for k: int in range(3):
-		var ring: float = fmod(progress*1.6+k/3.0,1.0)
-		g.draw_arc(at,14+ring*46,0,TAU,32,Color(0.86,0.84,0.98,(1-progress)*(1-ring)*0.9),3,true)
-	g.tf()
+static func toll_field(g, e: Dictionary, progress: float) -> void:
 	if e.get("first",false):
 		var veil := sin(clampf(progress*1.4,0,1)*PI)
 		g.draw_rect(L.FIELD_FRAME.grow(-6),Color(0.05,0.07,0.22,0.22*veil))
+
+static func toll_hud(g, e: Dictionary, progress: float) -> void:
+	var at := Vector2(TRACK.position.x+TRACK.size.x*clampf(e.time/day_end(g),0,1),TRACK.get_center().y)
+	for k: int in range(3):
+		var ring: float = fmod(progress*1.6+k/3.0,1.0)
+		g.draw_arc(at,14+ring*46,0,TAU,32,Color(0.86,0.84,0.98,(1-progress)*(1-ring)*0.9),3,true)
+
+static func toll(g, e: Dictionary, progress: float) -> void:
+	g.draw_set_transform_matrix(Transform2D.IDENTITY) # the top bar is never mirrored (online guest)
+	toll_hud(g,e,progress)
+	g.tf()
+	toll_field(g,e,progress)

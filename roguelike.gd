@@ -1458,8 +1458,10 @@ func paint_map(g) -> void:
 			rule_line += "\n異變【%s】：%s" % [String(sel_mut.name),String(sel_mut.desc)]
 		g.draw_multiline_string(g.font,right.position+Vector2(20,54),rule_line,HORIZONTAL_ALIGNMENT_LEFT,right.size.x-40,14,3,g.RED if not sel_mut.is_empty() else Color("5a4632"))
 		var enemy_scale: float = Catalog.enemy_floor_scale(run.floor)
-		var deck_hdr: String = ("敵方牌組（金幣獲得／冷卻速度 ×%.2f）：" % enemy_scale) if enemy_scale > 1.0 else "敵方牌組："
-		g.label_at(right.position+Vector2(20,132),deck_hdr,16,g.INK)
+		# The header sits in the narrow column left of the cards (it used to run under them).
+		g.label_at(right.position+Vector2(20,132),"敵方牌組",17,g.INK)
+		if enemy_scale > 1.0:
+			g.draw_multiline_string(g.font,right.position+Vector2(20,156),"金幣獲得與冷卻 ×%s" % B.number(snappedf(enemy_scale,0.01)),HORIZONTAL_ALIGNMENT_LEFT,110,13,3,Color("8a3a2c"))
 		mini_deck(g,Catalog.foe_deck(enemy),Vector2(1010,352),2,{},true)
 	else:
 		g.draw_string(g.font,right.position+Vector2(0,32),"選中遭遇：%s" % slot_title(sel),HORIZONTAL_ALIGNMENT_CENTER,right.size.x,22,g.RED)
@@ -1470,8 +1472,11 @@ func paint_map(g) -> void:
 	g.draw_string(g.font,right.position+Vector2(0,314),"我軍編制 · %s" % B.lord_name(run.lord),HORIZONTAL_ALIGNMENT_CENTER,right.size.x,20,g.INK)
 	g.draw_fitted(g.lord_art(run.lord),Rect2(right.position+Vector2(28,332),Vector2(90,115)),Color.WHITE,true)
 	mini_deck(g,run.deck,Vector2(1010,574),2,run.upgrades,true)
-	var relic_names: String = "、".join(run.relics.map(func(k: String) -> String: return Catalog.RELICS[k].name)) if not run.relics.is_empty() else "無"
-	g.draw_multiline_string(g.font,right.position+Vector2(18,458),"持有遺物（%d）：%s" % [run.relics.size(),relic_names],HORIZONTAL_ALIGNMENT_LEFT,120,14,4,Color("5a4632"))
+	# Relics: a count and the first two names; the full list is the tooltip over this corner.
+	g.label_at(right.position+Vector2(20,472),"持有遺物 %d 件" % run.relics.size(),15,g.INK)
+	var shown: Array = run.relics.slice(0,2).map(func(k: String) -> String: return Catalog.RELICS[k].name)
+	var relic_body: String = "尚無" if shown.is_empty() else ("、".join(shown) if run.relics.size() <= 2 else "%s 等\n指向查看全部" % shown[0])
+	g.draw_multiline_string(g.font,right.position+Vector2(20,494),relic_body,HORIZONTAL_ALIGNMENT_LEFT,108,13,2,Color("5a4632"))
 	g.label_at(right.position+Vector2(145,518),deck_summary(run.deck),15,Color("6f5a3e"))
 
 func paint_camp(g) -> void:

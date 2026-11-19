@@ -291,19 +291,43 @@ static func draw_play(g, e: Dictionary, progress: float) -> void:
 	else:
 		var k: float = (progress - 0.58) / 0.42
 		g.tf(e.pos + Vector2(0.0, 12.0), 0.0, Vector2(1.0, 0.42))
-		g.draw_arc(Vector2.ZERO, 18.0 + k * 34.0, 0.0, TAU, 24, Color(0.84, 0.68, 0.32, (1.0 - k) * 0.75), 2.2, true)
+		g.draw_arc(Vector2.ZERO, 18.0 + k * 34.0, 0.0, TAU, 24, Color(0.84, 0.68, 0.32, (1.0 - k) * 0.75), 2.4, true)
+		g.draw_arc(Vector2.ZERO, 8.0 + k * 18.0, 0.0, TAU, 18, Color(1.0, 0.94, 0.72, (1.0 - k) * 0.55), 1.6, true)
 		g.tf()
+		for i: int in range(5):
+			var a := float(i) * TAU / 5.0 + 0.4
+			var dp: Vector2 = e.pos + Vector2(cos(a) * (10.0 + k * 24.0), 10.0 + sin(a) * (4.0 + k * 9.0) - k * 10.0)
+			g.draw_circle(dp, 3.0 + k * 3.0, Color(0.60, 0.48, 0.33, (1.0 - k) * 0.45))
+
+static func model_to_screen(g, model_pos: Vector2) -> Vector2:
+	var prev_active: bool = g.cinematic.field_active
+	var prev_mirror: bool = g.field_mirror
+	g.cinematic.field_active = true
+	g.field_mirror = g.mirror_view
+	var cam: Transform2D = g.cinematic.field_transform(g)
+	g.cinematic.field_active = prev_active
+	g.field_mirror = prev_mirror
+	return cam * model_pos
+
+static func draw_ink_hud(g, e: Dictionary, progress: float) -> void:
+	var start: Vector2 = model_to_screen(g, e.pos)
+	var target: Vector2 = preload("res://economy_hud.gd").PURSE.get_center() if int(e.team) == g.me else Vector2(1322.0, 35.0)
+	var ease_t: float = 1.0 - pow(1.0 - clampf(progress, 0.0, 1.0), 2.0)
+	var pos: Vector2 = start.lerp(target, ease_t) - Vector2(0.0, sin(ease_t * PI) * 62.0)
+	var fade: float = 1.0 - clampf((progress - 0.85) / 0.15, 0.0, 1.0)
+	for i: int in range(1, 3):
+		var bt: float = maxf(0.0, ease_t - float(i) * 0.05)
+		var bp: Vector2 = start.lerp(target, bt) - Vector2(0.0, sin(bt * PI) * 62.0)
+		g.draw_circle(bp, 3.2 - float(i) * 0.8, Color(1.0, 0.86, 0.35, (0.55 - float(i) * 0.18) * fade))
+	g.draw_circle(pos, 7.6, Color("d9a62e", fade))
+	g.draw_arc(pos, 7.6, 0.0, TAU, 12, Color("6c4b14", fade), 1.4, true)
+	g.draw_circle(pos + Vector2(-2.0, -2.0), 2.3, Color("fff0a6", fade))
+	if progress > 0.84:
+		var rp := (progress - 0.84) / 0.16
+		g.draw_arc(target, 10.0 + rp * 20.0, 0.0, TAU, 18, Color(1.0, 0.88, 0.42, (1.0 - rp) * 0.85), 2.2, true)
 
 static func draw_ink(g, e: Dictionary, progress: float) -> void:
-	var target: Vector2 = g.to_model(Vector2(80.0, 765.0) if int(e.team) == g.me else Vector2(1322.0, 35.0))
-	var pos: Vector2 = e.pos.lerp(target, progress) - Vector2(0.0, sin(progress * PI) * 58.0)
-	for i: int in range(1, 3):
-		var bt: float = maxf(0.0, progress - float(i) * 0.05)
-		var bp: Vector2 = e.pos.lerp(target, bt) - Vector2(0.0, sin(bt * PI) * 58.0)
-		g.draw_circle(bp, 3.0 - float(i) * 0.8, Color(1.0, 0.86, 0.35, 0.55 - float(i) * 0.18))
-	g.draw_circle(pos, 7.2, Color("d9a62e"))
-	g.draw_arc(pos, 7.2, 0.0, TAU, 12, Color("6c4b14"), 1.3, true)
-	g.draw_circle(pos + Vector2(-2.0, -2.0), 2.2, Color("fff0a6"))
+	draw_ink_hud(g, e, progress)
 
 static func draw_death(g, e: Dictionary, progress: float) -> void:
 	var kind: String = e.get("art_kind", e.card)

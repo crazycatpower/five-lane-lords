@@ -46,8 +46,11 @@ static func section(g, team: int, lane: int, broken: bool) -> void:
 	var clear := Color(0.14,0.10,0.05,0.0)
 	g.draw_polygon(PackedVector2Array([Vector2(outer,top),Vector2(outer+dir*26,top+10),Vector2(outer+dir*26,top+height+10),Vector2(outer,top+height)]),PackedColorArray([dark,clear,clear,dark]))
 	# The painted masonry, mirrored for blue.
-	g.tf(Vector2(x,top),0,Vector2(dir,1))
-	g.draw_texture_rect(g.art("gate_broken" if broken else "gate",team),Rect2(-WIDTH*0.5,0,WIDTH,height),false,SHADE)
+	var hit_k: float = g.polish.gate_flash(team,lane) if (not broken and g.polish != null) else 0.0
+	var jiggle := Vector2(sin(g.clock*85.0)*2.4*hit_k,cos(g.clock*70.0)*1.2*hit_k) if (hit_k > 0.0 and g.shake_enabled) else Vector2.ZERO
+	g.tf(Vector2(x,top)+jiggle,0,Vector2(dir,1))
+	var wall_shade := SHADE.lightened(hit_k*0.25) if hit_k > 0.0 else SHADE
+	g.draw_texture_rect(g.art("gate_broken" if broken else "gate",team),Rect2(-WIDTH*0.5,0,WIDTH,height),false,wall_shade)
 	if not broken:
 		# Dark-ink cracks spread as the wall weakens, by day as well as by night.
 		var ratio: float = clampf(m.gates[team][lane]/B.GATE_HP,0.0,1.0)
@@ -63,7 +66,7 @@ static func section(g, team: int, lane: int, broken: bool) -> void:
 	if style == "towers":
 		if lane > 0: turret(g,Vector2(x,top),team)
 		if lane < L.GRID_ROWS-1 and not (lane+1) in m.active_lanes: turret(g,Vector2(x,top+height),team)
-	elif not broken: pennant(g,Vector2(x-dir*9,top+height*0.5+16),team)
+	elif not broken: pennant(g,Vector2(x-dir*9,top+height*0.5+16)+jiggle,team)
 
 # The team's pennant flying over a standing stretch (cut from the castle painting; gone once the
 # stretch is breached). It streams toward the enemy and stirs a little.

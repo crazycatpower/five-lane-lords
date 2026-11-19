@@ -10,16 +10,16 @@ static func style(kind: String) -> String:
 	var d: Dictionary = preload("res://balance.gd").CARDS.get(kind,{})
 	if d.has("attack_style"): return d.attack_style
 	match kind:
-		"axe_thrower": return "throw"
-		"hunter", "arcane_archer": return "bow"
+		"axe_thrower", "funeral_grenadier", "beekeeper", "web_spinner": return "throw"
+		"hunter", "arcane_archer", "vampire_hunter", "arquebusier", "shroud_arbalist", "net_hunter", "orrery_walker", "ballista_tower": return "bow"
 		"tower": return "tower"
-		"lord_rune", "arcane_tower", "chronomancer": return "cast"
-		"catapult": return "siege"
+		"lord_rune", "arcane_tower", "chronomancer", "plague_bishop", "spell_tide_magus", "prism_mage", "old_witch", "sigil_weaver", "bellbearer", "astrolabe_surveyor", "seal_bearer", "mourning_maid", "corpse_stitcher", "blood_attendant", "artificer", "renegade_artificer": return "cast"
+		"catapult", "dog_cannon": return "siege"
 		"dark_wizard", "necromancer", "healer", "lord_mage", "lord_underworld", "lord_harvest": return "cast"
 		"lord_adventure": return "cleave"
-		"lord_vampire", "arcane_golem", "corpse_giant", "knight", "reaper", "lord_lion", "lord_iron", "eyewing_dragon", "belly_eye", "thorn_dragon": return "heavy"
-		"ram", "ox": return "ram"
-		"raven", "fishbeak", "hooknose_flyer": return "peck"
+		"lord_vampire", "arcane_golem", "corpse_giant", "knight", "reaper", "lord_lion", "lord_iron", "lord_beast", "eyewing_dragon", "belly_eye", "thorn_dragon", "gold_monster", "thorn_mother", "dire_hydra", "bog_troll", "long_dragon", "chimera", "macebreaker", "gatebreaker", "rune_sentinel", "ward_guard", "ward_phalanx", "pallbearer": return "heavy"
+		"ram", "ox", "tusk_boar", "disgraced_lancer", "phase_rider": return "ram"
+		"raven", "fishbeak", "hooknose_flyer", "sky_scavenger", "parasite_mite", "aether_hound", "thorn_hound", "oathless_imp", "bearded_imp", "imp_bomb_runner": return "peck"
 		"drummer": return "drum"
 	return "thrust"
 

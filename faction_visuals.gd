@@ -83,6 +83,8 @@ static func summon(g, pos: Vector2, progress: float) -> void:
 
 static func spell(g, e: Dictionary, progress: float) -> bool:
 	var kind: String = e.get("card","")
+	if not kind in ["sacrifice","dread_howl","borrowed_bones","grave_exchange","mourning_shroud","sealed_coffin"]:
+		return false
 	var srect: Rect2 = e.get("rect",Rect2())
 	if srect.size != Vector2.ZERO:
 		g.draw_rect(srect,Color(0.85,0.68,0.35,(1.0-progress)*0.16))

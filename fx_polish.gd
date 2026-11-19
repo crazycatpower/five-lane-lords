@@ -5,7 +5,7 @@ extends RefCounted
 # and never touches the battle's random numbers.
 
 const SPELL_STYLE := {
-	"rain":"volley","fire":"fire","flaming_pitch":"fire",
+	"rain":"volley","fire":"fire","flaming_pitch":"fire","rolling_boulder":"boulder_launch",
 	"chain_lightning":"storm","mana_drain":"drain","phase_shift":"rift","mirror_clone":"rift",
 	"time_field":"clock","gravity_well":"vortex",
 	"arcane_shield":"bless","mana_spring":"bless","charge_horn":"bless","harvest":"bless",
@@ -14,7 +14,7 @@ const SPELL_STYLE := {
 	"wing_gust":"gust","devouring_maw":"maw","swarm_eruption":"eruption","pack_ambush":"eruption",
 }
 const SPELL_COLOR := {
-	"rain":"8a6a3c","fire":"f07a22","flaming_pitch":"e8571c","chain_lightning":"9fd0ff",
+	"rain":"8a6a3c","fire":"f07a22","flaming_pitch":"e8571c","rolling_boulder":"b88b4a","chain_lightning":"9fd0ff",
 	"mana_drain":"4fc3f7","phase_shift":"a497df","mirror_clone":"c6b8ff","time_field":"cbb0df",
 	"gravity_well":"7a62d6","arcane_shield":"7ac7e0","mana_spring":"4fc3f7","charge_horn":"e2b23a",
 	"harvest":"f2c230","berserk_blood":"c0392b","feral_mutation":"7fbf3f","levy":"e2b23a",
@@ -89,7 +89,25 @@ static func spell(g, e: Dictionary, progress: float) -> bool:
 		"gust": gust(g,e,progress,col)
 		"maw": maw(g,e,progress,col)
 		"eruption": eruption(g,e,progress,col)
+		"boulder_launch": boulder_launch(g,e,progress,col)
 	return true
+
+# 巨石滾落 launch burst: dust plume, shock ring, and forward speed streaks.
+static func boulder_launch(g, e: Dictionary, p: float, col: Color) -> void:
+	var c := area_center(e)
+	var dir := 1.0 if int(e.get("team", 0)) == 0 else -1.0
+	var r := area_radius(e) * 0.85
+	ground_disc(g, c, r * (0.45 + 0.55 * ease_out(p)), Color(col, (1.0 - p) * 0.25))
+	ground_ring(g, c, r * ease_out(p * 1.4), Color(DUST, (1.0 - p) * 0.85), 3.5)
+	for i: int in range(6):
+		var a := -PI * 0.6 + float(i) * PI * 0.24
+		var q := clampf(p * 1.4, 0.0, 1.0)
+		var d := c + Vector2(-dir * 16.0 * q + cos(a) * r * 0.7 * q, -6.0 - sin(q * PI) * 26.0 + sin(a) * 10.0)
+		g.draw_circle(d, 5.0 + 7.0 * q, Color(DUST, (1.0 - q) * 0.50))
+	for i: int in range(3):
+		var y_off := (i - 1) * 14.0
+		var x0 := c.x + dir * (10.0 + p * 40.0)
+		g.draw_line(Vector2(x0, c.y + y_off), Vector2(x0 + dir * 28.0, c.y + y_off), Color(col.lightened(0.3), (1.0 - p) * 0.75), 2.2, true)
 
 # The spell's colour washes over its area and fades; a bright edge shrinks inward.
 static func area_tint(g, e: Dictionary, p: float, col: Color) -> void:
@@ -497,3 +515,52 @@ static func burn(g, e: Dictionary, p: float) -> void:
 		var b: Vector2 = e.pos+Vector2((h(s,i)-0.5)*56,(h(s,i+5)-0.5)*18)
 		var flicker := 0.75+0.25*sin(p*70+i*2.1)
 		flame(g,b,(18+14*h(s,i+2))*strength*flicker,7,sin(p*30+i)*4,0.85*strength)
+
+static func hit_spark(g, e: Dictionary, p: float) -> void:
+	var s := seed_of(e)
+	var at: Vector2 = e.pos + Vector2(0.0, -18.0)
+	var a := 1.0 - p
+	var attacker: String = String(e.get("attacker", ""))
+	var target: String = String(e.get("target", ""))
+	var is_shield := target in ["shieldguard", "barricade", "bonewall"]
+	var is_magic := attacker in ["dark_wizard", "prism_mage", "spell_tide_magus", "arcane_archer", "arcane_tower", "chronomancer", "orrery_walker", "old_witch", "seal_bearer", "plague_bishop", "lord_mage", "lord_rune", "lord_underworld"]
+	var is_heavy := attacker in ["corpse_giant", "arcane_golem", "bog_troll", "thorn_dragon", "dire_hydra", "tusk_boar", "gold_monster", "thorn_mother", "knight", "reaper", "ram", "lord_iron", "lord_beast", "lord_lion", "lord_vampire", "lord_adventure"]
+	if is_shield:
+		var r := 10.0 + p * 14.0
+		g.draw_arc(at, r, -PI * 0.55, PI * 0.55, 14, Color("e8d294", a * 0.9), 2.6, true)
+		g.draw_line(at + Vector2(-7, 0), at + Vector2(7, 0), Color(1.0, 0.96, 0.80, a * 0.85), 2.0, true)
+		g.draw_line(at + Vector2(0, -7), at + Vector2(0, 7), Color(1.0, 0.96, 0.80, a * 0.85), 2.0, true)
+		return
+	if is_magic:
+		var mcol := Color("a88ce8")
+		var r := 7.0 + p * 16.0
+		g.draw_circle(at, 6.0 * a + 2.0, Color(mcol, a * 0.45))
+		for k: int in range(4):
+			var ang := k * PI * 0.5 + h(s, 3) * 0.6
+			var d := Vector2.from_angle(ang)
+			g.draw_line(at + d * 3.0, at + d * r, Color(0.92, 0.90, 1.0, a * 0.9), 1.8, true)
+		return
+	if is_heavy:
+		var r := 12.0 + ease_out(p) * 20.0
+		g.draw_arc(at, r, 0.0, TAU, 18, Color("f0c458", a * 0.75), 2.4, true)
+		for k: int in range(3):
+			var ang := (h(s, k) - 0.5) * 2.4 + (0.0 if int(e.get("team", 0)) == 1 else PI)
+			var d := Vector2.from_angle(ang)
+			g.draw_line(at + d * (4.0 + p * 6.0), at + d * (14.0 + p * 18.0), Color("fff0c0", a * 0.9), 2.2, true)
+		return
+	for k: int in range(3):
+		var ang := h(s, k + 11) * TAU
+		var d := Vector2.from_angle(ang)
+		g.draw_line(at + d * (3.0 + p * 5.0), at + d * (10.0 + p * 12.0), Color(0.28, 0.20, 0.14, a * 0.72), 2.0, true)
+		g.draw_line(at + d * (3.0 + p * 5.0), at + d * (9.0 + p * 10.0), Color(1.0, 0.93, 0.75, a * 0.85), 1.2, true)
+
+static func wall_chip(g, e: Dictionary, p: float) -> void:
+	var s := seed_of(e)
+	var a := 1.0 - p
+	var dir := 1.0 if int(e.get("team", 0)) == 0 else -1.0
+	for i: int in range(5):
+		var vy := -24.0 - h(s, i + 1) * 26.0
+		var vx := dir * (14.0 + h(s, i + 7) * 24.0)
+		var pt: Vector2 = e.pos + Vector2(vx * p, vy * p + 65.0 * p * p - 12.0 + (h(s, i + 13) - 0.5) * 32.0)
+		g.draw_circle(pt, 2.2 + h(s, i + 19) * 1.8, Color(0.55, 0.48, 0.36, a * 0.85))
+	ground_ring(g, e.pos + Vector2(dir * 10.0, 12.0), 10.0 + p * 18.0, Color(DUST, a * 0.55), 2.0)

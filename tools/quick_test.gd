@@ -581,5 +581,18 @@ func presentation_checks() -> void:
 		host.clock += 0.15
 		cd.step(host, 0.15)
 		peak = maxf(peak, cd.impulse.length())
-	check(peak <= cd.MAX_IMPULSE + 0.01 and cd.impulse.length() < 0.5, "camera shake stays bounded and settles under stacked events and frame spikes")
+	var CardSort = preload("res://card_sort.gd")
+	var all_cards: Array = B.CARDS.keys()
+	var before_cards := all_cards.duplicate()
+	var sort_ok: bool = CardSort.sort_lords(B.LORDS.keys()) == B.lord_menu_order() and CardSort.sort_cards(["gold_monster", "militia", "fire", "farm"], "cost_asc")[-1] == "gold_monster"
+	for mode: Array in CardSort.MODES:
+		var sorted: Array = CardSort.sort_cards(all_cards, mode[0], "magic")
+		sort_ok = sort_ok and sorted.size() == all_cards.size() and all_cards == before_cards
+	var SB = preload("res://sound_bank.gd")
+	var missing_sfx: Array = []
+	for sfx_name: String in SB.CUES.values():
+		if not ResourceLoader.exists("res://assets/audio/" + sfx_name + ".ogg") and not sfx_name in missing_sfx:
+			missing_sfx.append(sfx_name)
+	var polish = preload("res://ui_polish.gd").new()
+	check(peak <= cd.MAX_IMPULSE + 0.01 and cd.impulse.length() < 0.5 and sort_ok and missing_sfx.is_empty() and is_equal_approx(polish.screen_enter_t, 1.0), "camera shake stays bounded and settles under stacked events and frame spikes; CardSort, SoundBank (%s) and UiPolish are valid" % str(missing_sfx))
 	preload("res://tools/test_art_palette.gd").run(self)

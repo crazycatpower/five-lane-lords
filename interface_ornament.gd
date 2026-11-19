@@ -116,11 +116,11 @@ static func wax_upgrade_seal(g, center: Vector2, radius: float, lv: int) -> void
 static func portrait(g, r: Rect2, tint: Color, selected: bool) -> void:
 	g.draw_rect(Rect2(r.position+Vector2(2,3),r.size),Color("35291f",0.16))
 	g.panel(r,Color("ecddb9"),Color("8c6e43"))
-	var field := Rect2(r.position+Vector2(9,9),Vector2(r.size.x-18,r.size.y-75))
+	var field := Rect2(r.position+Vector2(9,9),Vector2(r.size.x-18,r.size.y-77))
 	g.draw_rect(field,Color("efe5cc").lerp(tint,0.23))
 	g.draw_rect(field,Color("9b8054",0.4),false,1)
 	for side: int in [0,1]:
 		var x := field.position.x+5 if side == 0 else field.end.x-5
 		g.draw_line(Vector2(x,field.position.y+5),Vector2(x,field.position.y+24),Color("a08147",0.65),1,true)
-	rule(g,Vector2(r.position.x+24,r.end.y-60),Vector2(r.end.x-24,r.end.y-60),Color("92703c"))
+	rule(g,Vector2(r.position.x+24,r.end.y-63),Vector2(r.end.x-24,r.end.y-63),Color("92703c"))
 	if selected: g.draw_rect(r.grow(-2),Color("a66b35"),false,2)

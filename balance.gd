@@ -945,8 +945,9 @@ const CHARGE_RESET_TIME := 3.0
 const FIRE_KNOCKBACK := 20.0
 
 # Text shares the data used by combat; optional tables let tests exercise future balance edits.
+# Whole numbers read as "350", not "350.0" (2026-11-19 polish); fractions keep up to 2 digits.
 static func number(value: float) -> String:
-	return String.num(value,2)
+	return String.num(value,2).trim_suffix(".0")
 
 static func troop_description(kind: String, count: int, cards: Dictionary, include_name: bool = true) -> String:
 	var d: Dictionary = cards[kind]

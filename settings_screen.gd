@@ -3,9 +3,9 @@ extends RefCounted
 # or from the pause banner of a local battle (g.settings_return says where "back" leads).
 const PANEL := Rect2(410,120,780,660)
 const ROWS := ["音樂音量","音效音量","全螢幕","戰鬥特效","畫面震動","電影運鏡","對戰錄影"]
-const ROW_Y := 228.0
-const ROW_STEP := 56.0
-const CONTROL_X := 720.0
+const ROW_Y := 282.0 # below the 設定 title (it overlapped the first row)
+const ROW_STEP := 52.0
+const CONTROL_X := 690.0 # keeps the longest note inside the frame
 static var knob_texture: ImageTexture
 
 # A vermilion wax-seal knob with a gold rim for the sliders.

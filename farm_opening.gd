@@ -186,12 +186,7 @@ func paint(g) -> void:
 		var hint := "空白鍵暫停" if active else "選牌部署在我方領地，開始反攻"
 		g.draw_string(g.font,Vector2(box.position.x+18,box.position.y+65),hint,HORIZONTAL_ALIGNMENT_LEFT,box.size.x-36,14,Color("796344"))
 	if m.ended: g.draw_result()
-	elif m.paused:
-		g.panel(L.OVERLAY_RECT)
-		g.label_at(L.OVERLAY_RECT.position+Vector2(50,58),"戰局暫停",30)
-		for item: Array in g.overlay_buttons():
-			g.panel(item[0],Color("fbf1d8") if item[0].has_point(g.get_global_mouse_position()) else Color("f3e6c6"))
-			g.draw_string(g.font,item[0].position+Vector2(0,27),item[1],HORIZONTAL_ALIGNMENT_CENTER,item[0].size.x,20,g.INK)
+	else: g.draw_pause_overlay()
 
 func paint_status(g) -> void:
 	if active: return

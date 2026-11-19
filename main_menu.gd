@@ -34,13 +34,19 @@ static func polygon(g, points: PackedVector2Array, color: Color) -> void:
 	var edge := points.duplicate()
 	edge.append(points[0])
 	g.draw_polyline(edge,Color("5e4932"),2.5,true)
-static func banner(g, y: float, height: float, color: Color, subtitle: String, subtitle_from_bottom: float = 24.0) -> void:
-	polygon(g,PackedVector2Array([Vector2(927,y+9),Vector2(1480,y+9),Vector2(1461,y+height/2),Vector2(1480,y+height),Vector2(927,y+height),Vector2(946,y+height/2)]),Color(0.15,0.12,0.08,0.2))
-	polygon(g,PackedVector2Array([Vector2(917,y),Vector2(1470,y),Vector2(1451,y+height/2),Vector2(1470,y+height),Vector2(917,y+height),Vector2(936,y+height/2)]),color)
-	g.draw_texture_rect(g.PAPER,Rect2(940,y+3,500,height-6),false,Color(1,1,1,0.09))
-	g.draw_line(Vector2(950,y+8),Vector2(1434,y+8),Color("d5b16e"),1.5)
-	g.draw_line(Vector2(950,y+height-8),Vector2(1434,y+height-8),Color("d5b16e"),1.5)
-	g.draw_string(g.font,Vector2(955,y+height-subtitle_from_bottom),subtitle,HORIZONTAL_ALIGNMENT_CENTER,480,17 if subtitle_from_bottom < 24.0 else 18,Color("e5cda1"))
+static func banner(g, y: float, height: float, color: Color, subtitle: String, subtitle_from_bottom: float = 24.0, hit_rect: Rect2 = Rect2()) -> float:
+	var hv: float = g.polish.hover_val("menu_banner_%d" % int(y), not hit_rect.size.is_zero_approx() and hit_rect.has_point(g.get_global_mouse_position()), g.is_processing())
+	var dy := -2.5 * hv
+	var yy := y + dy
+	var fill := color.lightened(hv * 0.12)
+	var trim := Color("d5b16e").lerp(Color("fff2c4"), hv * 0.6)
+	polygon(g,PackedVector2Array([Vector2(927,y+9),Vector2(1480,y+9),Vector2(1461,y+height/2),Vector2(1480,y+height),Vector2(927,y+height),Vector2(946,y+height/2)]),Color(0.15,0.12,0.08,0.20+0.08*hv))
+	polygon(g,PackedVector2Array([Vector2(917,yy),Vector2(1470,yy),Vector2(1451,yy+height/2),Vector2(1470,yy+height),Vector2(917,yy+height),Vector2(936,yy+height/2)]),fill)
+	g.draw_texture_rect(g.PAPER,Rect2(940,yy+3,500,height-6),false,Color(1,1,1,0.09+0.04*hv))
+	g.draw_line(Vector2(950,yy+8),Vector2(1434,yy+8),trim,1.5+0.6*hv)
+	g.draw_line(Vector2(950,yy+height-8),Vector2(1434,yy+height-8),trim,1.5+0.6*hv)
+	g.draw_string(g.font,Vector2(955,yy+height-subtitle_from_bottom),subtitle,HORIZONTAL_ALIGNMENT_CENTER,480,17 if subtitle_from_bottom < 24.0 else 18,Color("e5cda1").lerp(Color("fff6df"),hv*0.5))
+	return dy
 # Nine wax seals across the adventure banner: red for cleared, gold ring on the next stage.
 static func adventure_progress(g, y: float) -> void:
 	var a = g.adventure
@@ -54,21 +60,25 @@ static func adventure_progress(g, y: float) -> void:
 		if i == next and done < count: g.draw_circle(p,11,Color("f4d78c"))
 		g.draw_circle(p,8,Color("6e2a20") if a.is_cleared(i) else Color(0.95,0.88,0.7,0.35))
 		g.draw_arc(p,8,0,TAU,20,Color("e5cda1"),1.5,true)
-static func book(g, x: float, caption: String) -> void:
+static func book(g, x: float, caption: String, hit_rect: Rect2 = Rect2()) -> void:
+	var hv: float = g.polish.hover_val("menu_book_%d" % int(x), not hit_rect.size.is_zero_approx() and hit_rect.has_point(g.get_global_mouse_position()), g.is_processing())
+	var dy := -3.5 * hv
+	var cover := (Color("714838") if x < 300 else Color("39565a")).lightened(hv * 0.14)
+	var gold := Color("d4b36f").lerp(Color("fff2c4"), hv * 0.55)
 	polygon(g,PackedVector2Array([Vector2(x,700),Vector2(x+286,689),Vector2(x+308,814),Vector2(x+14,828)]),Color("694535"))
-	polygon(g,PackedVector2Array([Vector2(x+10,695),Vector2(x+282,685),Vector2(x+299,804),Vector2(x+21,817)]),Color("c5ad7a"))
-	polygon(g,PackedVector2Array([Vector2(x,681),Vector2(x+286,674),Vector2(x+302,793),Vector2(x+14,808)]),Color("714838") if x < 300 else Color("39565a"))
-	g.draw_line(Vector2(x+29,686),Vector2(x+43,800),Color("d4b36f"),3)
-	g.draw_fitted(g.ART.ornament(4),Rect2(x+72,775,160,20),Color(1,0.88,0.62,0.6))
-	g.draw_string(g.font,Vector2(x+42,714),caption,HORIZONTAL_ALIGNMENT_CENTER,225,16,Color("fff0ca"))
+	polygon(g,PackedVector2Array([Vector2(x+10,695+dy*0.5),Vector2(x+282,685+dy*0.5),Vector2(x+299,804+dy*0.5),Vector2(x+21,817+dy*0.5)]),Color("c5ad7a"))
+	polygon(g,PackedVector2Array([Vector2(x,681+dy),Vector2(x+286,674+dy),Vector2(x+302,793+dy),Vector2(x+14,808+dy)]),cover)
+	g.draw_line(Vector2(x+29,686+dy),Vector2(x+43,800+dy),gold,3.0+0.6*hv)
+	g.draw_fitted(g.ART.ornament(4),Rect2(x+72,775+dy,160,20),Color(1,0.88,0.62,0.6+0.3*hv))
+	g.draw_string(g.font,Vector2(x+42,714+dy),caption,HORIZONTAL_ALIGNMENT_CENTER,225,16,Color("fff0ca"))
 static func paint(g) -> void:
 	g.draw_fitted(g.ART.ornament(4),Rect2(90,48,660,55))
 	g.draw_string(g.font,Vector2(85,184),"羊皮紙戰記",HORIZONTAL_ALIGNMENT_CENTER,680,78,g.INK)
 	g.draw_string(g.font,Vector2(85,232),"種下村莊，寫下你的戰史。",HORIZONTAL_ALIGNMENT_CENTER,680,24,g.INK)
 	# A dirt track separates the living fields from the graveyard.
-	g.draw_colored_polygon(PackedVector2Array([Vector2(465,410),Vector2(505,410),Vector2(541,452),Vector2(568,496),Vector2(618,549),Vector2(670,604),Vector2(751,681),Vector2(605,681),Vector2(577,613),Vector2(543,550),Vector2(517,501),Vector2(493,451)]),Color(0.76,0.68,0.46,0.30))
-	g.ground_wash(Vector2(240,501),Vector2(180,135),Color("b5b66f"),72,0.13)
-	g.ground_wash(Vector2(730,501),Vector2(130,135),Color("655a70"),81,0.16)
+	g.draw_colored_polygon(PackedVector2Array([Vector2(465,410),Vector2(505,410),Vector2(541,452),Vector2(568,496),Vector2(618,549),Vector2(670,604),Vector2(751,681),Vector2(605,681),Vector2(577,613),Vector2(543,550),Vector2(517,501),Vector2(493,451)]),Color(0.76,0.68,0.46,0.16))
+	g.ground_wash(Vector2(240,501),Vector2(200,150),Color("b5b66f"),72,0.06)
+	g.ground_wash(Vector2(730,501),Vector2(150,150),Color("655a70"),81,0.06)
 	for row: int in range(2):
 		var y := 398.0+row*119
 		g.draw_fitted(g.art("farm"),Rect2(72,y-32,146,103),Color.WHITE,true)
@@ -85,14 +95,13 @@ static func paint(g) -> void:
 	g.draw_circle(Vector2(914,143),13,Color("b58a43"))
 	g.draw_circle(Vector2(1487,154),7,Color("b58a43"))
 	g.draw_string(g.font,Vector2(964,125),"五路戰線 · 一卷戰史",HORIZONTAL_ALIGNMENT_CENTER,480,27,g.INK)
-	banner(g,200,172,Color("963f30"),"搜尋線上對手 · 不足補 AI · 自由練習／好友房",20.0)
-	g.draw_string(g.font,Vector2(955,322),"出征領主：%s · 牌組 %d 張" % [g.B.LORDS[g.player_lord].name,g.player_deck.size()],HORIZONTAL_ALIGNMENT_CENTER,480,18,Color("fff5df"))
-	banner(g,386,110,Color("3b5662"),"")
-	adventure_progress(g,386)
-	banner(g,510,80,Color("8a5a2b"),"八場連戰、邊打邊換牌，輸一場就結束",16.0)
-	banner(g,604,80,Color("4c5032"),"兩邊都交給 AI，看牌組怎麼打",16.0)
-	g.draw_string(g.font,Vector2(951,752),"出征領主 · "+g.B.LORDS[g.player_lord].name,HORIZONTAL_ALIGNMENT_CENTER,490,19,g.INK)
-	book(g,88,"軍備名冊")
-	book(g,436,"萬物與軼聞")
+	var dy0 := banner(g,200,172,Color("963f30"),"搜尋線上對手 · 不足補 AI · 自由練習／好友房",20.0,Rect2(955,210,480,96))
+	g.draw_string(g.font,Vector2(955,322+dy0),"出征領主：%s · 牌組 %d 張" % [g.B.LORDS[g.player_lord].name,g.player_deck.size()],HORIZONTAL_ALIGNMENT_CENTER,480,18,Color("fff5df"))
+	var dy1 := banner(g,386,110,Color("3b5662"),"",24.0,Rect2(955,390,480,42))
+	adventure_progress(g,386+dy1)
+	banner(g,510,80,Color("8a5a2b"),"八場連戰、邊打邊換牌，輸一場就結束",16.0,Rect2(955,513,480,38))
+	banner(g,604,80,Color("4c5032"),"兩邊都交給 AI，看牌組怎麼打",16.0,Rect2(955,607,480,38))
+	book(g,88,"軍備名冊",Rect2(100,720,280,85))
+	book(g,436,"萬物與軼聞",Rect2(448,720,280,85))
 	g.draw_string(g.font,Vector2(90,860),"農田與墓碑之間，戰線已然展開。",HORIZONTAL_ALIGNMENT_CENTER,660,19,g.INK)
 	g.draw_string(g.font,Vector2(1380,862),"v"+g.VERSION,HORIZONTAL_ALIGNMENT_RIGHT,180,15,Color(g.INK,0.5))

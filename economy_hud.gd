@@ -78,6 +78,12 @@ static func draw_purse(g, ink: float, need: float, id: int, alarm: float = 0.0, 
 		g.draw_circle(Vector2.ZERO,92+glow*8,Color(1.0,0.82,0.30,0.18+0.14*glow))
 		g.tf()
 	g.draw_texture_rect(ART.object_icon(0),PURSE,false)
+	if g.polish != null and g.polish.purse_flash > 0.0:
+		var pf: float = 1.0 - clampf(g.polish.purse_flash / 0.32, 0.0, 1.0)
+		var pa: float = sin(pf * PI)
+		var mouth := PURSE.get_center() + Vector2(0.0, -24.0)
+		g.draw_circle(mouth, 16.0 + pf * 14.0, Color(1.0, 0.90, 0.45, 0.25 * pa))
+		g.draw_arc(mouth, 10.0 + pf * 24.0, 0.0, TAU, 24, Color(1.0, 0.94, 0.65, 0.72 * pa), 2.2, true)
 	var tex := coin_texture()
 	var spend := ceili(need/COIN_GOLD)
 	for i: int in range(maxi(coins,mini(spend,total))):

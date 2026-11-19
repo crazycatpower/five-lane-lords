@@ -450,6 +450,12 @@ func on_event(g, e: Dictionary) -> void:
 				trauma = maxf(trauma, 0.06)
 			if g.fx_enabled:
 				add_decal("rune", pos + Vector2(0, 12), e.get("radius", 50.0) * 0.65, 9.0)
+		"ramp":
+			if enabled and g.music != null and g.music.has_method("duck_pulse"):
+				g.music.duck_pulse(0.68, 0.55)
+		"nightfall":
+			if enabled and e.get("first", false) and g.music != null and g.music.has_method("duck_pulse"):
+				g.music.duck_pulse(0.62, 0.65)
 		"hit":
 			if g.fx_enabled and sparks.size() < MAX_SPARKS - 4:
 				var attacker: String = e.get("attacker", "")

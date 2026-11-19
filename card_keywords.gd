@@ -606,20 +606,22 @@ static func draw_card_pills(g, rect: Rect2, kind: String, blocked: bool = false)
 		x += w + gap
 
 # Draw larger manuscript keyword cartouches in the Codex / Battle Info / Battle Hand strip.
-static func draw_badges(g, pos: Vector2, kws: Array[String], fsize: int = 15) -> float:
+static func draw_badges(g, pos: Vector2, kws: Array[String], fsize: int = 15, max_width: float = 0.0, alpha: float = 1.0) -> float:
 	var x := pos.x
 	var h := float(fsize) + 8.0
 	for kw: String in kws:
 		var label := "· %s ·" % kw
 		var w: float = g.font.get_string_size(kw, HORIZONTAL_ALIGNMENT_LEFT, -1, fsize).x + 20.0
+		if max_width > 0.0 and x - pos.x + w > max_width:
+			break
 		var r := Rect2(x, pos.y - h + 4.5, w, h)
 		var col := color_of(kw)
 		var fill := Color("efe1be").lerp(fill_of(kw), 0.50)
-		_draw_cartouche(g, r, fill, col, kw, fsize, 3.0, true)
+		_draw_cartouche(g, r, Color(fill, alpha), Color(col, alpha), kw, fsize, 3.0, true, alpha)
 		x += w + 6.0
 	return x - pos.x
 
-static func _draw_cartouche(g, r: Rect2, fill: Color, col: Color, text: String, fsize: int, cut: float, ornate: bool) -> void:
+static func _draw_cartouche(g, r: Rect2, fill: Color, col: Color, text: String, fsize: int, cut: float, ornate: bool, alpha: float = 1.0) -> void:
 	var p := r.position
 	var s := r.size
 	var pts := PackedVector2Array([
@@ -629,19 +631,19 @@ static func _draw_cartouche(g, r: Rect2, fill: Color, col: Color, text: String, 
 	if ornate:
 		var sh := PackedVector2Array()
 		for pt: Vector2 in pts: sh.append(pt + Vector2(0.8, 1.2))
-		g.draw_colored_polygon(sh, Color("261b11", 0.16))
+		g.draw_colored_polygon(sh, Color("261b11", 0.16 * alpha))
 	g.draw_colored_polygon(pts, fill)
 	if ornate:
-		g.draw_line(p+Vector2(cut+1,1.2), p+Vector2(s.x-cut-1,1.2), Color("fff7df",0.58), 1.0, true)
+		g.draw_line(p+Vector2(cut+1,1.2), p+Vector2(s.x-cut-1,1.2), Color("fff7df",0.58 * alpha), 1.0, true)
 	var rim := pts.duplicate()
 	rim.append(rim[0])
-	g.draw_polyline(rim, Color(col, 0.76), 1.1, true)
+	g.draw_polyline(rim, Color(col, 0.76 * alpha), 1.1, true)
 	if ornate:
 		var my := p.y + s.y * 0.5
 		for dx: float in [3.2, s.x - 3.2]:
 			var cx := p.x + dx
 			g.draw_colored_polygon(PackedVector2Array([
 				Vector2(cx-1.5,my), Vector2(cx,my-1.5), Vector2(cx+1.5,my), Vector2(cx,my+1.5)
-			]), Color(col, 0.82))
+			]), Color(col, 0.82 * alpha))
 	var by := p.y + s.y * 0.5 + float(fsize) * 0.36 + 0.5
 	g.draw_string(g.font, Vector2(p.x, by), text, HORIZONTAL_ALIGNMENT_CENTER, s.x, fsize, col)
