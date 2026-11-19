@@ -62,7 +62,7 @@ const LORD_RANGED_RANGE_FAR := 430.0 # range tier SS for snipers/artillery (up f
 # grid's back edge (the back farm column is centred 59 px in), so raids on farms are not free to stop.
 const LORD_ZONE_DEPTH := 40.0
 const LORD_INTERVAL := 0.65 # interval tier B (was 0.6, off the tier table; 2026-11-09)
-const LORD_RANGED_INTERVAL := 1.4 # interval tier E for all ranged lords (down 1 tier from D 1.1)
+const LORD_RANGED_INTERVAL := 1.1 # interval tier D for all ranged lords (E 1.4 -> D 1.1 on 2026-11-19)
 const LORD_REGEN_DELAY := 6.0
 const LORD_REGEN := 5.0 # +2 base regen/s for all lords (was 3.0)
 const LORD_RETREAT_BELOW := 0.25 # retreat to the castle under this share of HP...
