@@ -627,10 +627,7 @@ func deploy(team: int, kind: String, cell: Vector2i, gold: int = 0) -> void:
 	if card.get("spread",false):
 		var middle := clampi(cell.y,1,3)
 		lanes = [middle-1,middle,middle+1]
-	# A mixed legion keeps formation: everyone marches at the slowest member's pace.
-	var march := INF
-	if groups.size() > 1:
-		for group: Array in groups: march = minf(march,B.CARDS[group[0]].speed)
+	# Legion members march at their own speeds (producer 2026-11-19: no forced common pace).
 	if GridRules.footprint(kind) != Vector2i(1,1) and GridRules.footprint_ok(self,team,kind,cell):
 		# Multi-cell cards (佔位): play_check already required every covered cell to be ours, so each
 		# share lands exactly on its cell; nothing is shifted inward or back. (A lord skill summoning the
@@ -642,18 +639,18 @@ func deploy(team: int, kind: String, cell: Vector2i, gold: int = 0) -> void:
 			cells[at].append([p.kind,p.count,p.offset])
 		var order: Dictionary = {}
 		for at: Vector2i in cells:
-			order[at.y] = spawn_groups(team,kind,at.y,at.x,cells[at],0.0,march,gold,int(order.get(at.y,0)))
+			order[at.y] = spawn_groups(team,kind,at.y,at.x,cells[at],0.0,gold,int(order.get(at.y,0)))
 		return
 	for lane: int in lanes:
 		if not lane in active_lanes: continue
 		var col := deployment_column(team,lane,cell.x)
 		if col < 0: continue
-		spawn_groups(team,kind,lane,col,groups,front_offset,march,gold,0)
+		spawn_groups(team,kind,lane,col,groups,front_offset,gold,0)
 
 # One squad in one cell: placed at the rear of the cell (mirrored for blue) so enemies inside it stay in
 # front of the freshly deployed interceptors. Each lane counts its own spawn order, so a multi-lane squad
 # steps out in all lanes at once. Returns the next spawn index for that lane.
-func spawn_groups(team: int, kind: String, lane: int, col: int, groups: Array, front_offset: float, march: float, gold: int, n: int) -> int:
+func spawn_groups(team: int, kind: String, lane: int, col: int, groups: Array, front_offset: float, gold: int, n: int) -> int:
 	var card: Dictionary = B.CARDS[kind]
 	var forward := 1.0 if team == 0 else -1.0
 	var spot := L.cell_center(Vector2i(col,lane))-Vector2(forward*(L.CELL_SIZE.x*0.5-12.0),0)
@@ -666,7 +663,6 @@ func spawn_groups(team: int, kind: String, lane: int, col: int, groups: Array, f
 			u.card = kind
 			if gold > 0: GoldMonster.apply(u,gold,card_upgrades[team].get(kind,{}))
 			elif card_upgrades[team].has(kind): Upgrades.apply_unit(u,kind,card_upgrades[team][kind])
-			if march < INF: u.march = march
 			n += 1
 	return n
 

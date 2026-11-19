@@ -72,7 +72,7 @@ const AI_TICK := 0.5
 const LORD_HYSTERESIS := 1.5
 # Costs run 1..30 (producer decision 2026-10-29). "role" is the card's job, shown on the card face.
 # Buildings never expire on their own (producer decision 2026-10-29); they stay until destroyed.
-# Speeds differ too: mob 60 (rush) ... knight and ram 22; a legion marches at its slowest member.
+# Speeds differ too: mob 60 (rush) ... knight and ram 22; legion members keep their own speeds.
 # Troop counts vary widely on purpose (1 to 12) so headcount itself sets a card apart.
 # Most troop cards are bulk buys (producer 2026-10-29): costlier, but more troops, so each troop is a bit cheaper.
 # Unit cards may carry "members" ([kind, count, px behind the front]) to field a mixed legion,
@@ -954,11 +954,8 @@ static func card_description(kind: String, cards: Dictionary = CARDS) -> String:
 	var lines: Array[String] = ["召喚限定" if d.get("summon_only",false) else "%s 金幣 · 冷卻 %s 秒" % [number(d.cost),number(d.cooldown)]]
 	if d.type == "unit":
 		if d.has("members"):
-			var march := INF
 			for group: Array in d.members:
 				lines.append(troop_description(group[0],group[1],cards,true))
-				march = minf(march,cards[group[0]].speed)
-			lines.append("軍團以最慢成員速度 %s 一起前進。" % number(march))
 			for group: Array in d.members:
 				var md: Dictionary = cards[group[0]]
 				if group[0] != kind and md.has("ward_share"): lines.append("%s結界：身邊 %s 範圍內的友軍受到傷害時，%d%% 改由最近的%s承受；構裝，工匠會優先修補。" % [md.name,number(md.ward_radius),int(md.ward_share*100),md.name])
