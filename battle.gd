@@ -1,6 +1,7 @@
 extends RefCounted
 const Windup = preload("res://attack_windup.gd")
 const WardRules = preload("res://ward_rules.gd")
+const RelicTriggers = preload("res://relic_triggers.gd")
 const Frontier = preload("res://frontier_cards.gd")
 const Faction = preload("res://faction_cards.gd")
 const GluttonNest = preload("res://glutton_nest.gd")
@@ -191,6 +192,7 @@ func apply_domestic(team: int, home: String, mods: Dictionary) -> void:
 	ink[team] = minf(B.MAX_INK,ink[team]+mods.get("start_ink",0.0))
 	for fm: Dictionary in mods.get("field_mutators",[]):
 		apply_field_mutator(fm,team)
+	RelicTriggers.battle_start(self,team)
 	refresh_territory()
 
 func is_water_cell(cell: Vector2i) -> bool:
@@ -785,6 +787,7 @@ func damage(target: Dictionary, amount: float, team: int, kind: String, source: 
 		if not target.has("cell") and target.kind != "lord" and not target.get("summoned",false):
 			var bounty := float(lord_mod(1-target.team,"kill_bounty",0.0))
 			if bounty > 0: gain_ink(1-target.team,bounty)
+			RelicTriggers.on_kill(self,1-target.team)
 
 func gate_credit_card(kind: String, source: Dictionary) -> String:
 	if not source.is_empty():
@@ -815,6 +818,7 @@ func hit_gate(side: int, lane: int, amount: float, kind: String = "militia", sou
 	if gates[side][lane] == 0 and first_breach < 0: first_breach = elapsed
 	if gates[side][lane] == 0:
 		if not credit.is_empty(): stats[1-side].breach_card = credit
+		RelicTriggers.on_gate_fall(self,side,lane)
 		event("breach",Vector2(L.gate_icon_x(side),L.cell_center(Vector2i(0,lane)).y),1-side,{"lane":lane})
 	stats[1-side].damage[kind] = stats[1-side].damage.get(kind,0.0)+dealt
 	if side == 0: alarm[lane] = 1.5
@@ -939,6 +943,7 @@ func skill_need(team: int) -> float:
 
 func add_skill_charge(team: int, amount: float) -> void:
 	if skill_cd[team] > 0.0: return # no charging while the skill cools down (producer 2026-11-19)
+	amount = RelicTriggers.charge_gain(self,team,amount)
 	if amount > 0.0: skill_charge[team] = minf(skill_need(team),skill_charge[team]+amount)
 
 func skill_charged(team: int) -> bool:
@@ -1065,6 +1070,7 @@ func cast_skill(team: int) -> bool:
 	if not skill_error(team).is_empty(): return false
 	skill_charge[team] = 0.0
 	skill_cd[team] = B.skill_cooldown(lords[team].lord)
+	RelicTriggers.on_cast(self,team)
 	var kind: String = lords[team].lord
 	stats[team].skills = stats[team].get("skills",0)+1
 	var visual_targets: Array[Vector2] = []

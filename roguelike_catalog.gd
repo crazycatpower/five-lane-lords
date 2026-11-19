@@ -33,7 +33,7 @@ const RELICS := {
 	"twin_towers":{"name":"雙哨塔","price":400,"mods":{"start_buildings":[[0,0,"watchtower"],[0,4,"watchtower"]]}},
 	"bounty_pouch":{"name":"獵頭賞袋","price":400,"mods":{"kill_bounty":1.0}},
 	"royal_medallion":{"name":"王室勳章","price":400,"mods":{"lord_boost":1}},
-	"chrono_pendulum":{"name":"時光鐘擺","price":400,"mods":{"skill_haste":1.4,"start_ink":5.0}},
+	"chrono_pendulum":{"name":"時光鐘擺","price":400,"mods":{"skill_charge_mult":1.25,"start_ink":5.0}},
 	"spiked_battlement":{"name":"荊棘雉堞","price":400,"mods":{"gate_armor":0.25,"thorns_gate":35.0}},
 	"harvest_sickle":{"name":"豐饒金鐮","price":400,"mods":{"farm_mult":1.35,"start_ink":8.0}},
 	"trench_engineer":{"name":"前線工兵營","price":400,"mods":{"field_mutators":[{"periodic":{"interval":24.0,"kind":"blast_trap","min_col":2,"max_col":6}}]}},
@@ -46,9 +46,21 @@ const RELICS := {
 	"philosopher_stone":{"name":"賢者之石","price":600,"mods":{"income_mult":1.35,"start_ink":15.0}},
 	"imperial_bastion":{"name":"帝國稜堡","price":600,"mods":{"start_buildings":[[0,1,"tower"],[0,3,"tower"],[1,2,"barricade"]]}},
 	"blood_chalice":{"name":"血誓聖爵","price":600,"mods":{"kill_bounty":1.5,"post_heal":{"gate":350.0,"lord":150.0}}},
-	"astral_compass":{"name":"星象羅盤","price":600,"mods":{"cycle_speed":{"*":1.25},"skill_haste":1.5}},
+	"astral_compass":{"name":"星象羅盤","price":600,"mods":{"cycle_speed":{"*":1.25},"skill_charge_mult":1.3}},
 	"aegis_obelisk":{"name":"聖盾方尖碑","price":600,"mods":{"field_mutators":[{"periodic_spell":{"interval":22.0,"kind":"arcane_shield"}}]}},
 	"fertile_floodplain":{"name":"沃野墾殖詔","price":600,"mods":{"field_mutators":[{"double_home_rows":true}],"farm_mult":1.2}},
+	"flint_spark":{"name":"引火燧石","price":200,"mods":{"skill_start_charge":0.3}},
+	"soul_lantern":{"name":"拘魂燈","price":200,"mods":{"kill_charge":3.0}},
+	"tithe_bowl":{"name":"什一缽","price":200,"mods":{"skill_echo_gold":6.0}},
+	"rally_bugle":{"name":"守城軍號","price":200,"mods":{"gate_fall_spell":{"kind":"charge_horn"}}},
+	"storm_core":{"name":"風暴晶核","price":400,"mods":{"skill_charge_mult":1.3}},
+	"last_ward":{"name":"最後結界","price":400,"mods":{"gate_fall_spell":{"kind":"arcane_shield"},"gate_armor":0.1}},
+	"scavenger_hook":{"name":"拾荒鉤","price":400,"mods":{"kill_bounty":0.5,"kill_charge":2.0}},
+	"echo_bell":{"name":"迴響戰鐘","price":400,"mods":{"skill_echo_gold":10.0,"skill_start_charge":0.2}},
+	"phoenix_ash":{"name":"鳳凰餘燼","price":600,"mods":{"gate_fall_spell":{"kind":"flaming_pitch"},"post_heal":{"gate":300.0,"lord":100.0}}},
+	"warlord_seal":{"name":"霸主印璽","price":600,"mods":{"skill_charge_mult":1.5,"skill_start_charge":0.5}},
+	"golden_echo":{"name":"金鳴法典","price":600,"mods":{"skill_echo_gold":15.0,"income_mult":1.15}},
+	"night_terror":{"name":"夜魘鈴","price":600,"mods":{"gate_fall_spell":{"kind":"dread_howl"},"kill_charge":3.0}},
 }
 const BOARD_REROLL_PRICE := 40
 const SKIP_REWARD_GOLD := 35
@@ -264,15 +276,15 @@ const STARTER_CORE := {
 	"beast":["fishbeak","long_dragon"],
 }
 const LORD_ROLES := {
-	"adventure":{"domestic":{"card":"farmer","passive":{"lord_boost":1,"skill_haste":1.35,"kill_bounty":0.5,"gold_bonus":0.20,"post_heal":{"gate":150.0,"lord":80.0}}},"combat":{"card":"knight"}},
+	"adventure":{"domestic":{"card":"farmer","passive":{"lord_boost":1,"skill_charge_mult":1.2,"kill_bounty":0.5,"gold_bonus":0.20,"post_heal":{"gate":150.0,"lord":80.0}}},"combat":{"card":"knight"}},
 	"lion":{"domestic":{"card":"charge_horn","passive":{"haste":["*"],"start_ink":6.0}},"combat":{"card":"mob"}},
 	"iron":{"domestic":{"card":"watchtower","passive":{"gate_armor":0.2,"thorns_gate":20.0,"start_buildings":[[1,1,"barricade"],[1,3,"barricade"]]}},"combat":{"card":"manor_retainer"}},
 	"harvest":{"domestic":{"card":"harvest","passive":{"income_mult":1.25,"farm_mult":1.3}},"combat":{"card":"levy"}},
-	"mage":{"domestic":{"card":"teleport_trap","passive":{"cycle_speed":{"*":1.25},"skill_haste":1.2}},"combat":{"card":"blink_blade"}},
+	"mage":{"domestic":{"card":"teleport_trap","passive":{"cycle_speed":{"*":1.25},"skill_charge_mult":1.15}},"combat":{"card":"blink_blade"}},
 	"rune":{"domestic":{"card":"artificer","passive":{"start_buildings":[[2,1,"teleport_trap"],[2,3,"blast_trap"]],"start_ink":10.0,"cycle_speed":{"*":1.15}}},"combat":{"card":"summon_trap"}},
-	"underworld":{"domestic":{"card":"bonewall","passive":{"start_buildings":[[0,2,"grave"]],"skill_haste":1.25,"skill_discount":10.0}},"combat":{"card":"ghoul"}},
+	"underworld":{"domestic":{"card":"bonewall","passive":{"start_buildings":[[0,2,"grave"]],"skill_charge_mult":1.2,"skill_discount":10.0}},"combat":{"card":"ghoul"}},
 	"beast":{"domestic":{"card":"bearded_imp","passive":{"toughen":["*"],"start_buildings":[[0,2,"glutton_nest"]]}},"combat":{"card":"thorn_dragon"}},
-	"vampire":{"domestic":{"card":"blood_tower","passive":{"lord_boost":1,"kill_bounty":0.6,"skill_haste":1.25,"post_heal":{"lord":100.0}}},"combat":{"card":"reaper"}},
+	"vampire":{"domestic":{"card":"blood_tower","passive":{"lord_boost":1,"kill_bounty":0.6,"skill_charge_mult":1.2,"post_heal":{"lord":100.0}}},"combat":{"card":"reaper"}},
 }
 
 # Pure same-faction draftable pool (excluding home cards, summon_only and unreleased).
@@ -572,7 +584,8 @@ static func merge_mods(base: Dictionary, extra: Dictionary) -> Dictionary:
 		var value = extra[key]
 		if not result.has(key): result[key] = value.duplicate(true) if value is Array or value is Dictionary else value
 		elif key.ends_with("_mult") or key == "skill_haste": result[key] *= value
-		elif key in ["start_ink","skill_discount","lord_boost","thorns_gate","kill_bounty","gold_bonus"]: result[key] += value
+		elif key in ["start_ink","skill_discount","lord_boost","thorns_gate","kill_bounty","gold_bonus","skill_echo_gold","kill_charge"]: result[key] += value
+		elif key == "skill_start_charge": result[key] = minf(1.0,result[key]+value)
 		elif key == "gate_armor": result[key] = minf(0.6,result[key]+value)
 		elif key == "post_heal":
 			for k: String in value: result[key][k] = result[key].get(k,0.0)+value[k]
@@ -827,6 +840,8 @@ static func validate() -> Array[String]:
 		if MINIONS.values().filter(func(d: Dictionary) -> bool: return d.get("enabled",true) and d.tier == tier).size() < need: problems.append("not enough tier %d 小怪 for normal foes plus elites" % tier)
 	for r: String in RELICS:
 		if not RELICS[r].price in RELIC_PRICES: problems.append("relic %s has an off-list price" % r)
+		var gfs: Dictionary = RELICS[r].mods.get("gate_fall_spell",{})
+		if not gfs.is_empty() and B.CARDS.get(String(gfs.get("kind","")),{}).get("type","") != "spell": problems.append("relic %s gate_fall_spell is not a spell" % r)
 		if B.passive_text(RELICS[r].mods).length() < 3: problems.append("relic %s has no effect" % r)
 	for price: int in RELIC_PRICES:
 		if RELICS.values().filter(func(d: Dictionary) -> bool: return d.price == price).size() < 2: problems.append("fewer than two relics at %d" % price)

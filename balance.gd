@@ -764,6 +764,11 @@ static func passive_text(d: Dictionary) -> String:
 	if d.has("post_heal"): parts.append("戰後每座城牆修 %d、領主治 %d" % [int(d.post_heal.get("gate",0)),int(d.post_heal.get("lord",0))])
 	if d.has("gold_bonus"): parts.append("戰勝金幣 +%d%%" % roundi(d.gold_bonus*100.0))
 	if d.get("targeted_upgrade",false): parts.append("商店與營火／古祠強化改為自選屬性（不隨機）")
+	if d.has("skill_charge_mult"): parts.append("領主技能充能 ×%s" % number(d.skill_charge_mult))
+	if d.has("skill_start_charge"): parts.append("開局技能已充能 %d%%" % roundi(d.skill_start_charge*100.0))
+	if d.has("skill_echo_gold"): parts.append("每次施放領主技能得 %d 金幣" % int(d.skill_echo_gold))
+	if d.has("kill_charge"): parts.append("每擊殺 1 名敵兵技能充能 +%d" % int(d.kill_charge))
+	if d.has("gate_fall_spell"): parts.append("我方城牆被攻破時，在缺口免費施放%s" % String(CARDS.get(String(d.gate_fall_spell.get("kind","")),{}).get("name","法術")))
 	for fm: Dictionary in d.get("field_mutators",[]):
 		if fm.has("water_cols"): parts.append("中央第 %s 縱列化為水路（禁建／非飛行 -60%% 速）" % "、".join(fm.water_cols.map(func(c: int) -> String: return str(c+1))))
 		if bool(fm.get("double_home_rows",false)): parts.append("開局前 2 排築滿 10 座我方常駐建築")

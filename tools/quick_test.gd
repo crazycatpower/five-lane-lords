@@ -447,7 +447,7 @@ func economy_and_roguelike_checks() -> void:
 	var broken: Array = []
 	for boss_k: String in B.LORDS:
 		var sim := Battle.new(900 + hash(boss_k) % 100, B.DEFAULT_DECK, RCatalog.BOSSES[boss_k], "mage", boss_k)
-		sim.apply_domestic(0, B.home_card("mage"), RCatalog.side_mods("mage", ["river_sluice", "trench_engineer", "spirit_graveyard", "sky_volley_seal", "aegis_obelisk", "fertile_floodplain"]))
+		sim.apply_domestic(0, B.home_card("mage"), RCatalog.side_mods("mage", ["river_sluice", "trench_engineer", "spirit_graveyard", "sky_volley_seal", "aegis_obelisk", "fertile_floodplain", "warlord_seal", "echo_bell", "soul_lantern", "last_ward", "phoenix_ash"]))
 		sim.apply_field_mutator(RCatalog.BOSS_MUTATORS[boss_k])
 		sim.apply_field_mutator(RCatalog.BOSS_VARIANTS.get(boss_k + "_ii", {})) # both faces of the boss at once
 		sim.ai_enabled = [true, true]
