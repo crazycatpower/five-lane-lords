@@ -226,14 +226,14 @@ func combat_checks() -> void:
 	gn.units.clear()
 	gn.buildings.clear()
 	var mouth := gn.add_building(0, Vector2i(2, 2), "glutton_nest")
-	var tank := ready_unit(gn, 1, 2, "knight", mouth.pos)
+	var tank := ready_unit(gn, 1, 2, "arcane_golem", mouth.pos)
 	var swarm: Array = []
 	for i: int in range(4): swarm.append(ready_unit(gn, 1, 2, "militia", mouth.pos + Vector2(30.0 + i * 20.0, 0.0)))
 	var own := ready_unit(gn, 0, 2, "militia", mouth.pos + Vector2(10.0, 0.0)) # nearest of all, but ours
 	Nest.update(gn, mouth, 0.01)
 	Nest.update(gn, mouth, B.CARDS.glutton_nest.windup)
 	var eaten: int = ([tank] + swarm).filter(func(u: Dictionary) -> bool: return u.hp < u.max_hp).size()
-	check(is_equal_approx(tank.hp, 400.0) and eaten == int(B.CARDS.glutton_nest.bite_max) and swarm[3].hp == swarm[3].max_hp and own.hp == own.max_hp, "glutton_nest deals at most 500 to a big body (900 -> 400) and bites only the nearest bite_max foes, never our own")
+	check(is_equal_approx(tank.hp, tank.max_hp - B.CARDS.glutton_nest.bite_cap) and eaten == int(B.CARDS.glutton_nest.bite_max) and swarm[3].hp == swarm[3].max_hp and own.hp == own.max_hp, "glutton_nest deals at most bite_cap to a big body and bites only the nearest bite_max foes, never our own")
 
 	# Damage buildings hit enemy buildings only when no enemy troop is in range.
 	var tw := quiet(35)

@@ -1190,7 +1190,7 @@
 	"lord_card_enemy_spell_tide_magus": {
 		"revision": "team-material-v2",
 		"sha256": "2ac087117fa3287a1845859a2ef75d926bba48eff2101464fe7e0aa0f1086fa4",
-		"size": 384,
+		"size": 384.0,
 		"source": "res://assets/manuscript-v1/spell_tide_magus.png"
 	},
 	"lord_card_enemy_spellbreaker": {
@@ -1232,7 +1232,7 @@
 	"lord_card_enemy_thorn_mother": {
 		"revision": "team-material-v2",
 		"sha256": "2ec2f79dea07f4ebb3d3d6ab3134efc833a88ff51b696e4a90a74a120273183e",
-		"size": 384,
+		"size": 384.0,
 		"source": "res://assets/manuscript-v1/thorn_mother.png"
 	},
 	"lord_card_enemy_time_field": {
@@ -1264,6 +1264,18 @@
 		"sha256": "505613cf7b828f6b6468d735be009a9aadee3c600010918f99dbb18ac0e31faf",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/war_lodge.png"
+	},
+	"lord_card_enemy_ward_guard": {
+		"revision": "team-material-v2",
+		"sha256": "9bf60ade9011d9f6051315618fe5a567300164b0f629487f615b6e4e71d3c0be",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/ward_guard.png"
+	},
+	"lord_card_enemy_ward_phalanx": {
+		"revision": "team-material-v2",
+		"sha256": "9bf60ade9011d9f6051315618fe5a567300164b0f629487f615b6e4e71d3c0be",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/ward_guard.png"
 	},
 	"lord_card_enemy_warp_beacon": {
 		"revision": "team-material-v2",
@@ -1808,7 +1820,7 @@
 	"spell_tide_magus": {
 		"revision": "team-material-v2",
 		"sha256": "2ac087117fa3287a1845859a2ef75d926bba48eff2101464fe7e0aa0f1086fa4",
-		"size": 384,
+		"size": 384.0,
 		"source": "res://assets/manuscript-v1/spell_tide_magus.png"
 	},
 	"spellbreaker": {
@@ -1856,7 +1868,7 @@
 	"thorn_mother": {
 		"revision": "team-material-v2",
 		"sha256": "2ec2f79dea07f4ebb3d3d6ab3134efc833a88ff51b696e4a90a74a120273183e",
-		"size": 384,
+		"size": 384.0,
 		"source": "res://assets/manuscript-v1/thorn_mother.png"
 	},
 	"time_field": {
@@ -1894,6 +1906,18 @@
 		"sha256": "505613cf7b828f6b6468d735be009a9aadee3c600010918f99dbb18ac0e31faf",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/war_lodge.png"
+	},
+	"ward_guard": {
+		"revision": "team-material-v2",
+		"sha256": "9bf60ade9011d9f6051315618fe5a567300164b0f629487f615b6e4e71d3c0be",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/ward_guard.png"
+	},
+	"ward_phalanx": {
+		"revision": "team-material-v2",
+		"sha256": "9bf60ade9011d9f6051315618fe5a567300164b0f629487f615b6e4e71d3c0be",
+		"size": 384,
+		"source": "res://assets/manuscript-v1/ward_guard.png"
 	},
 	"warp_beacon": {
 		"revision": "team-material-v2",
