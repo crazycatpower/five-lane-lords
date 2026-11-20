@@ -176,14 +176,14 @@ static func advance_piercing_arrow(m, a: Dictionary) -> void:
 			a.hit_ids.append(target.id)
 			m.damage(target,a.amount,a.team,a.kind,a.get("source",{}))
 			reveal(m, target)
+	for b: Dictionary in m.buildings:
+		if b.team == a.team or b.hp <= 0 or b.cell.y != a.lane or B.CARDS[b.kind].has("trap") or b.id in a.hit_ids: continue
+		var r_b: float = B.actor_radius(b)
+		var distance: float = (b.pos.x-a.origin.x)*a.direction
+		if distance+r_b >= previous and distance-r_b <= reached:
+			a.hit_ids.append(b.id)
+			m.damage(b,a.amount,a.team,a.kind,a.get("source",{}))
 	if a.kind != "long_dragon":
-		for b: Dictionary in m.buildings:
-			if b.team == a.team or b.hp <= 0 or b.cell.y != a.lane or B.CARDS[b.kind].has("trap") or b.id in a.hit_ids: continue
-			var r_b: float = B.actor_radius(b)
-			var distance: float = (b.pos.x-a.origin.x)*a.direction
-			if distance+r_b >= previous and distance-r_b <= reached:
-				a.hit_ids.append(b.id)
-				m.damage(b,a.amount,a.team,a.kind,a.get("source",{}))
 		var enemy: int = 1-a.team
 		var forward := 1.0 if a.team == 0 else -1.0
 		if not a.get("gate_hit",false) and is_equal_approx(a.direction,forward) and m.gates[enemy][a.lane] > 0:

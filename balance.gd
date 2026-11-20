@@ -1081,7 +1081,7 @@ static func card_description(kind: String, cards: Dictionary = CARDS) -> String:
 		"fishbeak": lines.append("主動換路尋找最近的敵人（部隊、建築或領主）發動攻擊；同一路無敵人時不被侷限。")
 		"bearded_imp": lines.append("每次打中敵方建築或城牆，從敵方偷走 %s 金幣給我方；敵方沒錢時偷不到。" % number(d.steal_gold))
 		"hooknose_flyer": lines.append("飛行：近戰部隊與建築打不到它，遠程、箭樓與領主仍可攻擊。它會攻擊地面部隊。")
-		"long_dragon": lines.append("吐出火焰，沿本路往前燒 %s，途中每名敵方部隊各受一次傷害。" % cells_text(d.range*d.pierce_range_multiplier))
+		"long_dragon": lines.append("吐出火焰，沿本路往前燒 %s，途中每名敵方部隊與建築各受一次傷害。" % cells_text(d.range*d.pierce_range_multiplier))
 		"thorn_dragon": lines.append("每次被近戰部隊打中，攻擊者受到 %s 反傷；遠程、法術與領主不會被刺傷。" % number(d.thorns))
 		"barricade": lines.append("沒有特殊效果。不攻擊、不產金、不反傷；依一般建築規則提供領地。")
 		"bandit": lines.append("登場時潛行，敵方部隊與建築無法直接鎖定（領主看得見）；發動攻擊後現形，脫戰持續移動 %s 秒後再次潛行（被偵查揭露則永久失去潛行）。範圍傷害仍可命中。" % number(CHARGE_RESET_TIME))
