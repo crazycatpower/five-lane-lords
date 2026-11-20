@@ -394,7 +394,7 @@ const CARD_OVERRIDES := {
 	"vampire_hunter": ["獵殺","遠射"],
 	"monster_hunter": ["獵殺"],
 	"runaway_thrall": ["獵殺","人海"],
-	"halberdier": ["獵殺"],
+	"halberdier": ["人海"],
 	"fishbeak": ["獵殺"],
 	"twin_gambler": ["獵殺"],
 	"seal_altar": ["召喚","恐懼"],
