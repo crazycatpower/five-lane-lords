@@ -26,7 +26,7 @@ static func update_building(m, b: Dictionary, dt: float) -> bool:
 				var impact: Vector2 = target.pos
 				var dmg: float = float(b.get("area_damage",d.area_damage))
 				for u: Dictionary in m.foe_units[b.team]:
-					if u.hp > 0 and B.point_edge_distance(impact,u) <= d.radius: m.damage(u,dmg,b.team,b.kind)
+					if u.hp > 0 and B.blast_hits(impact,String(d.get("blast","cross")),1 if b.team == 0 else -1,u): m.damage(u,dmg,b.team,b.kind)
 				if target.has("cell"): m.damage(target,dmg,b.team,b.kind) # a building target takes the blast too
 				b.cd = float(b.get("interval",d.interval))
 				m.event("arcane_impact",impact,b.team,{"from":b.pos,"radius":d.radius})
@@ -71,7 +71,7 @@ static func update_traps(m) -> void:
 			if u.team == trap.team or u.hp <= 0 or u.spawn_delay > 0 or B.CARDS[u.kind].get("flying",false): continue
 			var distance: float = B.point_edge_distance(trap.pos,u)
 			if distance <= d.trigger_radius and not u.get("phased",false): triggered = true
-			if distance <= d.radius: affected.append(u)
+			if (B.blast_hits(trap.pos,String(d.blast),1 if trap.team == 0 else -1,u) if d.has("blast") else distance <= d.radius): affected.append(u)
 		if not triggered: continue
 		if d.trap == "summon":
 			var seen: Array = trap.get("summon_triggered",[])
@@ -89,6 +89,9 @@ static func update_traps(m) -> void:
 				child.dy = (i-(d.summon_count-1)*0.5)*12.0
 				child.spawn_delay = 0.12*i
 				m.event("summoned",child.pos+Vector2(0,child.dy),child.team)
+			if d.has("summon_blast"): # 召喚法陣 2026-11-19: the summoning circle bursts as it opens
+				for foe: Dictionary in m.units:
+					if foe.hp > 0 and foe.team != trap.team and B.blast_hits(trap.pos,String(d.blast),1 if trap.team == 0 else -1,foe): m.damage(foe,float(d.summon_blast),trap.team,trap.kind)
 			m.event("rune_summon",trap.pos,trap.team)
 			moved = true
 		elif d.trap == "teleport":
@@ -147,11 +150,11 @@ static func reveal(m, u: Dictionary, permanent: bool = true) -> void:
 static func area_hit(m, u: Dictionary, point: Vector2) -> void:
 	var d: Dictionary = B.CARDS[u.kind]
 	for target: Dictionary in m.units+m.buildings+m.lords:
-		if target.team == u.team or target.hp <= 0 or B.point_edge_distance(point,target) > d.radius: continue
+		if target.team == u.team or target.hp <= 0 or not B.blast_hits(point,String(d.get("blast","cell")),1 if u.team == 0 else -1,target): continue
 		m.damage(target,d.area_damage,u.team,u.kind,u)
 		if target.has("spawn_delay") and target.hp > 0: target.stun_left = maxf(target.get("stun_left",0.0),d.stun_on_hit)
 	for lane: int in m.active_lanes:
-		if Vector2(L.gate_stop(1-u.team),L.cell_center(Vector2i(0,lane)).y).distance_to(point) <= d.radius:
+		if B.blast_hits_gate(point,String(d.get("blast","cell")),1 if u.team == 0 else -1,1-u.team,lane):
 			m.hit_gate(1-u.team,lane,d.area_damage,u.kind,u)
 	m.event("arcane_impact",point,u.team,{"from":u.pos,"radius":d.radius,"clock":true})
 

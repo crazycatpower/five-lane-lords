@@ -11,6 +11,10 @@ static func gold_for_health(health: float, d: Dictionary = B.CARDS.glutton_nest)
 	var linear: float = float(d.gold_first)-half_step
 	return maxi(0,int(floor((sqrt(linear*linear+4.0*half_step*maxf(0.0,health))-linear)/(2.0*half_step))))
 
+static func meal_gold(health: float, d: Dictionary = B.CARDS.glutton_nest) -> int:
+	if health <= 0.0: return 0
+	return gold_for_health(health,d)+int(d.get("gold_bonus",0))
+
 static func digestion_time(gold: int) -> float:
 	var d: Dictionary = B.CARDS.glutton_nest
 	return d.digest_time + maxi(0,gold)*d.digest_per_gold
@@ -26,20 +30,32 @@ static func update(m, b: Dictionary, dt: float) -> bool:
 	if b.hp <= 0: return true
 	var d: Dictionary = B.CARDS.glutton_nest
 	if b.get("digest_left",0.0) > 0:
-		var total: float = b.get("digest_total",digestion_time(int(b.get("last_gold",0))))
-		var before: float = maxf(0.0,total-b.digest_left-d.bite_duration)
-		b.digest_left = maxf(0.0,b.digest_left-dt)
-		var after: float = maxf(0.0,total-b.digest_left-d.bite_duration)
+		var total: float = float(b.get("digest_total",digestion_time(int(b.get("last_gold",0)))))
+		var chew_span: float = maxf(0.01,total-float(d.bite_duration))
+		var before: float = clampf(total-float(b.digest_left)-float(d.bite_duration),0.0,chew_span)
+		b.digest_left = maxf(0.0,float(b.digest_left)-dt)
+		var after: float = clampf(total-float(b.digest_left)-float(d.bite_duration),0.0,chew_span)
 		# Count completed chews, capped at the end of digestion even for large dt.
 		var chews := int(floor((after+0.000001)/d.chew_period))-int(floor((before+0.000001)/d.chew_period))
 		if b.get("meal_health",0.0) > 0 and chews > 0 and b.hp < b.max_hp:
 			b.hp = minf(b.max_hp,b.hp+chews*d.chew_heal)
 			if m.record_events: m.event("heal",b.pos,b.team,{"silent":true})
+		var goal_gold: int = int(b.get("last_gold",0))
+		if goal_gold > 0:
+			var total_chews: int = maxi(1,int(floor((chew_span+0.000001)/float(d.chew_period))))
+			var done_chews: int = mini(total_chews,int(floor((after+0.000001)/float(d.chew_period))))
+			var should_pay: int = goal_gold if b.digest_left <= 0.0 else int(floor(float(goal_gold)*float(done_chews)/float(total_chews)+0.000001))
+			var paid: int = int(b.get("gold_paid",0))
+			var due: int = should_pay-paid
+			if due > 0:
+				b.gold_paid = paid+due
+				m.gain_ink(b.team,float(due))
+				m.event("ink",b.pos,b.team)
 		if b.digest_left <= 0: m.build_lookups()
 		return true
 	if b.get("nest_windup",0.0) <= 0:
 		for u: Dictionary in m.units:
-			if u.team != b.team and edible(u) and B.point_edge_distance(b.pos,u) <= d.trigger_radius: # only foes (2026-11-19)
+			if edible(u) and B.point_edge_distance(b.pos,u) <= d.trigger_radius: # allies and foes
 				b.nest_windup = d.windup
 				m.event("nest_windup",b.pos,b.team)
 				m.build_lookups()
@@ -50,28 +66,31 @@ static func update(m, b: Dictionary, dt: float) -> bool:
 	# Recheck at impact: units can flee or enter the mouth during the tell.
 	var victims: Array[Dictionary] = []
 	for u: Dictionary in m.units:
-		if u.team != b.team and edible(u) and B.point_edge_distance(b.pos,u) <= d.radius: victims.append(u)
-	# One mouthful holds at most bite_max troops (2026-11-19): the nearest ones, ties by id.
+		if edible(u) and B.point_edge_distance(b.pos,u) <= d.radius: victims.append(u)
+	# One mouthful holds at most bite_max troops (enemies first, then nearest, ties by id).
 	victims.sort_custom(func(a: Dictionary, c: Dictionary) -> bool:
+		var ea: bool = a.team != b.team
+		var ec: bool = c.team != b.team
+		if ea != ec: return ea
 		var da: float = B.point_edge_distance(b.pos,a)
 		var dc: float = B.point_edge_distance(b.pos,c)
 		return da < dc or (da == dc and a.id < c.id))
 	victims = victims.slice(0,int(d.get("bite_max",victims.size())))
 	var cap: float = d.get("bite_cap",500.0)
+	var ally_mult: float = float(d.get("ally_feed_mult",2.0))
 	var health := 0.0
 	for u: Dictionary in victims:
 		var dealt: float = cap if u.hp > cap else u.hp
-		health += dealt
+		health += dealt*(ally_mult if u.team == b.team else 1.0)
 		# Sacrifice bypasses armour, shields and lethal-hit rescue, but preserves death accounting.
 		m.damage(u,dealt,b.team,b.kind,{},true)
 		m.link(u.pos,b.pos,b.team,"devour")
 	b.meal_health = health
-	b.last_gold = gold_for_health(health)
+	b.last_gold = meal_gold(health,d)
+	b.gold_paid = 0
 	b.digest_total = digestion_time(b.last_gold)
 	b.digest_left = b.digest_total
-	m.gain_ink(b.team,b.last_gold)
 	m.event("nest_bite",b.pos,b.team)
-	if b.last_gold > 0: m.event("ink",b.pos,b.team)
 	m.build_lookups()
 	return true
 
@@ -155,7 +174,7 @@ static func safe_coverage(s: Dictionary) -> Dictionary:
 			var close_approach := winding
 			if not winding:
 				for u: Dictionary in s.units:
-					if u.team == team or not edible_unit(u) or u.lane != lane: continue
+					if not edible_unit(u) or u.lane != lane: continue
 					var u_speed: float = maxf(1.0,u.get("speed",B.CARDS.get(u.kind,{}).get("speed",40.0)))
 					var edge_now: float = B.point_edge_distance(b.pos,u)
 					if u.team != team:
@@ -198,6 +217,10 @@ static func safe_coverage(s: Dictionary) -> Dictionary:
 						if winding or edge_now <= 2.5*L.CELL_SIZE.x or t_trigger <= 5.0: close_approach = true
 			if windup_damage < b.hp and not will_eat.is_empty():
 				var cap: float = d.get("bite_cap",500.0)
+				var max_bites: int = int(d.get("bite_max",4))
+				if will_eat.size() > max_bites:
+					will_eat.sort_custom(func(a: Dictionary, c: Dictionary) -> bool: return B.point_edge_distance(b.pos,a) < B.point_edge_distance(b.pos,c))
+					will_eat = will_eat.slice(0,max_bites)
 				for u: Dictionary in will_eat:
 					var uid: int = u.get("id",-1)
 					if uid >= 0 and u.hp <= cap:
@@ -221,11 +244,12 @@ static func ai_score(c: Dictionary, s: Dictionary, _target_lane: int, defend: in
 		if b.cell.y == lane: lane_nests += 1
 	var foe_eat := 0.0
 	var ally_eat := 0.0
+	var ally_cost := 0.0
 	var foe_ahead := 0.0
 	var ally_behind := 0.0
 	var min_foe_dist := INF
 	var min_ally_dist := INF
-	var cap: float = d.get("bite_cap",500.0)
+	var cap: float = float(d.get("bite_cap",500.0))
 	for u: Dictionary in s.units:
 		if u.hp <= 0 or u.get("kind","") == "lord" or u.has("cell") or u.get("phased",false) or B.CARDS.get(u.kind,{}).get("flying",false): continue
 		var dist: float = B.point_edge_distance(c.pos,u)
@@ -238,16 +262,41 @@ static func ai_score(c: Dictionary, s: Dictionary, _target_lane: int, defend: in
 				if ahead >= -d.trigger_radius and ahead <= 150.0:
 					foe_ahead += bite_hp
 					min_foe_dist = minf(min_foe_dist,maxf(0.0,ahead-d.trigger_radius))
-		# Our own troops are never eaten (2026-11-19), so they no longer count against a spot.
-	var net_eat: float = foe_eat-ally_eat*2.0
+		else:
+			if u.get("spawn_delay",0.0) <= 0 and dist <= d.radius:
+				ally_eat += bite_hp
+				var ud: Dictionary = B.CARDS.get(u.kind,{})
+				ally_cost += float(ud.get("cost",0))/maxf(1.0,float(ud.get("count",1)))*(bite_hp/maxf(1.0,float(u.max_hp)))
+			if u.lane == lane:
+				var behind: float = (c.pos.x-u.pos.x)*forward
+				if behind > -d.trigger_radius and behind <= 200.0:
+					ally_behind += bite_hp
+					min_ally_dist = minf(min_ally_dist,maxf(0.0,behind-d.trigger_radius))
 	if defend >= 0:
 		if lane != defend: return -INF
-		if foe_eat >= 150.0 and net_eat >= 100.0 and (min_foe_dist <= 35.0 or min_foe_dist <= min_ally_dist):
-			return 940.0+minf(net_eat,1500.0)*0.06
+		if foe_eat >= 150.0 and foe_eat >= ally_eat and (min_foe_dist <= 35.0 or min_foe_dist <= min_ally_dist):
+			return 940.0+minf(foe_eat,1500.0)*0.06
 		return -INF
-	if foe_eat >= 180.0 and net_eat >= 130.0 and min_foe_dist <= 35.0:
-		return 750.0+minf(net_eat,1200.0)*0.05
+	if foe_eat >= 180.0 and foe_eat >= ally_eat and min_foe_dist <= 35.0:
+		return 750.0+minf(foe_eat,1200.0)*0.05
 	if col >= 1 and lane_nests == 0 and ally_eat <= 0 and ally_behind <= 0 and foe_ahead >= 150.0:
 		return 720.0+minf(foe_ahead,1000.0)*0.05+col*10.0
+	if foe_eat <= 0.0 and foe_ahead <= 0.0 and ally_eat >= 350.0 and lane_nests == 0:
+		var feed_g: int = meal_gold(ally_eat*float(d.get("ally_feed_mult",2.0)),d)
+		var net_g: float = float(feed_g)-ally_cost
+		if net_g >= float(d.cost)+4.0:
+			return 710.0+minf(net_g,16.0)*6.0
 	# No passive income: never buy idle rear nests just to spend spare gold.
+	return -INF
+
+static func feed_score(c: Dictionary, s: Dictionary, data: Dictionary, lane_foe_hp: float) -> float:
+	if lane_foe_hp > 0.0 or float(s.ink) >= B.MAX_INK-10.0: return -INF
+	if data.type != "unit" or data.get("flying",false) or data.get("phase",false) or data.has("members") or data.get("spread",false) or data.get("pay_all",false) or data.get("shuttle",false): return -INF
+	var col: int = int(c.cell.x) if int(s.team) == 0 else 8-int(c.cell.x)
+	if col > 1: return -INF
+	var d: Dictionary = B.CARDS.glutton_nest
+	var cnt: int = mini(int(data.get("count",1)),int(d.get("bite_max",4)))
+	var feed_hp: float = minf(float(data.hp),float(d.bite_cap))*float(cnt)*float(d.get("ally_feed_mult",2.0))
+	var profit: float = float(meal_gold(feed_hp,d))-float(data.cost)
+	if profit >= 6.0: return 770.0+minf(profit,15.0)*8.0
 	return -INF

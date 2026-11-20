@@ -77,9 +77,9 @@ var deck_in_first := false
 var difficulty := 1
 var enemy_mode := 0 # 0: 經典冥府領主對手，1: 依難度選擇預設對手
 var practice_lord := "random" # "random" or a key in B.LORDS
-var practice_ratio_id := "balanced" # "random" or an id in DeckStore.PRACTICE_RATIOS
+var practice_ratio_id := "lord_best" # "lord_best", "random", or an id in DeckStore.PRACTICE_RATIOS
 var practice_foe_lord := ""
-var practice_foe_ratio_id := "balanced"
+var practice_foe_ratio_id := "lord_best"
 var practice_foe_deck: Array = []
 var spectating := false
 var menu_notice := ""
@@ -1682,12 +1682,13 @@ func draw_unit(u: Dictionary) -> void:
 		draw_line(pos-Vector2(c_dir*14,24),pos-Vector2(c_dir*30,24),c_col,1.8)
 		var spear := pos+Vector2(c_dir*18,-20)
 		draw_polyline(PackedVector2Array([spear-Vector2(c_dir*6,5),spear+Vector2(c_dir*3,0),spear-Vector2(c_dir*6,-5)]),c_col,2.4)
-	if u.get("hex_ticks",0) > 0 or u.get("poison_remaining",0) > 0:
+	var total_poison: int = int(u.get("hex_stacks",0))+int(u.get("poison_stacks",0))
+	if total_poison > 0:
 		draw_arc(pos+Vector2(0,16),ring_r-4.0,0,TAU,16,Color("115224",0.88),2.4)
-		for i: int in range(3):
-			var ha: float = model.elapsed*4.0+i*TAU/3.0
+		for i: int in range(mini(3+int(total_poison/3),6)):
+			var ha: float = model.elapsed*4.0+i*TAU/float(mini(3+int(total_poison/3),6))
 			draw_circle(pos+Vector2(cos(ha)*11,-18-fmod(model.elapsed*16+i*6,14)),2.6,Color("1b6e32",0.9))
-		field_text(pos+Vector2(-8,-50),"毒",HORIZONTAL_ALIGNMENT_LEFT,-1,13,Color("115224"))
+		field_text(pos+Vector2(-8,-50),("毒×%d" % total_poison) if total_poison > 1 else "毒",HORIZONTAL_ALIGNMENT_LEFT,-1,13,Color("115224"))
 	if u.get("armor",0.0) > 0 or u.get("armor_until",0.0) > model.elapsed:
 		draw_arc(pos+Vector2(0,16),ring_r-3.0,0,PI,16,Color("c4a75f",0.85),2.5)
 	if u.get("shroud_until",0.0) > model.elapsed:
@@ -2332,7 +2333,7 @@ func practice_lord_options() -> Array:
 	return ["random"] + B.lord_menu_order()
 
 func practice_ratio_options() -> Array:
-	return DeckStore.practice_ratio_ids() + ["random"]
+	return ["lord_best"] + DeckStore.practice_ratio_ids() + ["random"]
 
 func _cycle_option(options: Array, current: String, step: int) -> String:
 	var idx := options.find(current)
@@ -2348,6 +2349,10 @@ func roll_practice_opponent() -> void:
 	else:
 		practice_foe_lord = practice_lord
 	var ratio_ids := DeckStore.practice_ratio_ids()
+	if practice_ratio_id == "lord_best":
+		practice_foe_ratio_id = "lord_best"
+		practice_foe_deck = DeckStore.balanced_random_deck(rng,practice_foe_lord)
+		return
 	if practice_ratio_id == "random" or not practice_ratio_id in ratio_ids:
 		practice_foe_ratio_id = String(ratio_ids[rng.randi_range(0,ratio_ids.size()-1)])
 	else:
@@ -2357,7 +2362,7 @@ func roll_practice_opponent() -> void:
 
 func ensure_practice_opponent() -> void:
 	var lord_mismatch := practice_lord != "random" and B.LORDS.has(practice_lord) and practice_foe_lord != practice_lord
-	var ratio_mismatch := practice_ratio_id != "random" and practice_ratio_id in DeckStore.practice_ratio_ids() and practice_foe_ratio_id != practice_ratio_id
+	var ratio_mismatch := (practice_ratio_id == "lord_best" and practice_foe_ratio_id != "lord_best") or (practice_ratio_id != "random" and practice_ratio_id != "lord_best" and practice_ratio_id in DeckStore.practice_ratio_ids() and practice_foe_ratio_id != practice_ratio_id)
 	if lord_mismatch or ratio_mismatch or practice_foe_lord.is_empty() or not B.LORDS.has(practice_foe_lord) or not DeckStore.valid(practice_foe_deck,practice_foe_lord):
 		roll_practice_opponent()
 
@@ -2412,7 +2417,7 @@ func show_net() -> void:
 	button(Rect2(1366,264,106,44),"重抽牌組",func():
 		roll_practice_opponent()
 		show_net())
-	var ratio_btn_text := "配比：隨機配比（4 選 1）" if practice_ratio_id == "random" else "配比：%s（%s）" % [DeckStore.practice_ratio_entry(practice_ratio_id).name,DeckStore.practice_ratio_label(DeckStore.practice_ratio_entry(practice_ratio_id).ratio)]
+	var ratio_btn_text := "配比：領主最佳（隨領主自動配比）" if practice_ratio_id == "lord_best" else ("配比：隨機配比（4 選 1）" if practice_ratio_id == "random" else "配比：%s（%s）" % [DeckStore.practice_ratio_entry(practice_ratio_id).name,DeckStore.practice_ratio_label(DeckStore.practice_ratio_entry(practice_ratio_id).ratio)])
 	button(Rect2(896,316,44,42),"◀",func():
 		cycle_practice_ratio(-1)
 		show_net())
@@ -2476,7 +2481,7 @@ func draw_net() -> void:
 		label_at(Vector2(146,522),net.message,18,Color("7d4f1c"))
 	panel(Rect2(868,152,632,496))
 	label_at(Vector2(896,206),"單人練習（自由對戰）",26)
-	label_at(Vector2(896,236),"可指定或隨機對手領主，並切換 4 種編隊配比（或隨機配比）。",15,Color("5a4a36"))
+	label_at(Vector2(896,236),"可指定或隨機對手領主，並切換領主最佳、4 種編隊配比或隨機配比。",15,Color("5a4a36"))
 	panel(Rect2(896,368,576,158),Color("efe0bd"))
 	ensure_practice_opponent()
 	draw_fitted(lord_art(practice_foe_lord,1),Rect2(912,378,104,138))
@@ -2485,8 +2490,12 @@ func draw_net() -> void:
 	label_at(Vector2(1034,424),"技能：%s · 平均費 %.1f" % [B.LORDS[practice_foe_lord].skill,DeckStore.average(practice_foe_deck)],15,Color("5a4a36"))
 	label_at(Vector2(1034,454),"、".join(practice_foe_deck.slice(0,4).map(func(k): return B.CARDS[k].name)),16)
 	label_at(Vector2(1034,480),"、".join(practice_foe_deck.slice(4,8).map(func(k): return B.CARDS[k].name)),16)
-	var ratio_entry := DeckStore.practice_ratio_entry(practice_foe_ratio_id)
-	label_at(Vector2(1034,510),"%s：%s" % [ratio_entry.name,DeckStore.practice_ratio_label(ratio_entry.ratio)],15,Color("6f5a3e"))
+	if practice_foe_ratio_id == "lord_best":
+		var best_entry := DeckStore.lord_best_entry(practice_foe_lord)
+		label_at(Vector2(1034,510),"領主最佳 · %s：%s" % [best_entry.name,DeckStore.practice_ratio_label(best_entry.ratio)],15,Color("6f5a3e"))
+	else:
+		var ratio_entry := DeckStore.practice_ratio_entry(practice_foe_ratio_id)
+		label_at(Vector2(1034,510),"%s：%s" % [ratio_entry.name,DeckStore.practice_ratio_label(ratio_entry.ratio)],15,Color("6f5a3e"))
 	panel(Rect2(100,666,1400,74),Color("efe0bd"))
 	var sorted_mine: Array = B.menu_sorted(player_deck)
 	draw_string(font,Vector2(124,711),"我的牌組：%s · %s" % [B.LORDS[player_lord].name,"、".join(sorted_mine.map(func(k): return B.CARDS[k].name))],HORIZONTAL_ALIGNMENT_LEFT,1145,19,INK)
@@ -2902,9 +2911,9 @@ func draw_deck() -> void:
 	if not note.is_empty(): draw_string(font,Vector2(360,855),note,HORIZONTAL_ALIGNMENT_CENTER,880,20,RED)
 	elif watch_edit >= 0: draw_string(font,Vector2(360,855),"只改這場觀戰，不影響你的牌組",HORIZONTAL_ALIGNMENT_CENTER,880,18,muted)
 
-# Random spectate deck (rules live in DeckStore so the balance tools share them).
+# Random spectate deck (per-lord optimal ratios live in DeckStore).
 static func random_deck(rng: RandomNumberGenerator, lord: String = "") -> Array:
-	return DeckStore.random_deck(rng,lord)
+	return DeckStore.balanced_random_deck(rng,lord)
 
 func save_watch_lord(team: int) -> void:
 	var lord: String = watch_lords[team]

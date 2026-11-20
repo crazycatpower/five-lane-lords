@@ -389,6 +389,7 @@ func production_rate(team: int) -> float:
 	var crystal_rate := 0.0
 	for b: Dictionary in buildings:
 		if b.team == team and b.hp > 0 and b.kind == "crystal": crystal_rate += B.CARDS.crystal.income/Arcane.crystal_period(b)
+		if b.team == team and b.hp > 0 and b.kind == "glutton_nest" and float(b.get("digest_left",0.0)) > 0.0 and int(b.get("last_gold",0)) > 0: crystal_rate += float(b.last_gold)/maxf(1.0,float(b.get("digest_total",10.0))-float(B.CARDS.glutton_nest.bite_duration))
 	return (crystal_rate+rate*multiplier()+count_buildings(team,"grave")*B.CARDS.grave.income/B.CARDS.grave.period)*float(lord_mod(team,"gold_gain_mult",1.0))
 
 func gain_ink(team: int, amount: float) -> void:
@@ -439,14 +440,14 @@ func build_lookups() -> void:
 		foe_units[against].append(u)
 		lane_foes[against][u.lane].append(u)
 		if u.hp > 0:
-			if u.get("in_poison_zone",false) or u.get("poison_remaining",0) > 0: has_poisoned_unit = true
+			if int(u.get("poison_stacks",0)) > 0 or float(u.get("poison_zone_seen",-1.0)) >= 0.0: has_poisoned_unit = true
 			if u.get("levy",false): has_levy = true
 			if u.get("has_monster_tick",false): has_monster_tick = true
 			if u.kind == "plague_bishop": has_plague_bishop = true
 			if u.get("has_thorns_aura",false): has_thorns_aura[u.team] = true
 			WardRules.collect(u,wards)
 			if u.get("has_expansion_tick",false): has_expansion_tick = true
-			if u.get("hex_ticks",0) > 0 and u.get("hex_team",-1) >= 0: has_hex_unit = true
+			if int(u.get("hex_stacks",0)) > 0 and u.get("hex_team",-1) >= 0: has_hex_unit = true
 			if u.get("borrowed_until",-1.0) >= 0: has_borrowed_unit = true
 	for b: Dictionary in buildings:
 		var against: int = 1-b.team
@@ -556,7 +557,14 @@ func play(team: int, slot: int, pos: Vector2) -> bool:
 	var cell := cell_at(pos)
 	if card.type == "building":
 		var here := building_at(cell)
-		if here.is_empty(): add_building(team,cell,kind)
+		if here.is_empty():
+			var built := add_building(team,cell,kind)
+			if card.get("spawn_on_build",false) and card.has("spawn_kind"):
+				var cnt: int = int(card.get("spawn_count",1))
+				for i: int in range(cnt):
+					var u: Dictionary = spawn_unit(team,cell.y,String(card.spawn_kind),built.pos+Vector2(-24.0 if team == 0 else 24.0,(i-(cnt-1)*0.5)*12.0))
+					u.card = kind
+					event("summoned",u.pos,team)
 		else: refresh_building(here)
 	elif card.type == "unit": deploy(team,kind,cell,int(paid) if GoldMonster.pays_all(kind) else 0)
 	else:
@@ -663,7 +671,7 @@ func spawn_groups(team: int, kind: String, lane: int, col: int, groups: Array, f
 			var u := spawn_unit(team,lane,group[0],spawn_pos)
 			u.spawn_delay = n*0.12
 			u.card = kind
-			if gold > 0: GoldMonster.apply(u,gold,card_upgrades[team].get(kind,{}))
+			if gold > 0: GoldMonster.apply(u,gold,card_upgrades[team].get(kind,{}),i,int(group[1]))
 			elif card_upgrades[team].has(kind): Upgrades.apply_unit(u,kind,card_upgrades[team][kind])
 			n += 1
 	return n
@@ -728,6 +736,7 @@ func damage(target: Dictionary, amount: float, team: int, kind: String, source: 
 		amount = Expansion.absorb(self,target,amount,source)
 		amount = ExpansionMore.absorb(target,amount,kind)
 		amount = Faction.absorb(self,target,amount)
+		if target.get("terror_until",-1.0) > elapsed: amount *= float(target.get("terror_mult",1.0)) # 恐懼嚎叫 破膽
 		amount = WardRules.share(self,target,amount,team,kind,source) # 結界護衛 takes a share
 		if amount <= 0: return
 	var dealt := minf(amount,target.hp)
@@ -771,10 +780,20 @@ func damage(target: Dictionary, amount: float, team: int, kind: String, source: 
 			if not target.has("cell"):
 				if B.CARDS[target.kind].has("resonance"):
 					death_queue.append({"explosion":true,"pos":target.pos,"team":target.team,"kind":target.kind})
-				death_queue.append({"lane":target.lane,"pos":target.pos,"team":target.team,"kind":target.kind,"serial":old_serial,"poison_team":team if kind == "plague" else -1,"curse_team":target.get("curse_team",-1) if (target.get("cursed",false) or target.get("cursed_until",0.0) > elapsed) else -1,"spawn":B.CARDS[target.kind].get("on_death_spawn",[]),"card":target.get("card",target.kind)})
+				death_queue.append({"lane":target.lane,"pos":target.pos,"team":target.team,"kind":target.kind,"serial":old_serial,"poison_team":team if kind == "plague" and not B.poison_immune(target) else -1,"curse_team":target.get("curse_team",-1) if (target.get("cursed",false) or target.get("cursed_until",0.0) > elapsed) else -1,"spawn":B.CARDS[target.kind].get("on_death_spawn",[]),"card":target.get("card",target.kind),"death_refund":0.0 if sacrifice else float(target.get("death_refund",0.0))})
 		if target.has("cell"):
 			refresh_territory()
 			if target.kind == "granary": ExpansionMore.release_granary(self,target)
+			var b_spawn: Array = B.CARDS.get(target.kind,{}).get("on_death_spawn",[])
+			if not b_spawn.is_empty():
+				var b_cnt: int = int(b_spawn[1])
+				for k: int in range(b_cnt):
+					var child: Dictionary = spawn_unit(target.team,target.cell.y,String(b_spawn[0]),target.pos+Vector2(0.0,(k-(b_cnt-1)*0.5)*12.0))
+					child.card = target.kind
+					event("summoned",child.pos,child.team)
+					link(target.pos,child.pos,target.team,"summon")
+			if target.kind == "sleepless_belfry":
+				ExpansionMore.support(self,target,B.CARDS.sleepless_belfry)
 		if target.kind == "farm" and elapsed < 180.0: stats[target.team].farms_lost_early += 1
 		var art_kind: String = "lord_"+target.lord if target.kind == "lord" else target.kind
 		var face: float = target.get("face",1.0 if target.team == 0 else -1.0)
@@ -832,6 +851,17 @@ func add_zone(pos: Vector2, team: int, radius: float, duration: float, rect: Rec
 	var tick_dmg: float = dmg if dmg >= 0.0 else float(B.CARDS.plague.tick_damage)
 	zones.append({"pos":pos,"team":team,"radius":radius,"rect":rect,"damage":tick_dmg,"left":duration,"tick":B.CARDS.plague.tick_interval})
 
+func add_plague_stack(u: Dictionary, team: int, dmg: float, dt: float) -> void:
+	if u.hp <= 0 or B.poison_immune(u): return
+	var interval: float = B.CARDS.plague.tick_interval
+	var prev: int = int(u.get("poison_stacks",0))
+	u.poison_stacks = prev+1
+	u.poison_team = team
+	u.poison_damage = maxf(float(u.get("poison_damage",0.0)),dmg) if prev > 0 else dmg
+	u.poison_left = interval*2.0+dt
+	if prev == 0: u.poison_timer = dt
+	has_poisoned_unit = true
+
 func update_zones(dt: float) -> void:
 	if zones.is_empty() and not has_poisoned_unit: return
 	if not zones.is_empty():
@@ -849,35 +879,41 @@ func update_zones(dt: float) -> void:
 			while zone.tick <= 0.000001:
 				zone.tick += B.CARDS.plague.tick_interval
 				for u: Dictionary in units:
-					if u.hp > 0 and u.team != zone.team and (B.rect_hits_actor(zrect,u) if use_rect else B.point_edge_distance(zone.pos,u) <= zone.radius):
-						damage(u,zdmg,zone.team,"plague")
+					if u.hp > 0 and u.team != zone.team and not B.poison_immune(u) and (B.rect_hits_actor(zrect,u) if use_rect else B.point_edge_distance(zone.pos,u) <= zone.radius):
+						add_plague_stack(u,zone.team,zdmg,dt)
 			for u: Dictionary in units:
-				if u.hp > 0 and u.team != zone.team and (B.rect_hits_actor(zrect,u) if use_rect else B.point_edge_distance(zone.pos,u) <= zone.radius):
+				if u.hp > 0 and u.team != zone.team and not B.poison_immune(u) and (B.rect_hits_actor(zrect,u) if use_rect else B.point_edge_distance(zone.pos,u) <= zone.radius):
 					has_poisoned_unit = true
-					u.in_poison_zone = true
-					u.poison_remaining = 2
-					u.poison_team = zone.team
-					u.poison_damage = zdmg
-					u.poison_timer = B.CARDS.plague.tick_interval
+					u.poison_zone_seen = elapsed
+					u.poison_zone_team = zone.team
+					u.poison_zone_damage = zdmg
 		if z_expired:
 			zones = zones.filter(func(z: Dictionary) -> bool: return z.left > 0.000001)
 
 	if not has_poisoned_unit: return
+	var interval: float = B.CARDS.plague.tick_interval
 	for u: Dictionary in units:
 		if u.hp <= 0: continue
-		if u.get("in_poison_zone",false):
-			u.in_poison_zone = false
-			continue
-		if u.get("poison_remaining",0) > 0:
-			u.poison_timer = u.get("poison_timer",B.CARDS.plague.tick_interval)-dt
-			while u.poison_timer <= 0.000001 and u.poison_remaining > 0:
-				u.poison_timer += B.CARDS.plague.tick_interval
-				u.poison_remaining -= 1
-				damage(u,float(u.get("poison_damage",B.CARDS.plague.tick_damage)),u.poison_team,"plague")
+		if float(u.get("poison_zone_seen",-1.0)) >= 0.0 and u.poison_zone_seen < elapsed:
+			u.poison_zone_seen = -1.0
+			if int(u.get("poison_stacks",0)) == 0:
+				u.poison_stacks = 1
+				u.poison_team = u.get("poison_zone_team",-1)
+				u.poison_damage = float(u.get("poison_zone_damage",B.CARDS.plague.tick_damage))
+				u.poison_timer = interval+dt
+				u.poison_left = interval*2.0+dt
+		if int(u.get("poison_stacks",0)) > 0:
+			u.poison_timer = u.get("poison_timer",interval)-dt
+			while u.poison_timer <= 0.000001 and int(u.get("poison_stacks",0)) > 0:
+				u.poison_timer += interval
+				damage(u,float(u.get("poison_damage",B.CARDS.plague.tick_damage))*float(u.poison_stacks),u.poison_team,"plague")
 				if u.hp <= 0: break
-			if u.poison_remaining <= 0:
-				u.poison_remaining = 0
-				u.poison_team = -1
+			if u.hp > 0:
+				u.poison_left = float(u.get("poison_left",0.0))-dt
+				if u.poison_left <= 0.000001:
+					u.poison_stacks = 0
+					u.poison_left = 0.0
+					u.poison_team = -1
 
 func resolve_deaths() -> void:
 	# Append-only during processing: explosions may add more deaths, in deterministic order.
@@ -889,7 +925,7 @@ func resolve_deaths() -> void:
 			var explosion_kind: String = dead.get("kind","bonewall")
 			var explosion: Dictionary = B.CARDS[explosion_kind]
 			for u: Dictionary in units:
-				if u.hp > 0 and u.team != dead.team and B.point_edge_distance(dead.pos,u) <= explosion.radius:
+				if u.hp > 0 and u.team != dead.team and B.blast_hits(dead.pos,String(explosion.get("blast","square")),1 if dead.team == 0 else -1,u):
 					damage(u,explosion.explosion_damage,dead.team,explosion_kind)
 			event("boneburst",dead.pos,dead.team)
 			continue
@@ -897,6 +933,10 @@ func resolve_deaths() -> void:
 		Expansion.on_death(self,dead)
 		ExpansionMore.on_death(self,dead)
 		SealAltar.on_death(self,dead)
+		var refund: float = float(dead.get("death_refund",0.0))
+		if refund > 0.0:
+			gain_ink(dead.team,refund)
+			event("ink",dead.pos,dead.team)
 		for b: Dictionary in buildings:
 			if b.hp > 0 and b.kind == "grave" and b.cell.y == dead.lane:
 				link(dead.pos,b.pos,b.team,"soul")
@@ -1291,12 +1331,15 @@ func update_projectiles(dt: float) -> void:
 		if arrow.has("impact"):
 			arrow.pos = arrow.start.lerp(arrow.impact,clampf(1-arrow.remaining/arrow.flight,0,1))
 			if arrow.remaining <= 0:
+				var shell_shape: String = String(arrow.get("blast",""))
+				var shell_dir := 1 if arrow.team == 0 else -1
 				for u: Dictionary in units:
-					if u.hp > 0 and u.team != arrow.team and B.point_edge_distance(arrow.impact,u) <= arrow.radius: damage(u,arrow.amount,arrow.team,arrow.kind,arrow.get("source",{}))
+					if u.hp > 0 and u.team != arrow.team and (B.blast_hits(arrow.impact,shell_shape,shell_dir,u) if not shell_shape.is_empty() else B.point_edge_distance(arrow.impact,u) <= arrow.radius): damage(u,arrow.amount,arrow.team,arrow.kind,arrow.get("source",{}))
 				for b: Dictionary in buildings:
-					if b.hp > 0 and b.team != arrow.team and B.point_edge_distance(arrow.impact,b) <= arrow.radius: damage(b,arrow.amount,arrow.team,arrow.kind,arrow.get("source",{}))
+					if b.hp > 0 and b.team != arrow.team and (B.blast_hits(arrow.impact,shell_shape,shell_dir,b) if not shell_shape.is_empty() else B.point_edge_distance(arrow.impact,b) <= arrow.radius): damage(b,arrow.amount,arrow.team,arrow.kind,arrow.get("source",{}))
 				for lane: int in active_lanes:
-					if gates[1-arrow.team][lane] > 0 and Vector2(L.gate_stop(1-arrow.team),L.cell_center(Vector2i(0,lane)).y).distance_to(arrow.impact) <= arrow.radius:
+					var gate_hit: bool = B.blast_hits_gate(arrow.impact,shell_shape,shell_dir,1-arrow.team,lane) if not shell_shape.is_empty() else Vector2(L.gate_stop(1-arrow.team),L.cell_center(Vector2i(0,lane)).y).distance_to(arrow.impact) <= arrow.radius
+					if gates[1-arrow.team][lane] > 0 and gate_hit:
 						hit_gate(1-arrow.team,lane,arrow.amount,arrow.kind,arrow.get("source",{}))
 				event("stone_impact",arrow.impact,arrow.team,{"radius":arrow.radius})
 			continue
@@ -1307,8 +1350,21 @@ func update_projectiles(dt: float) -> void:
 				if gates[arrow.target.team][arrow.target.lane] > 0:
 					hit_gate(arrow.target.team,arrow.target.lane,arrow.amount,arrow.kind,arrow.get("source",{}))
 			elif arrow.target.hp > 0: damage(arrow.target,arrow.amount,arrow.team,arrow.kind,arrow.get("source",{}))
+			projectile_blast(arrow)
 	if expired:
 		projectiles = projectiles.filter(func(a: Dictionary) -> bool: return a.remaining > 0)
+
+# Grid splash around a shot's target for troops with "blast" and "area_damage" (2026-11-19).
+func projectile_blast(arrow: Dictionary) -> void:
+	var src: Dictionary = arrow.get("source",{})
+	var sd: Dictionary = B.CARDS.get(String(src.get("kind","")),{})
+	if not sd.has("blast") or not sd.has("area_damage") or sd.get("lob",false): return
+	var center: Vector2 = arrow.target.get("pos",arrow.pos) if arrow.target.get("kind","") != "gate" else Vector2(L.gate_stop(arrow.target.team),L.cell_center(Vector2i(0,arrow.target.lane)).y)
+	var dir := 1 if arrow.team == 0 else -1
+	var amount: float = float(src.get("area_damage",sd.area_damage))
+	for t: Dictionary in units+buildings:
+		if t.hp > 0 and t.team != arrow.team and not is_same(t,arrow.target) and B.blast_hits(center,String(sd.blast),dir,t): damage(t,amount,arrow.team,arrow.kind,src)
+	event("arcane_impact",center,arrow.team,{"from":arrow.start,"radius":float(sd.get("radius",75.0))})
 
 func heal(u: Dictionary, dt: float) -> void:
 	if u.kind != "healer": return
@@ -1316,15 +1372,19 @@ func heal(u: Dictionary, dt: float) -> void:
 	if u.heal_cd > 0: return
 	var healed := false
 	for ally: Dictionary in units:
-		var poisoned: bool = ally.get("hex_ticks",0) > 0 or ally.get("poison_remaining",0) > 0
+		var poisoned: bool = int(ally.get("hex_stacks",0)) > 0 or int(ally.get("poison_stacks",0)) > 0
 		if ally.team == u.team and ally.hp > 0 and (ally.hp < ally.max_hp or poisoned) and B.edge_distance(u,ally) <= B.HEAL_RADIUS:
 			ally.hp = minf(ally.max_hp,ally.hp+B.HEAL_AMOUNT)
-			if ally.get("hex_ticks",0) > 0:
-				ally.hex_ticks = maxi(0,ally.hex_ticks-1)
-				if ally.hex_ticks == 0: ally.hex_team = -1
-			if ally.get("poison_remaining",0) > 0:
-				ally.poison_remaining = maxi(0,ally.poison_remaining-1)
-				if ally.poison_remaining == 0: ally.poison_team = -1
+			if int(ally.get("hex_stacks",0)) > 0:
+				ally.hex_stacks = maxi(0,int(ally.hex_stacks)-1)
+				if ally.hex_stacks == 0:
+					ally.hex_left = 0.0
+					ally.hex_team = -1
+			if int(ally.get("poison_stacks",0)) > 0:
+				ally.poison_stacks = maxi(0,int(ally.poison_stacks)-1)
+				if ally.poison_stacks == 0:
+					ally.poison_left = 0.0
+					ally.poison_team = -1
 			event("heal",ally.pos,u.team)
 			if not is_same(ally,u): link(u.pos,ally.pos,u.team,"heal")
 			healed = true
@@ -1632,7 +1692,7 @@ func update_unit(u: Dictionary, dt: float) -> bool:
 		if not target.is_empty():
 			u.march_time = 0.0
 			if Windup.ready(self,u,Windup.target_key(target),dt):
-				projectiles.append({"source":u,"pos":u.pos,"start":u.pos,"impact":target.pos,"flight":data.flight_time,"remaining":data.flight_time,"amount":data.area_damage,"radius":data.radius,"team":u.team,"kind":u.kind})
+				projectiles.append({"source":u,"pos":u.pos,"start":u.pos,"impact":target.pos,"flight":data.flight_time,"remaining":data.flight_time,"amount":data.area_damage,"radius":data.radius,"blast":data.get("blast",""),"team":u.team,"kind":u.kind})
 				u.cd = attack_interval(u)
 				event("catapult_fire",u.pos,u.team,{"target":target.pos})
 			return false

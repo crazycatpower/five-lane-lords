@@ -64,11 +64,32 @@ static func cast(m, s: Dictionary) -> bool:
 			if gold > 0:
 				m.gain_ink(s.team,gold)
 				m.event("ink",s.pos,s.team)
+			m.add_skill_charge(s.team,health*float(data.get("charge_per_hp",0.0))) # 2026-11-19: blood feeds the lord's skill
+			if health > 0.0 and data.has("blast_share"):
+				var blast_dmg: float = clampf(health*float(data.blast_share),float(data.get("blast_min",90.0)),float(data.get("blast_max",600.0)))
+				var slow_sec: float = float(data.get("slow_duration",2.0))
+				for foe: Dictionary in m.units.duplicate():
+					if foe.hp <= 0 or foe.team == s.team or not B.rect_hits_actor(rect,foe): continue
+					m.damage(foe,blast_dmg,s.team,s.kind)
+					if foe.hp > 0 and slow_sec > 0.0: foe.slow_left = maxf(foe.get("slow_left",0.0),slow_sec)
+				m.event("boneburst",s.pos,s.team)
 		"dread_howl":
-			for u: Dictionary in m.units:
+			var enemy_dmg: float = float(data.get("enemy_damage",0.0))
+			var dur: float = float(data.duration)
+			var tmult: float = float(data.get("terror_mult",1.0))
+			for u: Dictionary in m.units.duplicate():
 				if u.hp <= 0 or not B.rect_hits_actor(rect,u): continue
-				if u.team != s.team: u.fear_left = data.duration
-				else: u.expansion_haste_until = maxf(u.get("expansion_haste_until",0.0),m.elapsed+3.0)
+				if u.team != s.team:
+					if not u.get("cursed",false):
+						u.cursed_until = maxf(u.get("cursed_until",0.0),m.elapsed+dur)
+						u.curse_team = s.team
+					if enemy_dmg > 0.0: m.damage(u,enemy_dmg,s.team,s.kind)
+					if u.hp > 0:
+						u.fear_left = maxf(u.get("fear_left",0.0),dur)
+						u.slow_left = maxf(u.get("slow_left",0.0),dur)
+						u.terror_until = maxf(u.get("terror_until",0.0),m.elapsed+dur) # 破膽: takes more damage while it flees
+						u.terror_mult = maxf(float(u.get("terror_mult",1.0)),tmult)
+				else: u.expansion_haste_until = maxf(u.get("expansion_haste_until",0.0),m.elapsed+4.0)
 	return true
 
 static func lane_of(pos: Vector2) -> int:
@@ -339,20 +360,36 @@ static func ai_score(c: Dictionary, s: Dictionary, covered: Dictionary = {}) -> 
 			var sacrifice_hp := 0.0
 			var mine := 0
 			var cheap := 0
+			var foes := 0
 			for u: Dictionary in s.units:
-				if u.hp <= 0 or u.team != team or not B.rect_hits_actor(rect,u): continue
+				if u.hp <= 0 or not B.rect_hits_actor(rect,u): continue
+				if u.team != team:
+					if not covered.has(u.get("id",-1)): foes += 1
+					continue
 				mine += 1
 				sacrifice_hp += minf(cap,u.hp)
 				if u.kind == "skeleton" or u.get("borrowed_until",-1.0) > 0 or u.hp < u.max_hp*0.45: cheap += 1
+			var gain: int = GluttonNest.gold_for_health(sacrifice_hp,data)
+			if mine >= 1 and cheap == mine and foes >= 2:
+				return 690.0+float(foes)*22.0+float(gain)*10.0
 			if mine >= 2 and cheap == mine:
-				var gain: int = GluttonNest.gold_for_health(sacrifice_hp,data)
 				if gain >= int(data.cost)+2: return 650.0+gain*10.0
 		"dread_howl":
 			var near := 0
+			var foes := 0
+			var allies := 0
 			var gate_x := L.gate_stop(team)
 			for u: Dictionary in s.units:
-				if u.hp > 0 and u.team != team and not covered.has(u.get("id",-1)) and B.rect_hits_actor(rect,u) and absf(u.pos.x-gate_x) <= L.CELL_SIZE.x*2: near += 1
-			if near >= 3: return 760.0+near*10
+				if u.hp <= 0: continue
+				if u.team == team:
+					if B.rect_hits_actor(rect,u) or u.pos.distance_to(c.pos) <= 220.0: allies += 1
+					continue
+				if covered.has(u.get("id",-1)) or not B.rect_hits_actor(rect,u): continue
+				foes += 1
+				if absf(u.pos.x-gate_x) <= L.CELL_SIZE.x*2.5: near += 1
+			if near >= 2: return 760.0+float(near)*14.0
+			if foes >= 2 and allies >= 1: return 700.0+float(foes)*16.0+float(allies)*10.0
+			if foes >= 3: return 690.0+float(foes)*14.0
 		"watchtower", "mass_grave", "blood_tower":
 			var col: int = c.cell.x if team == 0 else 8-c.cell.x
 			if col > 2: return -INF

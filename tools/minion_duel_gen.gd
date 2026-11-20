@@ -14,13 +14,19 @@ const MAX_IDEAL_SEC := 175.0
 func _resolve_foe(query: String, keys: Array) -> String:
 	if query.is_empty():
 		return ""
-	if Catalog.MINIONS.has(query):
+	if B.LORDS.has(query) or Catalog.MINIONS.has(query):
 		return query
-	for k: String in keys:
+	var all_keys: Array = []
+	for lk: String in B.LORDS.keys():
+		all_keys.append(lk)
+	for mk: String in keys:
+		if not mk in all_keys:
+			all_keys.append(mk)
+	for k: String in all_keys:
 		if String(B.lord_name(k)) == query:
 			return k
 	var matches: Array[String] = []
-	for k: String in keys:
+	for k: String in all_keys:
 		var nm := String(B.lord_name(k))
 		var cname := String(B.CARDS.get(String(B.lord_data(k).get("card", "")), {}).get("name", ""))
 		if query in nm or query in k or (not cname.is_empty() and query in cname):
@@ -38,6 +44,21 @@ func _resolve_foe(query: String, keys: Array) -> String:
 			return na.length() < nb.length()
 		return a < b)
 	return matches[0]
+
+func _default_deck_for(lord: String) -> Array:
+	if Catalog.MINIONS.has(lord):
+		return Catalog.MINIONS[lord].deck.duplicate()
+	return Catalog.BOSSES.get(lord, B.DEFAULT_DECK).duplicate()
+
+func _parse_deck_arg(csv: String) -> Array:
+	var out: Array = []
+	if csv.strip_edges().is_empty():
+		return out
+	for part: String in csv.split(",", false):
+		var ck := part.strip_edges()
+		if not ck.is_empty():
+			out.append(ck)
+	return out
 
 func _load_history(path: String) -> Dictionary:
 	if path.is_empty() or not FileAccess.file_exists(path):
@@ -88,9 +109,9 @@ func _pick_pair(keys: Array, date_str: String, history: Dictionary) -> Array[Str
 		best_pair = [a, b]
 	return best_pair
 
-func _simulate(red_lord: String, blue_lord: String, seed_val: int, record_notes: bool) -> Dictionary:
-	var red_deck: Array = Catalog.MINIONS[red_lord].deck.duplicate()
-	var blue_deck: Array = Catalog.MINIONS[blue_lord].deck.duplicate()
+func _simulate(red_lord: String, blue_lord: String, seed_val: int, record_notes: bool, custom_red_deck: Array = [], custom_blue_deck: Array = []) -> Dictionary:
+	var red_deck: Array = custom_red_deck.duplicate() if not custom_red_deck.is_empty() else _default_deck_for(red_lord)
+	var blue_deck: Array = custom_blue_deck.duplicate() if not custom_blue_deck.is_empty() else _default_deck_for(blue_lord)
 	var m := Battle.new(seed_val, red_deck, blue_deck, red_lord, blue_lord)
 	m.difficulty = 2
 	m.ai_enabled = [true, true]
@@ -154,6 +175,7 @@ func _score_match(sim: Dictionary, min_ideal: float = MIN_IDEAL_SEC, max_ideal: 
 	var winner_rem := red_rem if m.winner == 0 else blue_rem
 	s += clampf(5.0 - winner_rem / 1500.0, 0.0, 5.0) * 4.0
 	s -= loser_rem * 0.002
+	s += float(m.stats[0].used.size() + m.stats[1].used.size()) * 3.5
 	return s
 
 func _card_names_text(deck: Array) -> String:
@@ -173,12 +195,25 @@ func _card_names_text(deck: Array) -> String:
 func _card_descriptions_lines(red_lord: String, blue_lord: String, red_deck: Array, blue_deck: Array) -> Array[String]:
 	var ordered: Array[String] = []
 	var seen := {}
-	for k in [B.home_card(red_lord)] + red_deck + [B.home_card(blue_lord)] + blue_deck:
-		var ks := String(k)
+	var append_card := func(ks: String) -> void:
 		if ks.is_empty() or not B.CARDS.has(ks) or seen.has(ks):
-			continue
+			return
 		seen[ks] = true
 		ordered.append(ks)
+	for k in [B.home_card(red_lord)] + red_deck + [B.home_card(blue_lord)] + blue_deck:
+		append_card.call(String(k))
+	if seen.has("seal_altar"):
+		append_card.call("plague_bishop")
+		append_card.call("funeral_monk")
+	var skeleton_callers := ["necromancer", "corpse_stitcher", "pallbearer", "corpse_giant", "mass_grave", "ossuary", "borrowed_bones", "grave_exchange"]
+	var needs_skeleton := red_lord == "underworld" or blue_lord == "underworld"
+	if not needs_skeleton:
+		for sk: String in skeleton_callers:
+			if seen.has(sk):
+				needs_skeleton = true
+				break
+	if needs_skeleton:
+		append_card.call("skeleton")
 	var out: Array[String] = ["🃏 本場登場卡牌完整說明："]
 	for k: String in ordered:
 		var c: Dictionary = B.CARDS[k]
@@ -187,7 +222,7 @@ func _card_descriptions_lines(red_lord: String, blue_lord: String, red_deck: Arr
 		out.append("• 【%s】（%s｜%s）：%s" % [String(c.name), fac_label, String(c.get("role", "")), desc])
 	return out
 
-func _build_meta(date_str: String, red_lord: String, blue_lord: String, sim: Dictionary, replay_path: String, mp4_path: String, notes_path: String) -> Dictionary:
+func _build_meta(date_str: String, red_lord: String, blue_lord: String, sim: Dictionary, replay_path: String, mp4_path: String, notes_path: String, theme: String = "") -> Dictionary:
 	var red_name := String(B.lord_name(red_lord))
 	var blue_name := String(B.lord_name(blue_lord))
 	var red_role := String(B.lord_data(red_lord).get("role", ""))
@@ -200,8 +235,10 @@ func _build_meta(date_str: String, red_lord: String, blue_lord: String, sim: Dic
 	for c: Dictionary in rec.chapters:
 		chap_lines.append("%s %s" % [Recorder.fmt_time(float(c.time)), String(c.label)])
 
+	var intro_line := ("《五路領主》主題流派 AI 對決 — %s（%s）！" % [theme, date_str]) if not theme.is_empty() else ("每日《五路領主》野怪領主 AI 全自動對決（%s）！" % date_str)
+	var hashtags_line := "#五路領主 #主題對決 #策略遊戲 #AI對戰 #肉鴿" if not theme.is_empty() else "#五路領主 #野怪對決 #策略遊戲 #AI對戰 #肉鴿"
 	var desc_lines := [
-		"每日《五路領主》野怪領主 AI 全自動對決（%s）！" % date_str,
+		intro_line,
 		"",
 		"🔴 紅方：%s（%s｜常駐：%s）" % [red_name, red_role, String(B.CARDS.get(B.home_card(red_lord), {}).get("name", "無"))],
 		"套牌：%s" % _card_names_text(sim.red_deck),
@@ -217,18 +254,20 @@ func _build_meta(date_str: String, red_lord: String, blue_lord: String, sim: Dic
 	desc_lines.append("")
 	desc_lines.append("🏆 本場勝者：%s（時長 %s）" % [win_side, Recorder.fmt_time(float(sim.elapsed))])
 	desc_lines.append("")
-	desc_lines.append("#五路領主 #野怪對決 #策略遊戲 #AI對戰 #肉鴿")
+	desc_lines.append(hashtags_line)
 
 	var full_desc := "\n".join(desc_lines)
 	if full_desc.length() > 4950:
 		full_desc = full_desc.left(4947) + "..."
 
-	var title := "【五路領主】野怪領主對決！%s VS %s｜誰能稱霸五路戰場？（%s）" % [red_name, blue_name, date_str]
+	var title := ("【五路領主】%s！%s VS %s｜誰能稱霸五路戰場？（%s）" % [theme, red_name, blue_name, date_str]) if not theme.is_empty() else ("【五路領主】野怪領主對決！%s VS %s｜誰能稱霸五路戰場？（%s）" % [red_name, blue_name, date_str])
 	if title.length() > 98:
-		title = "%s VS %s｜五路領主野怪對決 (%s)" % [red_name, blue_name, date_str]
+		title = ("【五路領主】%s｜%s VS %s (%s)" % [theme, red_name, blue_name, date_str]) if not theme.is_empty() else ("%s VS %s｜五路領主野怪對決 (%s)" % [red_name, blue_name, date_str])
 
+	var tags := ["五路領主", theme if not theme.is_empty() else "野怪對決", red_name, blue_name, "AI對戰", "卡牌策略", "肉鴿"]
 	return {
 		"date": date_str,
+		"theme": theme,
 		"red_lord": red_lord,
 		"blue_lord": blue_lord,
 		"red_name": red_name,
@@ -242,7 +281,7 @@ func _build_meta(date_str: String, red_lord: String, blue_lord: String, sim: Dic
 		"notes_path": notes_path,
 		"title": title,
 		"description": full_desc,
-		"tags": ["五路領主", "野怪對決", red_name, blue_name, "AI對戰", "卡牌策略", "肉鴿"],
+		"tags": tags,
 	}
 
 func _initialize() -> void:
@@ -250,6 +289,10 @@ func _initialize() -> void:
 	var date_str := "%04d%02d%02d" % [dt.year, dt.month, dt.day]
 	var red_arg := ""
 	var blue_arg := ""
+	var red_deck_arg := ""
+	var blue_deck_arg := ""
+	var theme := ""
+	var custom_slug := ""
 	var out_dir := ProjectSettings.globalize_path("res://recordings/daily_yt")
 	var history_path := out_dir.path_join("history.json")
 	var fixed_seed := -1
@@ -260,6 +303,10 @@ func _initialize() -> void:
 	for arg: String in OS.get_cmdline_user_args():
 		if arg.begins_with("--red="): red_arg = arg.get_slice("=", 1)
 		elif arg.begins_with("--blue="): blue_arg = arg.get_slice("=", 1)
+		elif arg.begins_with("--red-deck="): red_deck_arg = arg.get_slice("=", 1)
+		elif arg.begins_with("--blue-deck="): blue_deck_arg = arg.get_slice("=", 1)
+		elif arg.begins_with("--theme="): theme = arg.get_slice("=", 1)
+		elif arg.begins_with("--slug="): custom_slug = arg.get_slice("=", 1)
 		elif arg.begins_with("--date="): date_str = arg.get_slice("=", 1)
 		elif arg.begins_with("--out-dir="): out_dir = arg.get_slice("=", 1)
 		elif arg.begins_with("--history="): history_path = arg.get_slice("=", 1)
@@ -270,6 +317,15 @@ func _initialize() -> void:
 			night_mode = true
 			min_dur = maxf(min_dur, B.NIGHT_START + 50.0) # 6:50+ deep night clash
 			max_dur = maxf(max_dur, B.DAWN - 15.0)
+
+	var custom_red_deck := _parse_deck_arg(red_deck_arg)
+	var custom_blue_deck := _parse_deck_arg(blue_deck_arg)
+	for ck: String in custom_red_deck + custom_blue_deck:
+		if not B.CARDS.has(ck):
+			push_error("Unknown card id in deck arg: " + ck)
+			quit(1)
+			return
+	var has_custom_decks := not custom_red_deck.is_empty() or not custom_blue_deck.is_empty()
 
 	var keys: Array = Catalog.MINIONS.keys()
 	keys.sort()
@@ -282,7 +338,7 @@ func _initialize() -> void:
 	var best_seed := fixed_seed if fixed_seed > 0 else 100
 	var chosen_sim: Dictionary = {}
 	if fixed_seed > 0 and not red_lord.is_empty() and not blue_lord.is_empty():
-		chosen_sim = _simulate(red_lord, blue_lord, best_seed, false)
+		chosen_sim = _simulate(red_lord, blue_lord, best_seed, false, custom_red_deck, custom_blue_deck)
 	elif night_mode and (fixed_red.is_empty() or fixed_blue.is_empty()):
 		# Search across stalwart Tier 2-3 (then all) pairs to find a genuine decisive late-night war.
 		var search_rng := RandomNumberGenerator.new()
@@ -301,7 +357,7 @@ func _initialize() -> void:
 			if r_cand == b_cand:
 				continue
 			var s_cand := search_rng.randi_range(1000, 999999)
-			var sim := _simulate(r_cand, b_cand, s_cand, false)
+			var sim := _simulate(r_cand, b_cand, s_cand, false, custom_red_deck, custom_blue_deck)
 			var sc := _score_match(sim, min_dur, max_dur)
 			if sc > best_score:
 				best_score = sc
@@ -321,22 +377,22 @@ func _initialize() -> void:
 		if fixed_seed <= 0:
 			best_seed = int(absi(hash(date_str + "_" + red_lord + "_vs_" + blue_lord)) % 900000) + 100
 		var best_score := -1e9
-		var max_tries := 30 if night_mode or min_dur > MIN_IDEAL_SEC else 10
+		var max_tries := 40
 		for off: int in range(max_tries):
 			var cand_seed := best_seed + off * 7
-			var sim := _simulate(red_lord, blue_lord, cand_seed, false)
+			var sim := _simulate(red_lord, blue_lord, cand_seed, false, custom_red_deck, custom_blue_deck)
 			var sc := _score_match(sim, min_dur, max_dur)
 			if sc > best_score:
 				best_score = sc
 				best_seed = cand_seed
 				chosen_sim = sim
-			if sim.model.ended and sim.model.winner in [0, 1] and sim.elapsed >= min_dur and sim.elapsed <= max_dur:
+			if not has_custom_decks and sim.model.ended and sim.model.winner in [0, 1] and sim.elapsed >= min_dur and sim.elapsed <= max_dur:
 				break
 
 	# Final deterministic pass with full chapter/highlight note capture
-	var final_sim := _simulate(red_lord, blue_lord, best_seed, true)
+	var final_sim := _simulate(red_lord, blue_lord, best_seed, true, custom_red_deck, custom_blue_deck)
 	DirAccess.make_dir_recursive_absolute(out_dir)
-	var slug := "duel_%s_%s_vs_%s" % [date_str, red_lord, blue_lord]
+	var slug := custom_slug if not custom_slug.is_empty() else ("duel_%s_%s_vs_%s" % [date_str, red_lord, blue_lord])
 	var replay_path := out_dir.path_join(slug + ".json")
 	var mp4_path := out_dir.path_join(slug + ".mp4")
 	var notes_path := out_dir.path_join(slug + "_notes.md")
@@ -362,11 +418,13 @@ func _initialize() -> void:
 	if nf != null:
 		nf.store_string(final_sim.recorder._build_markdown(null, final_sim.model))
 
-	var meta := _build_meta(date_str, red_lord, blue_lord, final_sim, replay_path, mp4_path, notes_path)
+	var meta := _build_meta(date_str, red_lord, blue_lord, final_sim, replay_path, mp4_path, notes_path, theme)
 	var mf := FileAccess.open(meta_path, FileAccess.WRITE)
 	if mf != null:
 		mf.store_string(JSON.stringify(meta, "\t"))
 
+	print("RED_USED: %s" % JSON.stringify(final_sim.model.stats[0].used))
+	print("BLUE_USED: %s" % JSON.stringify(final_sim.model.stats[1].used))
 	print("DUEL READY: %s VS %s (seed=%d, ticks=%d, dur=%.1fs, winner=%d)" % [
 		meta.red_name, meta.blue_name, best_seed, int(final_sim.tick), float(final_sim.elapsed), int(final_sim.winner)
 	])

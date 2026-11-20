@@ -8,6 +8,7 @@ const Battle = preload("res://battle.gd")
 const B = preload("res://balance.gd")
 const DS = preload("res://deck_store.gd")
 const EnemyAI = preload("res://enemy_ai.gd")
+const ExpansionMore = preload("res://expansion_more.gd")
 const L = preload("res://layout.gd")
 
 var checks := 0
@@ -83,7 +84,35 @@ func data_checks() -> void:
 	var missing_cards: Array = DS.pool("adventure").filter(func(k: String) -> bool: return not obtainable.has(k))
 	var missing_lords: Array = B.LORDS.keys().filter(func(lk: String) -> bool: return lk != "adventure" and not lk in catalog.UNLOCK_LORDS.values())
 	check(missing_cards.is_empty() and missing_lords.is_empty(), "campaign can obtain every adventure card and lord (missing %s / %s)" % [str(missing_cards), str(missing_lords)])
-	check(DS.valid(B.DEFAULT_DECK, B.DEFAULT_LORD) and load("res://game.gd") != null, "default deck is valid and game.gd loads")
+	var ratio_rng := RandomNumberGenerator.new()
+	ratio_rng.seed = 20261119
+	var ratios_ok := true
+	for lk: String in B.LORDS:
+		if not DS.LORD_BEST_RATIOS.has(lk):
+			ratios_ok = false
+			break
+		var want: Dictionary = DS.lord_best_ratio(lk)
+		var total_c := 0
+		for gid: int in [0, 1, 2, 3]: total_c += int(want.get(gid, 0))
+		var rd := DS.balanced_random_deck(ratio_rng, lk)
+		if total_c != 8 or not DS.valid(rd, lk):
+			ratios_ok = false
+			break
+		var got := {0: 0, 1: 0, 2: 0, 3: 0}
+		for ck: String in rd: got[B.card_group(ck)] += 1
+		if got != want:
+			ratios_ok = false
+			break
+	for pe: Dictionary in DS.PRACTICE_RATIOS:
+		var ptotal := 0
+		for gid: int in [0, 1, 2, 3]: ptotal += int(pe.ratio.get(gid, 0))
+		var pd := DS.balanced_random_deck(ratio_rng, "lion", pe.ratio)
+		var pgot := {0: 0, 1: 0, 2: 0, 3: 0}
+		for ck: String in pd: pgot[B.card_group(ck)] += 1
+		if ptotal != 8 or not DS.valid(pd, "lion") or pgot != pe.ratio:
+			ratios_ok = false
+			break
+	check(DS.valid(B.DEFAULT_DECK, B.DEFAULT_LORD) and load("res://game.gd") != null and ratios_ok, "default deck, game.gd, and lord/practice ratios are valid")
 	var Upgrades = preload("res://card_upgrades.gd")
 	var Keywords = preload("res://card_keywords.gd")
 	var bad_cards: Array = B.CARDS.keys().filter(func(k: String) -> bool:
@@ -145,15 +174,56 @@ func combat_checks() -> void:
 	for i: int in range(185): sb.step(1.0 / 60.0)
 	check(hidden_at_start and broke and restealthed and bandit.revealed and not bandit.stealthed, "stealth breaks on attack, returns after marching, and a watchtower reveals it for good")
 
-	# Poison and healing; armor keeps a 1-damage floor.
+	# Poison stacking, immunity for buildings and mechanical units, and healing; armor keeps a 1-damage floor.
 	var pb := quiet(33)
 	var sg := pb.spawn_unit(0, 2, "shieldguard", Vector2(400, 420))
-	sg.poison_remaining = 2
+	sg.poison_stacks = 3
+	sg.poison_left = 2.0
+	sg.poison_timer = 1.0
 	sg.poison_team = 1
-	sg.hex_ticks = 2
+	sg.hex_stacks = 3
+	sg.hex_left = 2.0
+	sg.hex_timer = 1.0
 	sg.hex_team = 1
 	pb.heal(pb.spawn_unit(0, 2, "healer", Vector2(380, 420)), 0.1)
-	check(sg.poison_remaining == 1 and sg.hex_ticks == 1, "healer removes one tick of both poison kinds")
+	var heal_ok: bool = int(sg.poison_stacks) == 2 and int(sg.hex_stacks) == 2
+
+	# Hex stacks infinitely and expires cleanly after duration.
+	var hex_pb := quiet(35)
+	var hex_prey := ready_unit(hex_pb, 0, 2, "pouch_beast", Vector2(500, 420))
+	for _hi: int in range(4):
+		ExpansionMore.add_hex(hex_pb, hex_prey, 1, "old_witch", 20.0, 1.0, 2)
+	var hex_4_ok: bool = int(hex_prey.get("hex_stacks", 0)) == 4
+	for _hi: int in range(63): hex_pb.step(1.0 / 60.0)
+	var hex_dmg_ok: bool = is_equal_approx(hex_prey.hp, hex_prey.max_hp - 80.0)
+	for _hi: int in range(126): hex_pb.step(1.0 / 60.0)
+	var hex_exp_ok: bool = int(hex_prey.get("hex_stacks", 0)) == 0 and is_equal_approx(hex_prey.hp, hex_prey.max_hp - 160.0)
+
+	# Plague stacks infinitely on organic troops while buildings and mechanical/construct units are immune.
+	var imm_pb := quiet(36)
+	var org := ready_unit(imm_pb, 0, 2, "pouch_beast", L.cell_center(Vector2i(3, 2)))
+	var imm_farm := imm_pb.add_building(0, Vector2i(3, 2), "farm")
+	var imm_units: Array = [
+		ready_unit(imm_pb, 0, 2, "catapult", L.cell_center(Vector2i(3, 2)) + Vector2(0, 10)),
+		ready_unit(imm_pb, 0, 2, "ram", L.cell_center(Vector2i(3, 2)) + Vector2(0, 14)),
+		ready_unit(imm_pb, 0, 2, "orrery_walker", L.cell_center(Vector2i(3, 2)) + Vector2(0, -10)),
+		ready_unit(imm_pb, 0, 2, "arcane_golem", L.cell_center(Vector2i(3, 2)) + Vector2(0, -14)),
+		ready_unit(imm_pb, 0, 0, "ward_guard", L.cell_center(Vector2i(3, 0))),
+	]
+	var esc_mil := ready_unit(imm_pb, 0, 4, "militia", L.cell_center(Vector2i(3, 4)))
+	imm_pb.add_zone(org.pos, 1, 290.0, 10.0)
+	imm_pb.add_zone(imm_units[4].pos, 1, 150.0, 10.0)
+	ExpansionMore.add_hex(imm_pb, imm_farm, 1, "old_witch", 20.0, 1.0, 2)
+	for iu: Dictionary in imm_units:
+		ExpansionMore.add_hex(imm_pb, iu, 1, "old_witch", 20.0, 1.0, 2)
+	for _pi: int in range(186): imm_pb.step(1.0 / 60.0)
+	var imm_ok: bool = int(org.get("poison_stacks", 0)) == 3 and is_equal_approx(org.hp, org.max_hp - 210.0)
+	imm_ok = imm_ok and is_equal_approx(imm_farm.hp, imm_farm.max_hp) and int(imm_farm.get("hex_stacks", 0)) == 0
+	for iu: Dictionary in imm_units:
+		imm_ok = imm_ok and is_equal_approx(iu.hp, iu.max_hp) and int(iu.get("poison_stacks", 0)) == 0 and int(iu.get("hex_stacks", 0)) == 0
+	imm_ok = imm_ok and B.poison_immune(imm_units[1]) and not B.poison_immune(esc_mil)
+
+	check(heal_ok and hex_4_ok and hex_dmg_ok and hex_exp_ok and imm_ok, "poison stacks infinitely, healer removes 1 stack of each, and buildings/mechanical units are immune")
 	var armor: float = float(B.CARDS.shieldguard.armor)
 	var hp0: float = sg.hp
 	pb.damage(sg, armor, 1, "knight")
@@ -208,7 +278,7 @@ func combat_checks() -> void:
 		gate_ok = gate_ok and is_equal_approx(rgt.gates[1][1], B.GATE_HP - hit[2])
 	check(gate_ok, "gate damage: melee and spells in full, ranged halved")
 
-	# Glutton nest: hidden and immune until it bites; eats foes for gold; caps damage at 500 on big bodies.
+	# Glutton nest: hidden and immune until it bites; devours up to bite_max allies (2x feed) or foes, paying gold gradually while chewing.
 	var gn := Battle.new(13, [], [], "beast", "lion")
 	gn.ai_enabled = [false, false]
 	gn.lords[0].hp = 0
@@ -219,21 +289,40 @@ func combat_checks() -> void:
 	gn.damage(nest, 100.0, 1, "fire")
 	var immune: bool = Nest.hidden(nest) and nest.hp == nest.max_hp
 	var prey := ready_unit(gn, 1, 2, "ox", nest.pos)
-	var gold0: float = gn.ink[0]
+	var prey_hp: float = minf(prey.max_hp, float(B.CARDS.glutton_nest.bite_cap))
 	gn.step(1.0 / 60.0)
+	var gold0: float = gn.ink[0]
 	Nest.update(gn, nest, B.CARDS.glutton_nest.windup)
-	check(immune and prey.hp <= 0 and gn.ink[0] > gold0 and not Nest.hidden(nest), "glutton_nest hides immune, then devours a ground foe for gold and opens up")
+	var bite_now_ok: bool = prey.hp <= 0 and not Nest.hidden(nest) and is_equal_approx(gn.ink[0], gold0) and int(nest.get("last_gold", 0)) == Nest.meal_gold(prey_hp)
+	Nest.update(gn, nest, float(nest.digest_total) * 0.5)
+	var mid_gold_ok: bool = gn.ink[0] > gold0 and gn.ink[0] < gold0 + float(nest.last_gold)
+	Nest.update(gn, nest, float(nest.digest_total))
+	check(immune and bite_now_ok and mid_gold_ok and is_equal_approx(gn.ink[0], gold0 + float(nest.last_gold)) and Nest.hidden(nest), "glutton_nest hides immune, pays gold+2 gradually during chewing, then hides again")
 	gn.units.clear()
 	gn.buildings.clear()
 	var mouth := gn.add_building(0, Vector2i(2, 2), "glutton_nest")
 	var tank := ready_unit(gn, 1, 2, "arcane_golem", mouth.pos)
+	var own := ready_unit(gn, 0, 2, "militia", mouth.pos + Vector2(10.0, 0.0)) # closer ally spared when 4 foes exist
 	var swarm: Array = []
 	for i: int in range(4): swarm.append(ready_unit(gn, 1, 2, "militia", mouth.pos + Vector2(30.0 + i * 20.0, 0.0)))
-	var own := ready_unit(gn, 0, 2, "militia", mouth.pos + Vector2(10.0, 0.0)) # nearest of all, but ours
+	var gn_ink0: float = gn.ink[0]
 	Nest.update(gn, mouth, 0.01)
 	Nest.update(gn, mouth, B.CARDS.glutton_nest.windup)
-	var eaten: int = ([tank] + swarm).filter(func(u: Dictionary) -> bool: return u.hp < u.max_hp).size()
-	check(is_equal_approx(tank.hp, tank.max_hp - B.CARDS.glutton_nest.bite_cap) and eaten == int(B.CARDS.glutton_nest.bite_max) and swarm[3].hp == swarm[3].max_hp and own.hp == own.max_hp, "glutton_nest deals at most bite_cap to a big body and bites only the nearest bite_max foes, never our own")
+	var eaten_foes: int = ([tank] + swarm).filter(func(u: Dictionary) -> bool: return u.hp < u.max_hp).size()
+	var feed_check: int = Nest.meal_gold(900.0 + swarm[0].max_hp + swarm[1].max_hp + swarm[2].max_hp)
+	Nest.update(gn, mouth, 10.0)
+	var earned_partial: float = gn.ink[0] - gn_ink0
+	mouth.hp = 0.0
+	Nest.update(gn, mouth, 100.0)
+	gn.units.clear()
+	gn.buildings.clear()
+	var mouth2 := gn.add_building(0, Vector2i(2, 2), "glutton_nest")
+	var foe2 := ready_unit(gn, 1, 2, "militia", mouth2.pos + Vector2(20.0, 0.0))
+	var ally2 := ready_unit(gn, 0, 2, "militia", mouth2.pos + Vector2(5.0, 0.0))
+	Nest.update(gn, mouth2, 0.01)
+	Nest.update(gn, mouth2, B.CARDS.glutton_nest.windup)
+	var fallback_ok: bool = foe2.hp <= 0 and ally2.hp <= 0 and int(mouth2.last_gold) == Nest.meal_gold(foe2.max_hp + ally2.max_hp * 2.0)
+	check(int(B.CARDS.glutton_nest.bite_max) == 4 and is_equal_approx(tank.hp, tank.max_hp - B.CARDS.glutton_nest.bite_cap) and is_equal_approx(own.hp, own.max_hp) and eaten_foes == 4 and is_equal_approx(swarm[3].hp, swarm[3].max_hp) and int(mouth.last_gold) == feed_check and earned_partial > 0.0 and is_equal_approx(gn.ink[0] - gn_ink0, earned_partial) and earned_partial < float(mouth.last_gold) and fallback_ok, "glutton_nest prioritizes 4 nearest foes before allies(2x), caps at bite_cap, and stops unpaid gold if destroyed")
 
 	# Damage buildings hit enemy buildings only when no enemy troop is in range.
 	var tw := quiet(35)
@@ -326,7 +415,12 @@ func combat_checks() -> void:
 	var ward_ok: bool = is_equal_approx(warded.hp, warded.max_hp - 50.0) and is_equal_approx(ward.hp, ward.max_hp - 50.0)
 	for i: int in range(90): wd.step(1.0 / 30.0)
 	ward_ok = ward_ok and is_equal_approx(ward.hp, ward.max_hp)
-	check(mismatched.is_empty() and ward_ok, "placement preview matches where every squad really stands, and 結界護衛 shares damage and is repaired by an artificer (mismatch: %s, ward %s)" % [str(mismatched), ward_ok])
+	# Grid blasts: a cross misses the diagonal a nine-square hits; a row runs away from the attacker.
+	var bc: Vector2 = L.cell_center(Vector2i(5, 2))
+	var east := {"pos": L.cell_center(Vector2i(6, 2)), "lane": 2}
+	var corner := {"pos": L.cell_center(Vector2i(6, 3)), "lane": 3}
+	ward_ok = ward_ok and B.blast_hits(bc, "cross", 1, east) and not B.blast_hits(bc, "cross", 1, corner) and B.blast_hits(bc, "square", 1, corner) and B.blast_hits(bc, "row2", 1, east) and not B.blast_hits(bc, "row2", -1, east)
+	check(mismatched.is_empty() and ward_ok, "placement preview matches where every squad really stands, and 結界護衛 shares damage and is repaired by an artificer, and grid blasts cover their cells (mismatch: %s, ward/blast %s)" % [str(mismatched), ward_ok])
 
 	# Grid spells hit exactly their tiles.
 	var g := quiet(63, "mage", "lion")
@@ -477,7 +571,7 @@ func new_card_checks() -> void:
 	var gm := quiet(15)
 	var spot := L.cell_center(Vector2i(1, 2))
 	var plays_ok := true
-	for c: Array in [[37.6, 2, 900.0, 95.0, 0.65, 65.0], [50.0, 5, 900.0, 70.0, 1.9, 90.0], [1.2, 1, 130.0, 36.0, 1.9, 36.0]]:
+	for c: Array in [[37.6, 3, 900.0, 130.0, 1.4, 65.0], [50.0, 5, 900.0, 95.0, 1.4, 90.0], [1.2, 1, 130.0, 36.0, 1.9, 36.0]]:
 		gm.units.clear()
 		gm.decks[0][0] = "gold_monster"
 		gm.hand_cd[0][0] = 0.0
@@ -488,8 +582,36 @@ func new_card_checks() -> void:
 	gm.decks[0][0] = "gold_monster"
 	gm.hand_cd[0][0] = 0.0
 	gm.ink[0] = 0.5
-	check(plays_ok and gm.play_check(0, 0, spot) == Battle.Refusal.GOLD, "gold_monster spends every whole coin and fields that stage's bodies; needs at least 1 coin")
-	check(GM.ai_wait("gold_monster", 20.0, false) and not GM.ai_wait("gold_monster", 30.0, false) and not GM.ai_wait("gold_monster", 9.0, true) and GM.cost_text("gold_monster", B.CARDS.gold_monster) == "全", "AI saves up for gold_monster and its cost reads 全")
+	var gm2 := quiet(20, "lion", "lion")
+	gm2.decks[0][0] = "gold_monster"
+	gm2.hand_cd[0][0] = 0.0
+	gm2.ink[0] = 24.0
+	gm2.play(0, 0, L.cell_center(Vector2i(1, 2)))
+	var gmb: Array = gm2.units.filter(func(u: Dictionary) -> bool: return u.kind == "gold_monster")
+	var gm_no_shield_ok: bool = gmb.size() == 2 and is_equal_approx(float(gmb[0].get("shield", 0.0)), 0.0)
+	var before_refund: float = gm2.ink[0]
+	for gb: Dictionary in gmb: gm2.damage(gb, 99999.0, 1, "fire")
+	gm2.resolve_deaths()
+	var gm_refund_ok: bool = is_equal_approx(gm2.ink[0] - before_refund, 9.0)
+	gm2.decks[0][0] = "gold_monster"
+	gm2.hand_cd[0][0] = 0.0
+	gm2.ink[0] = 24.0
+	gm2.play(0, 0, L.cell_center(Vector2i(1, 2)))
+	var gmb2: Array = gm2.units.filter(func(u: Dictionary) -> bool: return u.kind == "gold_monster" and u.hp > 0)
+	var before_sac: float = gm2.ink[0]
+	gm2.damage(gmb2[0], 99999.0, 0, "sacrifice", {}, true)
+	gm2.damage(gmb2[1], 99999.0, 1, "fire")
+	gm2.resolve_deaths()
+	var gm_sac_ok: bool = is_equal_approx(gm2.ink[0] - before_sac, 4.0)
+	gm2.decks[0][0] = "gold_monster"
+	gm2.hand_cd[0][0] = 0.0
+	gm2.ink[0] = 1.0
+	gm2.play(0, 0, L.cell_center(Vector2i(1, 2)))
+	var gmb1: Array = gm2.units.filter(func(u: Dictionary) -> bool: return u.kind == "gold_monster" and u.hp > 0)
+	var before_one: float = gm2.ink[0]
+	for gb1: Dictionary in gmb1: gm2.damage(gb1, 9999.0, 1, "fire")
+	gm2.resolve_deaths()
+	check(plays_ok and gm.play_check(0, 0, spot) == Battle.Refusal.GOLD and gm_no_shield_ok and gm_refund_ok and gm_sac_ok and is_equal_approx(gm2.ink[0] - before_one, 0.0) and GM.ai_wait("gold_monster", 20.0, false) and not GM.ai_wait("gold_monster", 30.0, false) and not GM.ai_wait("gold_monster", 9.0, true) and GM.cost_text("gold_monster", B.CARDS.gold_monster) == "全", "gold_monster spends purse at 100% stages (no shield), refunds 40% non-sacrificed deaths (>=3g), AI waits and shows 全")
 
 	var sa := quiet(16, "underworld", "lion", false)
 	sa.decks[0][0] = "seal_altar"
@@ -555,6 +677,110 @@ func new_card_checks() -> void:
 		Monster.on_hit(den, t, attacker)
 		pricks.append(attacker.max_hp - attacker.hp)
 	check(pricks == [70.0, 36.0, 0.0], "荊棘母獸 aura: thorns two tiers up (36 -> 70), 36 for allies without, none outside (got %s)" % str(pricks))
+
+	var rework_fails: Array = []
+	var Exp := preload("res://expansion_cards.gd")
+	var ExpMore := preload("res://expansion_more.gd")
+	var Faction := preload("res://faction_cards.gd")
+
+	var wb := quiet(21, "rune", "beast")
+	wb.decks[0][0] = "warp_beacon"
+	wb.hand_cd[0][0] = 0.0
+	wb.ink[0] = 50.0
+	var wb_spot := L.cell_center(Vector2i(1, 2))
+	var wb_placed: bool = wb.play(0, 0, wb_spot)
+	var wb_flyer := ready_unit(wb, 1, 2, "hooknose_flyer", wb_spot + Vector2(100.0, 0.0))
+	var wb_x0: float = wb_flyer.pos.x
+	wb.step(1.0 / 60.0)
+	if not wb_placed or wb_flyer.pos.x <= wb_x0 + 100.0 or float(wb_flyer.get("stun_left", 0.0)) <= 0.5 or not is_equal_approx(wb_flyer.max_hp - wb_flyer.hp, 55.0):
+		rework_fails.append("warp_beacon")
+
+	var sb := quiet(22, "vampire", "lion")
+	sb.decks[0][0] = "sleepless_belfry"
+	sb.hand_cd[0][0] = 0.0
+	sb.ink[0] = 50.0
+	var sb_spot := L.cell_center(Vector2i(1, 2))
+	var sb_placed: bool = sb.play(0, 0, sb_spot)
+	var belfry := sb.building_at(Vector2i(1, 2))
+	var sb_healthy := ready_unit(sb, 0, 2, "militia", sb_spot + Vector2(40.0, 0.0))
+	var sb_dirty := ready_unit(sb, 0, 2, "militia", sb_spot + Vector2(20.0, 0.0))
+	sb_dirty.hp = 50.0
+	sb_dirty.slow_left = 4.0
+	sb_dirty.poison_stacks = 5
+	sb_dirty.poison_left = 2.0
+	sb_dirty.poison_team = 1
+	sb_dirty.hex_stacks = 4
+	sb_dirty.hex_left = 2.0
+	sb_dirty.hex_team = 1
+	var sb_foe := ready_unit(sb, 1, 2, "militia", sb_spot + Vector2(120.0, 0.0))
+	Exp.support(sb, belfry, B.CARDS.sleepless_belfry)
+	var belfry_pulse_ok: bool = sb_placed and float(sb_healthy.get("expansion_haste_until", 0.0)) > sb.elapsed and is_equal_approx(sb_dirty.slow_left, 0.0) and is_equal_approx(sb_dirty.hp, 100.0) and int(sb_dirty.get("poison_stacks", 0)) == 0 and int(sb_dirty.get("hex_stacks", 0)) == 0 and float(sb_foe.get("slow_left", 0.0)) >= 1.5
+	sb.damage(belfry, 9999.0, 1, "fire")
+	var belfry_skels: int = sb.units.filter(func(u: Dictionary) -> bool: return u.team == 0 and u.kind == "skeleton" and u.hp > 0 and u.get("card", "") == "sleepless_belfry").size()
+	if not belfry_pulse_ok or belfry_skels != 3:
+		rework_fails.append("sleepless_belfry")
+
+	var dh := quiet(23, "vampire", "lion")
+	var dh_ally := ready_unit(dh, 0, 2, "militia", L.cell_center(Vector2i(2, 2)))
+	var dh_foe := ready_unit(dh, 1, 2, "militia", L.cell_center(Vector2i(3, 2)) + Vector2(40.0, 0.0))
+	Faction.cast(dh, {"kind": "dread_howl", "team": 0, "pos": L.cell_center(Vector2i(3, 2))})
+	var dh_hit_ok: bool = is_equal_approx(dh_foe.max_hp - dh_foe.hp, 55.0) and float(dh_foe.get("fear_left", 0.0)) >= 5.0 and float(dh_foe.get("slow_left", 0.0)) >= 5.0 and float(dh_foe.get("terror_until", 0.0)) > dh.elapsed and float(dh_foe.get("cursed_until", 0.0)) > dh.elapsed and float(dh_ally.get("expansion_haste_until", 0.0)) >= 4.0
+	dh.damage(dh_foe, 9999.0, 0, "fire")
+	dh.resolve_deaths()
+	var dh_curse_ok: bool = dh.units.any(func(u: Dictionary) -> bool: return u.team == 0 and u.kind == "skeleton" and u.hp > 0)
+	if not (dh_hit_ok and dh_curse_ok):
+		rework_fails.append("dread_howl")
+
+	var os_m := quiet(24, "underworld", "lion")
+	os_m.decks[0][0] = "ossuary"
+	os_m.hand_cd[0][0] = 0.0
+	os_m.ink[0] = 50.0
+	os_m.play(0, 0, L.cell_center(Vector2i(1, 2)))
+	var os_build_cnt: int = os_m.units.filter(func(u: Dictionary) -> bool: return u.team == 0 and u.kind == "skeleton" and u.hp > 0).size()
+	var os_b := os_m.building_at(Vector2i(1, 2))
+	os_m.damage(os_b, 9999.0, 1, "fire")
+	var os_total_cnt: int = os_m.units.filter(func(u: Dictionary) -> bool: return u.team == 0 and u.kind == "skeleton" and u.hp > 0).size()
+	if os_build_cnt != 2 or os_total_cnt != 6:
+		rework_fails.append("ossuary")
+
+	var sa2 := quiet(25, "vampire", "lion")
+	var sa_ally := ready_unit(sa2, 0, 2, "knight", L.cell_center(Vector2i(3, 2)))
+	var sa_foe := ready_unit(sa2, 1, 2, "knight", L.cell_center(Vector2i(3, 2)) + Vector2(30.0, 0.0))
+	sa2.ink[0] = 0.0
+	sa2.skill_charge[0] = 0.0
+	Faction.cast(sa2, {"kind": "sacrifice", "team": 0, "pos": L.cell_center(Vector2i(3, 2))})
+	if not is_equal_approx(sa_ally.max_hp - sa_ally.hp, 500.0) or not is_equal_approx(sa_foe.max_hp - sa_foe.hp, 250.0) or float(sa_foe.get("slow_left", 0.0)) < 2.0 or sa2.ink[0] <= 0.0 or sa2.skill_charge[0] <= 0.0:
+		rework_fails.append("sacrifice")
+
+	var fc := quiet(26, "vampire", "lion")
+	fc.decks[0][0] = "funeral_cottage"
+	fc.hand_cd[0][0] = 0.0
+	fc.ink[0] = 50.0
+	fc.play(0, 0, L.cell_center(Vector2i(1, 2)))
+	fc.ink[0] = 10.0
+	fc.skill_charge[0] = 0.0
+	var fc_foe1 := ready_unit(fc, 1, 2, "militia", L.cell_center(Vector2i(3, 2)))
+	fc.damage(fc_foe1, 9999.0, 0, "fire")
+	fc.resolve_deaths()
+	var fc_first_ok: bool = is_equal_approx(fc.ink[0], 11.0) and is_equal_approx(fc.skill_charge[0], 2.0)
+	var fc_foe2 := ready_unit(fc, 1, 2, "militia", L.cell_center(Vector2i(3, 2)))
+	fc.damage(fc_foe2, 9999.0, 0, "fire")
+	fc.resolve_deaths()
+	if not fc_first_ok or not is_equal_approx(fc.ink[0], 11.0):
+		rework_fails.append("funeral_cottage")
+
+	var wg := quiet(27, "beast", "lion")
+	var wg_ally := ready_unit(wg, 0, 2, "militia", L.cell_center(Vector2i(3, 2)) - Vector2(20.0, 0.0))
+	wg_ally.slow_left = 3.0
+	var wg_ground := ready_unit(wg, 1, 2, "pouch_beast", L.cell_center(Vector2i(3, 2)) + Vector2(20.0, 0.0))
+	var wg_fly := ready_unit(wg, 1, 2, "hooknose_flyer", L.cell_center(Vector2i(3, 2)) + Vector2(20.0, 0.0))
+	var wg_gx0: float = wg_ground.pos.x
+	var wg_fx0: float = wg_fly.pos.x
+	ExpMore.cast(wg, {"kind": "wing_gust", "team": 0, "pos": L.cell_center(Vector2i(3, 2))})
+	if not is_equal_approx(wg_ally.slow_left, 0.0) or float(wg_ally.get("expansion_haste_until", 0.0)) <= wg.elapsed or not is_equal_approx(wg_ground.pos.x - wg_gx0, 236.0) or not is_equal_approx(float(wg_ground.get("stun_left", 0.0)), 1.0) or not is_equal_approx(wg_ground.max_hp - wg_ground.hp, 55.0) or not is_equal_approx(wg_fly.pos.x - wg_fx0, 236.0) or not is_equal_approx(float(wg_fly.get("stun_left", 0.0)), 2.0) or not is_equal_approx(wg_fly.max_hp - wg_fly.hp, 110.0):
+		rework_fails.append("wing_gust")
+
+	check(rework_fails.is_empty(), "low-cost card mechanic reworks: " + str(rework_fails))
 
 # ---------------- presentation (3) ----------------
 func presentation_checks() -> void:

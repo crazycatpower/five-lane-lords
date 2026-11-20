@@ -71,16 +71,28 @@ static func attack(m, u: Dictionary, target: Dictionary, data: Dictionary) -> bo
 		blast(m,u,target.pos,data)
 		return true
 	if data.get("lob",false):
-		m.projectiles.append({"source":u,"pos":u.pos,"start":u.pos,"impact":target.pos,"flight":data.get("flight_time",0.8),"remaining":data.get("flight_time",0.8),"amount":data.area_damage,"radius":data.radius,"team":u.team,"kind":u.get("card",u.kind)})
+		m.projectiles.append({"source":u,"pos":u.pos,"start":u.pos,"impact":target.pos,"flight":data.get("flight_time",0.8),"remaining":data.get("flight_time",0.8),"amount":data.area_damage,"radius":data.radius,"blast":data.get("blast",""),"team":u.team,"kind":u.get("card",u.kind)})
 		m.event("catapult_fire",u.pos,u.team,{"target":target.pos})
 		return true
 	if data.has("dot_damage") and data.has("area_damage"):
 		var direction: float = 1.0 if target.pos.x >= u.pos.x else -1.0
 		var origin: Vector2 = u.pos+Vector2(0,u.get("dy",0.0))+Vector2(direction*16,-30)
-		m.projectiles.append({"source":u,"direction":direction,"pos":origin,"start":origin,"target":target,"remaining":B.ARROW_TIME,"amount":data.area_damage,"radius":data.radius,"dot_damage":data.dot_damage,"dot_interval":data.dot_interval,"dot_ticks":data.dot_ticks,"curse_splash":true,"team":u.team,"kind":u.get("card",u.kind)})
+		m.projectiles.append({"source":u,"direction":direction,"pos":origin,"start":origin,"target":target,"remaining":B.ARROW_TIME,"amount":data.area_damage,"radius":data.radius,"blast":data.get("blast",""),"dot_damage":data.dot_damage,"dot_interval":data.dot_interval,"dot_ticks":data.dot_ticks,"curse_splash":true,"team":u.team,"kind":u.get("card",u.kind)})
 		m.event("arrow",u.pos,u.team)
 		return true
 	return false
+
+static func add_hex(m, target: Dictionary, team: int, kind: String, dmg: float, interval: float, ticks: int) -> void:
+	if target.hp <= 0 or not target.has("spawn_delay") or B.poison_immune(target): return
+	var prev: int = int(target.get("hex_stacks",0))
+	target.hex_stacks = prev+1
+	target.hex_interval = interval
+	target.hex_damage = maxf(float(target.get("hex_damage",0.0)),dmg) if prev > 0 else dmg
+	target.hex_left = maxf(float(target.get("hex_left",0.0)),interval*float(ticks))
+	if prev == 0: target.hex_timer = interval
+	target.hex_team = team
+	target.hex_kind = kind
+	m.has_hex_unit = true
 
 # Splash impact for curse projectiles; returns true if handled.
 static func hit_projectile(m, arrow: Dictionary) -> bool:
@@ -89,16 +101,11 @@ static func hit_projectile(m, arrow: Dictionary) -> bool:
 	var point: Vector2 = target.get("pos",arrow.pos)
 	var src: Dictionary = arrow.get("source",{})
 	for u: Dictionary in m.units:
-		if u.hp <= 0 or u.team == arrow.team or B.point_edge_distance(point,u) > arrow.radius: continue
+		var curse_shape: String = String(arrow.get("blast",""))
+		var in_curse: bool = B.blast_hits(point,curse_shape,1 if arrow.team == 0 else -1,u) if not curse_shape.is_empty() else B.point_edge_distance(point,u) <= arrow.radius
+		if u.hp <= 0 or u.team == arrow.team or not in_curse: continue
 		m.damage(u,arrow.amount,arrow.team,arrow.kind,src)
-		if u.hp > 0:
-			m.has_hex_unit = true
-			u.hex_ticks = int(arrow.dot_ticks)
-			u.hex_interval = float(arrow.dot_interval)
-			u.hex_timer = float(arrow.dot_interval)
-			u.hex_damage = float(arrow.dot_damage)
-			u.hex_team = arrow.team
-			u.hex_kind = arrow.kind
+		if u.hp > 0: add_hex(m,u,arrow.team,arrow.kind,float(arrow.dot_damage),float(arrow.dot_interval),int(arrow.dot_ticks))
 	if not target.is_empty():
 		if target.get("kind","") == "gate": m.hit_gate(target.team,target.lane,arrow.amount,arrow.kind,src)
 		elif (target.has("cell") or target.get("kind","") == "lord") and target.hp > 0: m.damage(target,arrow.amount,arrow.team,arrow.kind,src)
@@ -112,10 +119,11 @@ static func gate_attack(m, u: Dictionary, data: Dictionary, enemy: int) -> bool:
 	return true
 
 static func blast(m, u: Dictionary, point: Vector2, data: Dictionary) -> void:
+	var dir := 1 if u.team == 0 else -1
 	for t: Dictionary in m.units+m.buildings:
-		if t.team != u.team and t.hp > 0 and B.point_edge_distance(point,t) <= data.radius: m.damage(t,data.area_damage,u.team,u.get("card",u.kind),u)
+		if t.team != u.team and t.hp > 0 and B.blast_hits(point,String(data.get("blast","square")),dir,t): m.damage(t,data.area_damage,u.team,u.get("card",u.kind),u)
 	for lane: int in m.active_lanes:
-		if Vector2(L.gate_stop(1-u.team),L.cell_center(Vector2i(0,lane)).y).distance_to(point) <= data.radius: m.hit_gate(1-u.team,lane,data.area_damage,u.get("card",u.kind),u)
+		if B.blast_hits_gate(point,String(data.get("blast","square")),dir,1-u.team,lane): m.hit_gate(1-u.team,lane,data.area_damage,u.get("card",u.kind),u)
 	m.event("trap_blast",point,u.team,{"radius":data.radius})
 	m.damage(u,u.hp,u.team,"suicide_blast",{},true)
 
@@ -168,13 +176,7 @@ static func after_hit(m, target: Dictionary, dealt: float, source: Dictionary) -
 		var ls: float = float(sd.get("lifesteal",0.0))+(0.25 if source.get("berserk_lifesteal_until",0.0) > m.elapsed else 0.0)
 		if ls > 0.0: source.hp = minf(source.max_hp,source.hp+dealt*ls)
 	if sd.has("dot_damage") and not sd.has("area_damage") and target.has("spawn_delay") and target.hp > 0:
-		m.has_hex_unit = true
-		target.hex_ticks = int(sd.dot_ticks)
-		target.hex_interval = float(sd.dot_interval)
-		target.hex_timer = float(sd.dot_interval)
-		target.hex_damage = float(sd.dot_damage)
-		target.hex_team = source.team
-		target.hex_kind = source.kind
+		add_hex(m,target,source.team,source.kind,float(sd.dot_damage),float(sd.dot_interval),int(sd.dot_ticks))
 	if target.hp <= 0 and target.has("spawn_delay"):
 		var td: Dictionary = B.CARDS.get(target.kind,{})
 		var saved := false
@@ -246,17 +248,19 @@ static func on_death(m, dead: Dictionary) -> void:
 static func update(m, dt: float) -> void:
 	if m.has_hex_unit:
 		for u: Dictionary in m.units:
-			if u.hp <= 0 or u.get("hex_ticks",0) <= 0 or u.get("hex_team",-1) < 0: continue
+			if u.hp <= 0 or int(u.get("hex_stacks",0)) <= 0 or u.get("hex_team",-1) < 0: continue
 			var interval: float = u.get("hex_interval",1.0)
 			u.hex_timer = u.get("hex_timer",interval)-dt
-			while u.hex_timer <= 0.000001 and u.hex_ticks > 0:
+			while u.hex_timer <= 0.000001 and int(u.get("hex_stacks",0)) > 0:
 				u.hex_timer += interval
-				u.hex_ticks -= 1
-				m.damage(u,u.get("hex_damage",20.0),u.hex_team,u.get("hex_kind","old_witch"))
+				m.damage(u,u.get("hex_damage",20.0)*float(u.hex_stacks),u.hex_team,u.get("hex_kind","old_witch"))
 				if u.hp <= 0: break
-			if u.hex_ticks <= 0:
-				u.hex_ticks = 0
-				u.hex_team = -1
+			if u.hp > 0:
+				u.hex_left = float(u.get("hex_left",0.0))-dt
+				if u.hex_left <= 0.000001:
+					u.hex_stacks = 0
+					u.hex_left = 0.0
+					u.hex_team = -1
 	if m.has_borrowed_unit:
 		var borrowed_expired := false
 		for u: Dictionary in m.units:
@@ -264,6 +268,12 @@ static func update(m, dt: float) -> void:
 				borrowed_expired = true
 				break
 		if borrowed_expired:
+			for u: Dictionary in m.units:
+				if u.get("card","") != "borrowed_bones" or u.get("borrowed_until",-1.0) < 0 or u.borrowed_until > m.elapsed or u.hp <= 0: continue
+				var bd: Dictionary = B.CARDS.borrowed_bones
+				for foe: Dictionary in m.units+m.buildings:
+					if foe.hp > 0 and foe.team != u.team and B.blast_hits(u.pos,String(bd.blast),1 if u.team == 0 else -1,foe): m.damage(foe,float(bd.return_blast),u.team,"borrowed_bones",u)
+				m.event("boneburst",u.pos,u.team)
 			m.units = m.units.filter(func(u: Dictionary) -> bool:
 				if u.get("borrowed_until",-1.0) < 0 or u.borrowed_until > m.elapsed or u.hp <= 0: return true
 				m.event("levy_dust",u.pos,u.team)
@@ -280,22 +290,37 @@ static func support(m, actor: Dictionary, d: Dictionary) -> bool:
 			m.event("drum",actor.pos,actor.team,{"duration":0.6})
 			return true
 		"cleanse":
-			var cleansed := false
+			var pulsed := false
+			var any_cleansed := false
+			var haste_dur: float = float(d.get("duration",2.4))
+			var heal_amt: float = float(d.get("support_amount",50.0))
 			for u: Dictionary in m.units:
-				if u.hp > 0 and u.team == actor.team and B.edge_distance(actor,u) <= d.radius:
-					if u.get("stun_left",0.0) > 0 or u.get("slow_left",0.0) > 0 or u.get("fear_left",0.0) > 0 or u.get("root_left",0.0) > 0 or u.get("seal_left",0.0) > 0 or u.get("hex_ticks",0) > 0 or u.get("poison_remaining",0) > 0:
-						cleansed = true
+				if u.hp > 0 and u.team == actor.team and u.get("spawn_delay",0.0) <= 0 and B.edge_distance(actor,u) <= d.radius:
+					pulsed = true
+					u.expansion_haste_until = maxf(u.get("expansion_haste_until",0.0),m.elapsed+haste_dur)
+					var was_dirty: bool = u.get("stun_left",0.0) > 0 or u.get("slow_left",0.0) > 0 or u.get("fear_left",0.0) > 0 or u.get("root_left",0.0) > 0 or u.get("seal_left",0.0) > 0 or int(u.get("hex_stacks",0)) > 0 or int(u.get("poison_stacks",0)) > 0
 					u.stun_left = 0.0
 					u.slow_left = 0.0
 					u.fear_left = 0.0
 					u.root_left = 0.0
 					u.seal_left = 0.0
-					u.hex_ticks = 0
+					u.hex_stacks = 0
+					u.hex_left = 0.0
 					u.hex_team = -1
-					u.poison_remaining = 0
+					u.poison_stacks = 0
+					u.poison_left = 0.0
 					u.poison_team = -1
-					u.in_poison_zone = false
-			if cleansed and m.record_events:
+					u.poison_zone_seen = -1.0
+					if was_dirty:
+						any_cleansed = true
+						if heal_amt > 0.0 and u.hp < u.max_hp:
+							u.hp = minf(u.max_hp,u.hp+heal_amt)
+						if m.record_events: m.event("heal",u.pos,actor.team)
+			if any_cleansed:
+				for foe: Dictionary in m.units:
+					if foe.hp > 0 and foe.team != actor.team and B.edge_distance(actor,foe) <= d.radius:
+						foe.slow_left = maxf(foe.get("slow_left",0.0),1.5)
+			if pulsed and m.record_events:
 				m.event("support_pulse",actor.pos,actor.team,{"style":"cleanse","radius":d.radius})
 			return true
 	return false
@@ -426,7 +451,8 @@ static func cast_effects(m, s: Dictionary, d: Dictionary, lane: int, rect: Rect2
 			if d.has("knockback"):
 				m.knockback_unit(u,dir*d.knockback)
 			if d.has("stun_on_hit") and not d.get("pull_center",false):
-				u.stun_left = maxf(u.get("stun_left",0.0),float(d.stun_on_hit))
+				var stun_dur: float = float(d.stun_on_hit)*(float(d.anti_air_mult) if (d.has("anti_air_mult") and u.get("flying",false)) else 1.0)
+				u.stun_left = maxf(u.get("stun_left",0.0),stun_dur)
 			if d.get("pull_center",false):
 				u.pos = u.pos.lerp(s.pos,0.75)
 				u.march_time = 0.0
@@ -437,13 +463,7 @@ static func cast_effects(m, s: Dictionary, d: Dictionary, lane: int, rect: Rect2
 				u.armor = 0.0
 				u.expansion_armor = 0.0
 				u.armor_until = 0.0
-				u.hex_ticks = 2
-				m.has_hex_unit = true
-				u.hex_interval = 1.0
-				u.hex_timer = 1.0
-				u.hex_damage = 20.0
-				u.hex_team = s.team
-				u.hex_kind = s.kind
+				add_hex(m,u,s.team,s.kind,20.0,1.0,2)
 			if d.has("maw_targets"):
 				if maw_ids.has(u.id):
 					m.damage(u,d.maw_damage,s.team,s.kind)
@@ -456,7 +476,8 @@ static func cast_effects(m, s: Dictionary, d: Dictionary, lane: int, rect: Rect2
 				continue
 			if d.has("enemy_damage"):
 				var was_alive: bool = u.hp > 0
-				m.damage(u,d.enemy_damage,s.team,s.kind)
+				var dmg: float = float(d.enemy_damage)*(float(d.anti_air_mult) if (d.has("anti_air_mult") and u.get("flying",false)) else 1.0)
+				m.damage(u,dmg,s.team,s.kind)
 				hits += 1
 				if was_alive and u.hp <= 0: killed_foes.append({"lane":u.lane,"pos":u.pos})
 	if d.get("strip_defences",false) and d.has("enemy_damage"):
@@ -470,6 +491,20 @@ static func cast_effects(m, s: Dictionary, d: Dictionary, lane: int, rect: Rect2
 			child.borrowed_until = m.elapsed+d.get("spawn_life",12.0)
 			m.has_borrowed_unit = true
 			m.event("summoned",child.pos,s.team)
+	if d.has("ambush_spawn"): ambush(m,s.team,lane,String(d.ambush_spawn[0]),int(d.ambush_spawn[1]))
+
+# 獸群突襲 (2026-11-19): beasts burst out at our front-most dry cell of the lane.
+static func ambush(m, team: int, lane: int, kind: String, count: int) -> void:
+	var cols: Array = range(L.GRID_COLUMNS-1,-1,-1) if team == 0 else range(L.GRID_COLUMNS)
+	for col: int in cols:
+		var cell := Vector2i(col,lane)
+		if m.territory_owner(cell) != team or m.is_water_cell(cell): continue
+		for i: int in range(count):
+			var u: Dictionary = m.spawn_unit(team,lane,kind,L.cell_center(cell))
+			u.card = "pack_ambush"
+			u.dy = (i-(count-1)*0.5)*12.0
+			m.event("summoned",u.pos,team)
+		return
 
 static func on_card_played(m, team: int, kind: String, lane: int) -> void:
 	var card: Dictionary = B.CARDS[kind]
@@ -494,7 +529,7 @@ static func burst_battery(m, b: Dictionary) -> void:
 	m.gain_ink(b.team,float(charges)*d.gold_per_charge)
 	m.event("ink",b.pos,b.team)
 	for u: Dictionary in m.units:
-		if u.hp > 0 and u.team != b.team and B.point_edge_distance(b.pos,u) <= d.radius:
+		if u.hp > 0 and u.team != b.team and B.blast_hits(b.pos,String(d.get("blast","square")),1 if b.team == 0 else -1,u):
 			m.damage(u,dmg,b.team,b.kind)
 
 static func granary_store(m, farm_b: Dictionary) -> void:
@@ -523,7 +558,7 @@ static func hatch_egg(m, b: Dictionary) -> void:
 		m.event("summoned",u.pos,b.team)
 	var dmg: float = float(b.get("area_damage",d.area_damage))
 	for foe: Dictionary in m.units:
-		if foe.hp > 0 and foe.team != b.team and B.point_edge_distance(b.pos,foe) <= d.radius:
+		if foe.hp > 0 and foe.team != b.team and B.blast_hits(b.pos,String(d.get("blast","square")),1 if b.team == 0 else -1,foe):
 			m.damage(foe,dmg,b.team,b.kind)
 	b.hp = 0
 	m.refresh_territory()
@@ -560,23 +595,27 @@ static func tick_buildings_and_zones(m, dt: float) -> void:
 		var b_dt: float = dt * Faction.building_factor(m,b)
 		if b.kind == "mimic_egg":
 			b.egg_clock = b.get("egg_clock",0.0)+b_dt
-			if b.egg_clock >= d.hatch_time: hatch_egg(m,b)
+			var sprung: bool = d.get("ambush_hatch",false) and m.units.any(func(u: Dictionary) -> bool: return u.hp > 0 and u.team != b.team and u.get("spawn_delay",0.0) <= 0 and not B.CARDS[u.kind].get("flying",false) and B.blast_hits(b.pos,String(d.blast),1 if b.team == 0 else -1,u))
+			if sprung or b.egg_clock >= d.hatch_time: hatch_egg(m,b)
 		elif b.kind == "warp_beacon":
-			b.warp_clock = b.get("warp_clock",0.0)+b_dt
-			if b.warp_clock >= d.period:
-				b.warp_clock -= d.period
-				var best: Dictionary = {}
-				var best_d := INF
+			b.warp_clock = minf(float(d.period),float(b.get("warp_clock",d.period))+b_dt)
+			if b.warp_clock >= float(d.period):
+				var pdmg: float = float(b.get("area_damage",d.get("area_damage",0.0)))
+				var pstun: float = float(d.get("pulse_stun",0.0))
+				var targets: Array = []
 				for u: Dictionary in m.units:
-					if u.hp > 0 and u.team != b.team and not u.get("flying",false) and u.lane == b.cell.y:
+					if u.hp > 0 and u.team != b.team and u.get("spawn_delay",0.0) <= 0 and u.lane == b.cell.y:
 						var dist: float = maxf(0.0,absf(u.pos.x-b.pos.x)-B.actor_radius(b)-B.actor_radius(u))
-						if dist <= d.range and dist < best_d:
-							best_d = dist
-							best = u
-				if not best.is_empty():
-					var back := 1.0 if best.team == 0 else -1.0
-					m.knockback_unit(best,-back*d.pushback)
-					m.link(b.pos,best.pos,b.team,"mana")
+						if dist <= d.range: targets.append(u)
+				if not targets.is_empty():
+					b.warp_clock = 0.0
+					for u: Dictionary in targets:
+						var back: float = 1.0 if u.team == 0 else -1.0
+						m.knockback_unit(u,-back*float(d.pushback))
+						if pstun > 0.0: u.stun_left = maxf(u.get("stun_left",0.0),pstun)
+						if pdmg > 0.0: m.damage(u,pdmg,b.team,b.kind)
+						m.link(b.pos,u.pos,b.team,"mana")
+					if m.record_events: m.event("support_pulse",b.pos,b.team,{"style":"range","radius":float(d.range)})
 		elif b.kind == "blood_cauldron":
 			b.cauldron_clock = b.get("cauldron_clock",0.0)+b_dt
 			if b.cauldron_clock >= d.period:
@@ -776,6 +815,9 @@ static func ai_score(c: Dictionary, s: Dictionary, covered: Dictionary = {}) -> 
 		if c.kind == "counter_charge":
 			if (foes >= 1 and allies >= 1) or foes >= 2: return 695.0+float(foes)*16.0+float(allies)*14.0
 			return -INF
+		if c.kind == "wing_gust":
+			if foes >= 2 or (foes >= 1 and allies >= 2): return 695.0+float(foes)*18.0+float(allies)*10.0
+			return -INF
 		if c.kind in ["berserk_blood","phase_shift","pack_ambush","feral_mutation"]:
 			if allies >= 2: return 680.0+allies*15.0
 			return -INF
@@ -838,7 +880,7 @@ static func placement_score(c: Dictionary, s: Dictionary, pr: Dictionary, covere
 			return pr.get("support_score",660.0)+minf(foes+1.0,5.0)*18.0-duplicates*80.0
 		if danger > 0: return -INF
 		var value := allies
-		if d.has("death_income"): value = minf(allies,foes)
+		if d.has("death_income"): value = minf(allies,foes) if d.get("death_side","") == "ally" else (allies+foes)
 		if d.get("support","") == "slow": value = foes
 		if d.has("store_per_farm"):
 			var farm_n := 0

@@ -13,7 +13,7 @@ const KEYWORDS := {
 		"color": Color("115224"),
 		"fill": Color("b8dec2"),
 		"fx": Color("1b6e32"),
-		"desc": "使目標中毒或腐蝕防禦，在數秒內持續受到毒性傷害（可被治療減輕或被淨化解除）。",
+		"desc": "使非機械目標中毒，在數秒內持續受到毒性傷害，可無限疊加（對建築與機械／構裝單位無效；可被治療減輕 1 層或被淨化解除）。",
 		"terms": ["毒蝕","毒霧","小毒霧","毒死","持續傷害","咒彈","毒蜂","腐蝕酸雨","清除敵軍護盾與護甲"]
 	},
 	"治療": {
@@ -308,12 +308,12 @@ const CARD_OVERRIDES := {
 	"beekeeper": ["毒蝕","遲緩"],
 	"mourning_maid": ["遲緩"],
 	"time_field": ["遲緩"],
-	"dread_howl": ["恐懼","加速"],
+	"dread_howl": ["恐懼","遲緩","加速","召喚"],
 	"eyewing_dragon": ["恐懼","重裝"],
-	"sleepless_belfry": ["淨化"],
+	"sleepless_belfry": ["淨化","加速","治療","召喚"],
 	"counter_charge": ["擊退","暈眩","加速"],
-	"wing_gust": ["擊退","爆破"],
-	"warp_beacon": ["擊退"],
+	"wing_gust": ["擊退","暈眩","加速","爆破"],
+	"warp_beacon": ["擊退","暈眩","爆破"],
 	"disgraced_lancer": ["衝鋒","暈眩"],
 	"tusk_boar": ["衝鋒","暈眩"],
 	"ox": ["衝鋒","攻城"],
@@ -383,7 +383,7 @@ const CARD_OVERRIDES := {
 	"hook_collector": ["產金","獵殺"],
 	"funeral_cottage": ["產金"],
 	"soul_well": ["治療","加速"],
-	"sacrifice": ["產金"],
+	"sacrifice": ["產金","爆破","遲緩"],
 	"grave_exchange": ["產金","召喚"],
 	"mana_battery": ["產金","爆破"],
 	"supply_depot": ["產金"],
@@ -402,7 +402,7 @@ const CARD_OVERRIDES := {
 	"funeral_monk": ["治療"],
 	"spell_tide_magus": ["遠射"],
 	"thorn_mother": ["反傷","重裝"],
-	"gold_monster": ["重裝","人海"],
+	"gold_monster": ["重裝","人海","產金"],
 	"feral_mutation": ["重裝","獵殺"],
 	"ram": ["攻城","重裝"],
 	"gatebreaker": ["攻城","重裝"],
@@ -471,7 +471,7 @@ static func for_card(kind: String) -> Array[String]:
 	if d.has("structure_mult") or d.get("hits","") == "buildings": out.append("攻城")
 	if d.get("patrol",false): out.append("巡邏")
 	if out.is_empty():
-		if d.get("projectile",false) or d.get("range",47.0) >= 140.0: out.append("遠射")
+		if d.get("projectile",false) or d.get("range",0.0) >= B.RANGED_MIN: out.append("遠射")
 		elif d.get("count",1) >= 4: out.append("人海")
 		else: out.append("重裝")
 	return out.slice(0, 3)

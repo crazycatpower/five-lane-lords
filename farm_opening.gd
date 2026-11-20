@@ -67,7 +67,7 @@ func observe(g) -> void:
 		attacked = true
 	killed = not m.units.any(func(u: Dictionary) -> bool: return u.team == 0 and u.kind == "farmer" and u.hp > 0)
 	burned = m.count_buildings(0,"farm") <= 1
-	var reach: float = L.cell_center(Vector2i(0,2)).x+B.MELEE_RANGE+B.UNIT_BODY_RADIUS+B.kind_radius("farm")+5.0
+	var reach: float = L.cell_center(Vector2i(0,2)).x+float(B.CARDS.bandit.range)+B.UNIT_BODY_RADIUS+B.kind_radius("farm")+5.0
 	var at_village: bool = m.units.any(func(u: Dictionary) -> bool: return u.team == 1 and u.hp > 0 and u.pos.x <= reach)
 	if killed and burned and at_village:
 		arrived = true

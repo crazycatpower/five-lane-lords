@@ -194,7 +194,21 @@ def get_valid_access_token(secrets_dir: Path) -> str:
     return tok["access_token"]
 
 
-def generate_duel(godot_exe: str, date_str: str, red: str, blue: str, out_dir: Path, seed: int | None, night: bool = False) -> dict:
+def generate_duel(
+    godot_exe: str,
+    date_str: str,
+    red: str,
+    blue: str,
+    out_dir: Path,
+    seed: int | None,
+    night: bool = False,
+    red_deck: str = "",
+    blue_deck: str = "",
+    theme: str = "",
+    slug: str = "",
+    min_dur: float | None = None,
+    max_dur: float | None = None,
+) -> dict:
     out_dir.mkdir(parents=True, exist_ok=True)
     history_path = out_dir / "history.json"
     cmd = [
@@ -213,8 +227,20 @@ def generate_duel(godot_exe: str, date_str: str, red: str, blue: str, out_dir: P
         cmd.append(f"--red={red}")
     if blue:
         cmd.append(f"--blue={blue}")
+    if red_deck:
+        cmd.append(f"--red-deck={red_deck}")
+    if blue_deck:
+        cmd.append(f"--blue-deck={blue_deck}")
+    if theme:
+        cmd.append(f"--theme={theme}")
+    if slug:
+        cmd.append(f"--slug={slug}")
     if seed is not None:
         cmd.append(f"--seed={seed}")
+    if min_dur is not None:
+        cmd.append(f"--min-dur={min_dur}")
+    if max_dur is not None:
+        cmd.append(f"--max-dur={max_dur}")
     if night:
         cmd.append("--night")
 
@@ -365,8 +391,14 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Daily Minion Lord VS Minion Lord YouTube uploader")
     ap.add_argument("--auth", action="store_true", help="Run one-time browser OAuth setup")
     ap.add_argument("--render-only", action="store_true", help="Generate replay & MP4 without uploading")
-    ap.add_argument("--red", default="", help="Red minion lord id or name")
-    ap.add_argument("--blue", default="", help="Blue minion lord id or name")
+    ap.add_argument("--red", default="", help="Red lord or minion lord id or name")
+    ap.add_argument("--blue", default="", help="Blue lord or minion lord id or name")
+    ap.add_argument("--red-deck", default="", help="Comma-separated 8-card deck for red")
+    ap.add_argument("--blue-deck", default="", help="Comma-separated 8-card deck for blue")
+    ap.add_argument("--theme", default="", help="Optional matchup theme title")
+    ap.add_argument("--slug", default="", help="Optional output file stem")
+    ap.add_argument("--min-dur", type=float, default=None, help="Minimum ideal match duration (sec)")
+    ap.add_argument("--max-dur", type=float, default=None, help="Maximum ideal match duration (sec)")
     ap.add_argument("--date", default=dt.date.today().strftime("%Y%m%d"), help="YYYYMMDD date key")
     ap.add_argument("--seed", type=int, default=None, help="Optional fixed RNG seed")
     ap.add_argument("--night", action="store_true", help="Find a late-night decisive match (>= 6:50)")
@@ -394,7 +426,21 @@ def main() -> int:
 
     godot_exe = find_godot_exe()
     out_dir = Path(args.out_dir)
-    meta = generate_duel(godot_exe, args.date, args.red, args.blue, out_dir, args.seed, args.night)
+    meta = generate_duel(
+        godot_exe,
+        args.date,
+        args.red,
+        args.blue,
+        out_dir,
+        args.seed,
+        args.night,
+        red_deck=args.red_deck,
+        blue_deck=args.blue_deck,
+        theme=args.theme,
+        slug=args.slug,
+        min_dur=args.min_dur,
+        max_dur=args.max_dur,
+    )
     mp4_path = render_mp4(godot_exe, meta)
     print(f"MP4 READY: {mp4_path}")
 

@@ -162,15 +162,23 @@ static func decide(s: Dictionary) -> Dictionary:
 			var col: int = c.cell.x if team == 0 else 8-c.cell.x
 			if has_own_nest and data.type == "unit" and not data.get("flying",false):
 				var eaten_on_spawn := false
+				var armed_hidden := false
 				for b: Dictionary in s.buildings:
 					if b.hp > 0 and b.team == team and b.cell.y == lane:
 						if GluttonNest.hidden(b) and (b.pos.x-c.pos.x)*forward >= -B.CARDS.glutton_nest.trigger_radius:
 							eaten_on_spawn = true
+							if (b.pos.x-c.pos.x)*forward <= L.CELL_SIZE.x: armed_hidden = true
 							break
 						if b.get("nest_windup",0.0) > 0.0 and B.point_edge_distance(b.pos,{"pos":c.pos,"kind":c.kind}) <= B.CARDS.glutton_nest.radius:
 							eaten_on_spawn = true
 							break
-				if eaten_on_spawn: continue
+				if eaten_on_spawn:
+					if defend < 0 and armed_hidden:
+						var fscore: float = GluttonNest.feed_score(c,s,data,foes[lane])
+						if fscore > best_score:
+							best_score = fscore
+							best = c.duplicate()
+					continue
 			if GoldMonster.ai_wait(c.kind,s.ink,defend >= 0 and lane == defend): continue # 金幣怪物 waits for a real purse
 			if c.kind == "seal_altar": # 封印祭壇: back of the quietest lane, never while defending
 				var altar_score: float = SealAltar.ai_score(c,s,team,col)
@@ -446,6 +454,6 @@ static func dark_card_score(c: Dictionary, s: Dictionary, ours: Array, foes: Arr
 			var count := 0
 			var prect: Rect2 = B.spell_rect(c.pos,B.CARDS.plague)
 			for u: Dictionary in s.units:
-				if u.hp > 0 and u.team != s.team and not covered.has(u.get("id",-1)) and B.rect_hits_actor(prect,u): count += 1
+				if u.hp > 0 and u.team != s.team and not covered.has(u.get("id",-1)) and not B.poison_immune(u) and B.rect_hits_actor(prect,u): count += 1
 			if count > 0: return 650.0+count*60
 	return -INF

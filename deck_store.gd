@@ -54,14 +54,26 @@ static func random_deck(rng: RandomNumberGenerator, lord: String = "") -> Array:
 	while deck.size() < 8: deck.append(rest.pop_at(rng.randi_range(0,rest.size()-1)))
 	return deck
 
-# 4 selectable 8-card compositions matching B.card_group (3:building, 0:melee, 1:ranged, 2:spell).
-const PRACTICE_RATIO := {3: 2, 0: 3, 1: 2, 2: 1}
+# 4 selectable 8-card compositions matching B.card_group (3:building, 0:melee, 1:ranged, 2:spell),
+# calibrated from 972 two-stage AI matches (2026-11-19).
+const PRACTICE_RATIO := {3: 1, 0: 2, 1: 4, 2: 1}
 const PRACTICE_RATIOS := [
-	{"id":"balanced","name":"均衡陣型","ratio":{3: 2, 0: 3, 1: 2, 2: 1}},
-	{"id":"rush","name":"強攻推線","ratio":{3: 1, 0: 4, 1: 2, 2: 1}},
-	{"id":"ranged","name":"遠程火力","ratio":{3: 2, 0: 2, 1: 3, 2: 1}},
+	{"id":"ranged_heavy","name":"四遠火網","ratio":{3: 1, 0: 2, 1: 4, 2: 1}},
+	{"id":"pure_army","name":"零法純兵","ratio":{3: 1, 0: 4, 1: 3, 2: 0}},
+	{"id":"fort_melee","name":"三建步戰","ratio":{3: 3, 0: 3, 1: 1, 2: 1}},
 	{"id":"spell","name":"砲法控制","ratio":{3: 2, 0: 2, 1: 2, 2: 2}},
 ]
+const LORD_BEST_RATIOS := {
+	"adventure":{"id":"fort_melee","name":"三建步戰","ratio":{3: 3, 0: 3, 1: 1, 2: 1}},
+	"lion":{"id":"ranged_heavy","name":"四遠火網","ratio":{3: 1, 0: 2, 1: 4, 2: 1}},
+	"harvest":{"id":"ranged_heavy","name":"四遠火網","ratio":{3: 1, 0: 2, 1: 4, 2: 1}},
+	"iron":{"id":"ranged","name":"遠程火力","ratio":{3: 2, 0: 2, 1: 3, 2: 1}},
+	"mage":{"id":"spell","name":"砲法控制","ratio":{3: 2, 0: 2, 1: 2, 2: 2}},
+	"rune":{"id":"no_bld_aggro","name":"零建強攻","ratio":{3: 0, 0: 4, 1: 3, 2: 1}},
+	"underworld":{"id":"no_bld_aggro","name":"零建強攻","ratio":{3: 0, 0: 4, 1: 3, 2: 1}},
+	"vampire":{"id":"rush","name":"強攻推線","ratio":{3: 1, 0: 4, 1: 2, 2: 1}},
+	"beast":{"id":"pure_army","name":"零法純兵","ratio":{3: 1, 0: 4, 1: 3, 2: 0}},
+}
 
 static func practice_ratio_ids() -> Array:
 	return PRACTICE_RATIOS.map(func(entry: Dictionary) -> String: return entry.id)
@@ -71,10 +83,17 @@ static func practice_ratio_entry(id: String) -> Dictionary:
 		if entry.id == id: return entry
 	return PRACTICE_RATIOS[0]
 
+static func lord_best_entry(lord: String) -> Dictionary:
+	return LORD_BEST_RATIOS[lord] if LORD_BEST_RATIOS.has(lord) else PRACTICE_RATIOS[0]
+
+static func lord_best_ratio(lord: String) -> Dictionary:
+	return lord_best_entry(lord).ratio
+
 static func practice_ratio_label(ratio: Dictionary) -> String:
 	return "建築 %d · 近戰 %d · 遠程 %d · 法術 %d" % [int(ratio.get(3, 0)), int(ratio.get(0, 0)), int(ratio.get(1, 0)), int(ratio.get(2, 0))]
 
-static func balanced_random_deck(rng: RandomNumberGenerator, lord: String = "", ratio: Dictionary = PRACTICE_RATIO) -> Array:
+static func balanced_random_deck(rng: RandomNumberGenerator, lord: String = "", ratio: Dictionary = {}) -> Array:
+	var chosen_ratio: Dictionary = ratio if not ratio.is_empty() else lord_best_ratio(lord)
 	var buckets := {0: [], 1: [], 2: [], 3: []}
 	var all_cards: Array = pool(lord)
 	for kind: String in all_cards:
@@ -82,7 +101,7 @@ static func balanced_random_deck(rng: RandomNumberGenerator, lord: String = "", 
 	var deck: Array = []
 	for group_id: int in [3, 0, 1, 2]:
 		var bucket: Array = buckets[group_id]
-		var need := mini(int(ratio.get(group_id, 0)), bucket.size())
+		var need := mini(int(chosen_ratio.get(group_id, 0)), bucket.size())
 		for _i: int in range(need):
 			deck.append(bucket.pop_at(rng.randi_range(0, bucket.size() - 1)))
 	var spare: Array = all_cards.filter(func(k: String) -> bool: return not k in deck)

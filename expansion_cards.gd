@@ -48,16 +48,20 @@ static func support(m, actor: Dictionary, d: Dictionary) -> void:
 		if u.hp <= 0 or u.team != actor.team or u.get("spawn_delay",0.0) > 0 or B.edge_distance(actor,u) > d.radius: continue
 		match d.support:
 			"heal":
-				var poisoned: bool = u.get("hex_ticks",0) > 0 or u.get("poison_remaining",0) > 0
+				var poisoned: bool = int(u.get("hex_stacks",0)) > 0 or int(u.get("poison_stacks",0)) > 0
 				if u.hp < u.max_hp or poisoned:
 					if m.record_events: active = true
 					u.hp = minf(u.max_hp,u.hp+d.support_amount)
-					if u.get("hex_ticks",0) > 0:
-						u.hex_ticks = maxi(0,u.hex_ticks-1)
-						if u.hex_ticks == 0: u.hex_team = -1
-					if u.get("poison_remaining",0) > 0:
-						u.poison_remaining = maxi(0,u.poison_remaining-1)
-						if u.poison_remaining == 0: u.poison_team = -1
+					if int(u.get("hex_stacks",0)) > 0:
+						u.hex_stacks = maxi(0,int(u.hex_stacks)-1)
+						if u.hex_stacks == 0:
+							u.hex_left = 0.0
+							u.hex_team = -1
+					if int(u.get("poison_stacks",0)) > 0:
+						u.poison_stacks = maxi(0,int(u.poison_stacks)-1)
+						if u.poison_stacks == 0:
+							u.poison_left = 0.0
+							u.poison_team = -1
 					if m.record_events:
 						m.event("heal",u.pos,actor.team)
 						m.link(actor.pos,u.pos,actor.team,d.support)
@@ -119,5 +123,7 @@ static func on_death(m, dead: Dictionary) -> void:
 		if d.get("death_side","") == "ally" and dead.team != b.team: continue # 殯儀小屋: only our own dead
 		if period > 0.0: b.soul_ready = m.elapsed+period
 		m.gain_ink(b.team,d.death_income)
+		var charge: float = float(d.get("death_charge",0.0))
+		if charge > 0.0: m.add_skill_charge(b.team,charge)
 		m.link(dead.pos,b.pos,b.team,"soul")
 
