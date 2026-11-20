@@ -1084,7 +1084,7 @@ static func card_description(kind: String, cards: Dictionary = CARDS) -> String:
 		"long_dragon": lines.append("吐出火焰，沿本路往前燒 %s，途中每名敵方部隊各受一次傷害。" % cells_text(d.range*d.pierce_range_multiplier))
 		"thorn_dragon": lines.append("每次被近戰部隊打中，攻擊者受到 %s 反傷；遠程、法術與領主不會被刺傷。" % number(d.thorns))
 		"barricade": lines.append("沒有特殊效果。不攻擊、不產金、不反傷；依一般建築規則提供領地。")
-		"bandit": lines.append("登場時潛行，無法被敵方直接鎖定；發動攻擊後現形，脫戰持續移動 %s 秒後再次潛行（被偵查揭露則永久失去潛行）。範圍傷害仍可命中。" % number(CHARGE_RESET_TIME))
+		"bandit": lines.append("登場時潛行，敵方部隊與建築無法直接鎖定（領主看得見）；發動攻擊後現形，脫戰持續移動 %s 秒後再次潛行（被偵查揭露則永久失去潛行）。範圍傷害仍可命中。" % number(CHARGE_RESET_TIME))
 		"corpse_giant": lines.append("生命每減少 %d%%（含死亡）就在原地爆出 %d 名骷髏兵；自身死亡仍會加速墓碑並觸發吞噬。" % [int(d.burst_step*100),int(d.burst_count)])
 		"curse": lines.append("範圍內所有部隊（含我方）受到永久詛咒；死亡時在原地變成我方骷髏兵。")
 		"catapult": lines.append("攻擊本路 %s～%s 內最遠敵方部隊、建築或城牆；每 %s 秒拋射，%s 秒後落地，對落點%s內敵方部隊、建築與城牆造成 %s 範圍傷害。落點不追蹤移動。" % [cells_text(d.min_range),cells_text(d.range),number(d.interval),number(d.flight_time),blast_text(d.blast),number(d.area_damage)])
@@ -1114,7 +1114,7 @@ static func expansion_description(d: Dictionary) -> Array[String]:
 	if not d.get("expansion",false): return lines
 	if d.get("ignore_armor",false): lines.append("攻擊無視護甲減傷。")
 	if d.get("lane_shooter",false): lines.append("僅直線射擊本路前方的敵軍，命中路徑上的第一個目標。")
-	if d.get("stealth",false): lines.append("登場時潛行，無法被敵方直接鎖定；脫戰持續移動 %s 秒後再次潛行（被偵查揭露則永久失去潛行）。" % number(CHARGE_RESET_TIME))
+	if d.get("stealth",false): lines.append("登場時潛行，敵方部隊與建築無法直接鎖定（領主看得見）；脫戰持續移動 %s 秒後再次潛行（被偵查揭露則永久失去潛行）。" % number(CHARGE_RESET_TIME))
 	if d.has("net_slow"): lines.append("命中使敵軍移速與攻速減半 %s 秒。" % number(d.net_slow))
 	if d.has("reveal_radius"): lines.append("揭露 %s 範圍內的潛行敵軍。" % number(d.reveal_radius))
 	if d.has("regen_amount"): lines.append("每 %s 秒恢復 %s 生命（脫戰持續移動 %s 秒後恢復量 ×1.5），不超過最大生命。" % [number(d.period),number(d.regen_amount),number(CHARGE_RESET_TIME)])
