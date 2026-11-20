@@ -95,23 +95,19 @@ static func absorb(_m, _target: Dictionary, amount: float, _source: Dictionary) 
 
 static func attack_damage(m, u: Dictionary, target: Dictionary, amount: float) -> float:
 	var d: Dictionary = B.CARDS[u.kind]
-	if d.has("charge_damage") and not u.get("charged",false) and not u.get("expansion_charged",false):
-		u.charged = true
-		u.expansion_charged = true
+	var own_charge: bool = d.get("charge",false) and not u.get("charged",false) and not u.get("expansion_charged",false)
+	if own_charge or u.get("granted_charge",false):
+		# One charge rule (2026-11-20): x CHARGE_MULT, knockback and a short stun, for every charger.
+		if own_charge:
+			u.charged = true
+			u.expansion_charged = true
+		else: u.granted_charge = false
 		u.march_time = 0.0
 		if target.has("spawn_delay"):
-			target.stun_left = maxf(target.get("stun_left",0.0),d.charge_stun)
-			m.knockback_unit(target,u.face*15.0)
+			target.stun_left = maxf(target.get("stun_left",0.0),B.CHARGE_STUN)
+			m.knockback_unit(target,u.face*B.CHARGE_KNOCKBACK)
 		if m.record_events: m.event("charge_impact",target.pos,u.team,{"radius":26.0,"face":1.0 if u.team == 0 else -1.0})
-		return d.charge_damage
-	if u.get("granted_charge",false):
-		u.granted_charge = false
-		u.march_time = 0.0
-		if target.has("spawn_delay"):
-			target.stun_left = maxf(target.get("stun_left",0.0),float(u.get("granted_charge_stun",0.5)))
-			m.knockback_unit(target,u.face*15.0)
-		if m.record_events: m.event("charge_impact",target.pos,u.team,{"radius":26.0,"face":1.0 if u.team == 0 else -1.0})
-		return amount*2.0
+		return amount*B.CHARGE_MULT
 	return amount
 
 static func on_death(m, dead: Dictionary) -> void:

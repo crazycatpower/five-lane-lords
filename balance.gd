@@ -90,11 +90,11 @@ const CARDS := {
 	# GOLD_MONSTER_STAGES gives every other amount (gold_monster.gd).
 	"gold_monster":{"name":"金幣怪物","role":"傾囊·成長","type":"unit","cost":1,"cooldown":15.0,"count":1,"hp":130.0,"damage":36.0,"interval":1.9,"range":59.0,"speed":36.0,"pay_all":true},
 	"gatebreaker":{"name":"破門錘手","role":"破門·攻城","type":"unit","cost":7,"cooldown":15.0,"count":1,"hp":560.0,"damage":95.0,"interval":1.4,"range":59.0,"speed":36.0,"expansion":true,"structure_mult":3.0,"attack_style":"heavy"},
-	"disgraced_lancer":{"name":"叛逃槍騎","faction":"normal","role":"衝刺·近戰","type":"unit","footprint":[1,2],"cost":12,"cooldown":15.0,"count":2,"hp":350.0,"damage":50.0,"interval":1.1,"range":118.0,"speed":65.0,"expansion":true,"charge_damage":130.0,"charge_stun":0.5},
+	"disgraced_lancer":{"name":"叛逃槍騎","faction":"normal","role":"衝刺·近戰","type":"unit","footprint":[1,2],"cost":12,"cooldown":15.0,"count":2,"hp":350.0,"damage":70.0,"interval":1.1,"range":118.0,"speed":65.0,"expansion":true,"charge":true},
 	"runaway_thrall":{"name":"逃亡血奴","faction":"dark","role":"弒主·騷擾","type":"unit","footprint":[2,3],"formation":"v_wide","cost":5,"cooldown":10.0,"count":3,"hp":130.0,"damage":36.0,"interval":0.85,"range":59.0,"speed":65.0,"expansion":true,"bonus_vs":{"dark":2.0}},
 	"renegade_artificer":{"name":"叛逃工匠","faction":"magic","role":"重拳·暈眩","type":"unit","cost":7,"cooldown":15.0,"count":1,"hp":350.0,"damage":140.0,"interval":1.4,"range":59.0,"speed":36.0,"expansion":true,"area_damage":140.0,"radius":37.0,"blast":"cell","stun_on_hit":0.5,"attack_style":"heavy"},
 	"oathless_imp":{"name":"無誓鬼","faction":"beast","role":"死撐·騷擾","type":"unit","cost":5,"cooldown":10.0,"count":2,"hp":350.0,"damage":50.0,"interval":0.85,"range":59.0,"speed":65.0,"expansion":true,"last_stand":true},
-	"assassin":{"name":"刺客","role":"潛行·衝鋒","type":"unit","cost":3,"cooldown":20.0,"count":1,"hp":130.0,"damage":95.0,"interval":0.85,"range":59.0,"speed":90.0,"expansion":true,"stealth":true,"hits":"units","charge_damage":180.0,"charge_stun":0.5},
+	"assassin":{"name":"刺客","role":"潛行·衝鋒","type":"unit","cost":3,"cooldown":20.0,"count":1,"hp":130.0,"damage":130.0,"interval":0.85,"range":59.0,"speed":90.0,"expansion":true,"stealth":true,"hits":"units","charge":true},
 	"vampire_hunter":{"name":"吸血鬼獵人","role":"獵殺·亡者","type":"unit","footprint":[2,1],"cost":14,"cooldown":10.0,"count":2,"hp":210.0,"damage":50.0,"interval":1.1,"range":354.0,"speed":36.0,"expansion":true,"projectile":true,"bonus_vs":{"dark":2.0},"attack_style":"bow"},
 	"old_witch":{"name":"老巫婆","role":"毒蝕·範圍","type":"unit","cost":4,"cooldown":10.0,"count":1,"hp":210.0,"damage":20.0,"area_damage":20.0,"radius":75.0,"blast":"cross","interval":1.9,"range":236.0,"speed":36.0,"expansion":true,"projectile":true,"dot_damage":20.0,"dot_interval":1.0,"dot_ticks":2,"attack_style":"cast","ai":["no_defend","hold"]},
 	"monster_hunter":{"name":"怪物獵人","role":"獵殺·魔物","type":"unit","cost":12,"cooldown":15.0,"count":2,"hp":350.0,"damage":70.0,"interval":1.1,"range":118.0,"speed":50.0,"expansion":true,"bonus_vs":{"beast":2.0}},
@@ -124,7 +124,7 @@ const CARDS := {
 	"sigil_weaver":{"name":"符印織師","role":"護盾·支援","faction":"magic","type":"unit","cost":5,"cooldown":10.0,"count":1,"hp":210.0,"damage":36.0,"interval":1.4,"range":295.0,"speed":36.0,"expansion":true,"projectile":true,"support":"shield","support_amount":70.0,"duration":4.0,"radius":100.0,"period":3.0,"attack_style":"cast"},
 	"astrolabe_surveyor":{"name":"星盤測繪師","role":"偵察·遠程","faction":"magic","type":"unit","cost":4,"cooldown":10.0,"count":1,"hp":210.0,"damage":36.0,"interval":1.4,"range":295.0,"speed":36.0,"expansion":true,"projectile":true,"reveal_radius":210.0,"attack_style":"cast"},
 	"bog_troll":{"name":"沼澤巨魔","role":"重裝·再生","faction":"beast","type":"unit","cost":15,"cooldown":25.0,"count":1,"hp":1500.0,"damage":95.0,"interval":1.4,"range":59.0,"speed":36.0,"body_radius":28.0,"expansion":true,"regen_amount":70.0,"period":2.4,"attack_style":"heavy"},
-	"tusk_boar":{"name":"獠牙野豬人","role":"衝鋒·破陣","faction":"beast","type":"unit","cost":9,"cooldown":15.0,"count":1,"hp":900.0,"damage":95.0,"interval":1.1,"range":0.0,"speed":65.0,"body_radius":22.0,"expansion":true,"charge_damage":180.0,"charge_stun":1.0,"attack_style":"ram"},
+	"tusk_boar":{"name":"獠牙野豬人","role":"衝鋒·破陣","faction":"beast","type":"unit","cost":9,"cooldown":15.0,"count":1,"hp":900.0,"damage":130.0,"interval":1.1,"range":0.0,"speed":65.0,"body_radius":22.0,"expansion":true,"charge":true,"attack_style":"ram"},
 	"granary":{"name":"糧倉","role":"儲備·經濟","faction":"normal","type":"building","cost":11,"cooldown":20.0,"hp":560.0,"expires":-1.0,"expansion":true,"ai":["defend_building"],"store_per_farm":1.0,"store_max":10.0},
 	"field_smithy":{"name":"野戰鐵匠鋪","role":"護甲·支援","faction":"normal","type":"building","cost":5,"cooldown":20.0,"hp":560.0,"expires":-1.0,"expansion":true,"ai":["defend_building"],"support":"armor","support_amount":26.0,"radius":150.0,"period":2.4,"duration":3.0},
 	"ossuary":{"name":"藏骨禮拜堂","role":"亡者·召集","faction":"dark","type":"building","cost":1,"cooldown":25.0,"hp":560.0,"expires":-1.0,"expansion":true,"ai":["defend_building"],"spawn_on_build":true,"spawn_kind":"skeleton","spawn_count":2,"period":15.0,"on_death_spawn":["skeleton",4]},
@@ -238,7 +238,7 @@ const CARDS := {
 	"rain":{"name":"箭雨","role":"清群法術","type":"spell","ai":["defend_spell","wave_spell"],"cost":3,"cooldown":5.0,"radius":100.0,"shape":[2,2],"damage":140.0,"building_damage":90.0,"gate_damage":90.0},
 	"tower":{"name":"箭樓","faction":"normal","role":"防守","type":"building","ai":["guard","defend_building","obstacle"],"cost":25,"cooldown":15.0,"hp":350.0,"expires":-1.0,"range":236.0,"damage":50.0,"interval":0.65,"reach":{"square":2,"cut_corners":true}},
 	"healer":{"name":"草藥婆","role":"支援·治療","faction":"normal","type":"unit","ai":["no_defend","hold"],"cost":7,"cooldown":10.0,"count":1,"hp":210.0,"damage":26.0,"interval":1.1,"range":236.0,"speed":36.0},
-	"ox":{"name":"耕牛","role":"衝鋒·拆建","faction":"normal","type":"unit","footprint":[1,2],"ai":["raid"],"cost":13,"cooldown":10.0,"count":2,"hp":350.0,"damage":50.0,"interval":1.9,"range":0.0,"speed":120.0},
+	"ox":{"name":"耕牛","role":"衝鋒·拆建","faction":"normal","type":"unit","charge":true,"footprint":[1,2],"ai":["raid"],"cost":13,"cooldown":10.0,"count":2,"hp":350.0,"damage":70.0,"interval":1.9,"range":0.0,"speed":120.0},
 	"fire":{"name":"火罐","role":"燒田法術","type":"spell","ai":["defend_spell","wave_spell","raid"],"cost":19,"cooldown":20.0,"radius":100.0,"shape":[2,2],"damage":370.0,"building_damage":600.0,"gate_damage":140.0},
 	"knight":{"name":"騎士","role":"主坦","faction":"normal","type":"unit","footprint":[1,2],"cost":18,"cooldown":25.0,"count":2,"hp":900.0,"damage":95.0,"interval":1.9,"range":59.0,"speed":27.0},
 	"guard":{"name":"聖堂護衛","role":"重裝軍團","faction":"normal","type":"unit","footprint":[2,2],"cost":26,"cooldown":30.0,"members":[["knight",2,0.0],["healer",2,50.0]],"art":["knight","healer"]},
@@ -335,7 +335,7 @@ const LORD_NEEDS := ["name","role","hp","damage","speed","skill","skill_desc"]
 
 # Everything wrong with the card and lord tables ([] = fine). quick_test.gd fails on any problem and
 # the game prints them at start, so a new card with a typo or a missing field is caught at once.
-const AUXILIARY_TIERS := {"repair_interval":"interval","repair_range":"range","repair_amount":"damage","regen_amount":"damage","support_amount":"damage","charge_damage":"damage","chew_heal":"damage","chew_period":"interval","bolt_damage":"damage","shield":"damage","devour_heal":"damage","reflect_damage":"damage"}
+const AUXILIARY_TIERS := {"repair_interval":"interval","repair_range":"range","repair_amount":"damage","regen_amount":"damage","support_amount":"damage","chew_heal":"damage","chew_period":"interval","bolt_damage":"damage","shield":"damage","devour_heal":"damage","reflect_damage":"damage"}
 
 static func validate() -> Array[String]:
 	var problems: Array[String] = []
@@ -403,7 +403,7 @@ static func validate() -> Array[String]:
 		# The description reads the fields above, so only build it once they are all present.
 		if problems.size() == before and card_description(kind).is_empty(): problems.append("%s: no description" % kind)
 	# Shared constants sit on the tier table too (moved here from the old smoke test, 2026-11-09).
-	for check: Array in [["HEAL_RADIUS","radius",HEAL_RADIUS],["LORD_RANGE","range",LORD_RANGE],["LORD_RANGED_RANGE_MED","range",LORD_RANGED_RANGE_MED],["LORD_RANGED_RANGE_FAR","range",LORD_RANGED_RANGE_FAR],["LORD_INTERVAL","interval",LORD_INTERVAL],["LORD_RANGED_INTERVAL","interval",LORD_RANGED_INTERVAL],["OX_SLOW_SPEED","speed",OX_SLOW_SPEED],["GATE_HP","hp",GATE_HP],["HEAL_AMOUNT","damage",HEAL_AMOUNT],["HEAL_INTERVAL","interval",HEAL_INTERVAL],["OX_CHARGE","damage",OX_CHARGE],["LION_KNIGHT_SPEED","speed",LION_KNIGHT_SPEED]]:
+	for check: Array in [["HEAL_RADIUS","radius",HEAL_RADIUS],["LORD_RANGE","range",LORD_RANGE],["LORD_RANGED_RANGE_MED","range",LORD_RANGED_RANGE_MED],["LORD_RANGED_RANGE_FAR","range",LORD_RANGED_RANGE_FAR],["LORD_INTERVAL","interval",LORD_INTERVAL],["LORD_RANGED_INTERVAL","interval",LORD_RANGED_INTERVAL],["GATE_HP","hp",GATE_HP],["HEAL_AMOUNT","damage",HEAL_AMOUNT],["HEAL_INTERVAL","interval",HEAL_INTERVAL],["LION_KNIGHT_SPEED","speed",LION_KNIGHT_SPEED]]:
 		if tier(check[1],check[2]).is_empty(): problems.append("%s %s is not a %s tier value" % [check[0],str(check[2]),check[1]])
 	for kind: String in LORDS:
 		for key: String in LORD_NEEDS:
@@ -940,10 +940,12 @@ const HARVEST_TIME := 15.0 # 豐收 doubles farms this long; no instant payout s
 const HEAL_RADIUS := 100.0 # radius tier C
 const HEAL_AMOUNT := 50.0
 const HEAL_INTERVAL := 2.4
-const OX_CHARGE := 180.0
-const OX_KNOCKBACK := 30.0
+# One charge rule for every charging troop (2026-11-20): the charge hit deals x CHARGE_MULT, knocks the
+# target back and stuns it briefly; the charge comes back after CHARGE_RESET_TIME s of marching.
+const CHARGE_MULT := 2.0
+const CHARGE_KNOCKBACK := 30.0
+const CHARGE_STUN := 0.5
 const OX_BUILDING_BONUS := 1.5
-const OX_SLOW_SPEED := 36.0
 const CHARGE_RESET_TIME := 3.0
 const FIRE_KNOCKBACK := 20.0
 
@@ -1101,7 +1103,7 @@ static func card_description(kind: String, cards: Dictionary = CARDS) -> String:
 		"scarecrow": lines.append("將周圍九宮格（本路與相鄰兩路、前後各一欄）內的敵兵吸引至同一路，敵兵會先換完行再優先攻擊稻草人（不會斜向攻擊），包括烏鴉。")
 		"harvest": lines.append("範圍內農田持續 %s 秒產出加倍（不會立刻產出）；與耕田、磨坊的加成相乘疊加。" % number(HARVEST_TIME))
 		"fire": lines.append("敵方部隊擊退 %s。" % number(FIRE_KNOCKBACK))
-		"ox": lines.append("首擊傷害 %s，擊退 %s；建築與城牆傷害 ×%s，衝鋒後移速 %s，脫戰持續移動 %s 秒後再次衝鋒。" % [number(OX_CHARGE),number(OX_KNOCKBACK),number(OX_BUILDING_BONUS),number(OX_SLOW_SPEED),number(CHARGE_RESET_TIME)])
+		"ox": lines.append("建築與城牆傷害 ×%s。" % number(OX_BUILDING_BONUS))
 		"healer", "guard": lines.append("草藥婆每 %s 秒為半徑 %s 內友軍部隊回復 %s 生命，並減輕 1 層毒蝕。" % [number(HEAL_INTERVAL),number(HEAL_RADIUS),number(HEAL_AMOUNT)])
 		"ram": lines.append("攻城槌只打建築、城牆與敵方領主，民兵在前護送；破門後拆完殘垣再前進。")
 		"hunter", "spearbow": lines.append("獵戶箭矢飛行 %s 秒，命中才扣血。" % number(ARROW_TIME))
@@ -1116,7 +1118,7 @@ static func expansion_description(d: Dictionary) -> Array[String]:
 	if d.has("net_slow"): lines.append("命中使敵軍移速與攻速減半 %s 秒。" % number(d.net_slow))
 	if d.has("reveal_radius"): lines.append("揭露 %s 範圍內的潛行敵軍。" % number(d.reveal_radius))
 	if d.has("regen_amount"): lines.append("每 %s 秒恢復 %s 生命（脫戰持續移動 %s 秒後恢復量 ×1.5），不超過最大生命。" % [number(d.period),number(d.regen_amount),number(CHARGE_RESET_TIME)])
-	if d.has("charge_damage"): lines.append("衝鋒時移速升一檔，首次攻擊改為 %s 傷害並暈眩部隊 %s 秒；脫戰持續移動 %s 秒後再次衝鋒。" % [number(d.charge_damage),number(d.charge_stun),number(CHARGE_RESET_TIME)])
+	if d.get("charge",false): lines.append("衝鋒：衝鋒時移速升一檔，衝鋒一擊造成 ×%s 傷害並擊退、暈眩 %s 秒；脫戰持續移動 %s 秒後再次衝鋒。" % [number(CHARGE_MULT),number(CHARGE_STUN),number(CHARGE_RESET_TIME)])
 	if d.has("income"): lines.append("每 %s 秒產出 %s 金幣。" % [number(d.period),number(d.income)])
 	if d.has("store_per_farm") and d.has("store_max"): lines.append("每當己方農田產出時累積 %s 金幣；累積滿 %s 金幣或死亡時放出。" % [number(d.store_per_farm),number(d.store_max)])
 	if d.has("spawn_kind") and d.has("period"):
@@ -1192,7 +1194,7 @@ static func expansion_description(d: Dictionary) -> Array[String]:
 		if d.has("duration") and not d.has("tick_damage") and not d.has("support"): lines.append("複製範圍內最強友軍 1 名，幻影存在 %s 秒。" % number(d.duration))
 		if d.has("hp_cost_share"): lines.append("消耗範圍內友軍 %d%% 當前生命，使攻擊傷害升一檔（最高 S），並獲得 6 秒移速與攻速升檔及 25%% 吸血。" % int(d.hp_cost_share*100))
 		if d.get("strip_defences",false): lines.append("清除敵軍護盾與護甲、對非機械敵軍疊加 1 層毒蝕（每秒 20 傷害，持續 2 秒，可無限疊加），並以酸雨直接傷害敵方建築。")
-		if d.get("grant_charge",false): lines.append("賦予範圍內我方部隊衝鋒，立即獲得衝鋒移速加成；下次攻擊造成雙倍傷害（既有衝鋒者立刻重置並強化下次衝鋒）並暈眩目標 %s 秒。" % number(d.get("charge_stun",0.5)))
+		if d.get("grant_charge",false): lines.append("賦予範圍內我方部隊衝鋒，立即獲得衝鋒移速加成；下次攻擊造成 ×%s 傷害並擊退、暈眩 %s 秒（既有衝鋒者立刻重置衝鋒）。" % [number(CHARGE_MULT),number(CHARGE_STUN)])
 		if d.has("ambush_spawn"): lines.append("並在本路我方領地最前端放出 %d 隻%s。" % [int(d.ambush_spawn[1]),CARDS[d.ambush_spawn[0]].name])
 		if d.has("maw_targets"): lines.append("咬住範圍內生命最高的 %d 名敵方地面部隊，各造成 %s 傷害。" % [int(d.maw_targets),number(d.maw_damage)])
 		if d.has("execute_hp"): lines.append("直接吞殺最多 %d 名生命 ≤ %s 的敵方地面部隊（每名得 %s 金幣），並對其餘敵軍造成 %s 傷害。" % [int(d.execute_max),number(d.execute_hp),number(d.execute_gold),number(d.get("enemy_damage",140.0))])

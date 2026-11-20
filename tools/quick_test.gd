@@ -147,14 +147,14 @@ func combat_checks() -> void:
 	var cb := quiet(31)
 	var ox_u := cb.spawn_unit(0, 2, "ox", Vector2(300, 420))
 	var dummy := cb.spawn_unit(1, 2, "militia", Vector2(330, 420))
-	var fresh: bool = not ox_u.charged and is_equal_approx(cb.movement_speed(ox_u), 120.0)
+	var fresh: bool = not ox_u.charged and cb.movement_speed(ox_u) > float(B.CARDS.ox.speed) # charging runs one tier faster
 	cb.attack(ox_u, dummy)
-	var struck: bool = ox_u.charged and dummy.hp <= 0 and is_equal_approx(cb.movement_speed(ox_u), B.OX_SLOW_SPEED)
+	var struck: bool = ox_u.charged and dummy.hp <= 0 and is_equal_approx(cb.movement_speed(ox_u), float(B.CARDS.ox.speed)) # x2 hit, back to normal pace
 	cb.remove_dead()
 	for i: int in range(120): cb.step(1.0 / 60.0)
 	var held: bool = ox_u.charged
 	for i: int in range(65): cb.step(1.0 / 60.0)
-	check(fresh and struck and held and not ox_u.charged, "ox charges, strikes, and recharges only after 3 s of marching")
+	check(fresh and struck and held and not ox_u.charged, "a charger (ox) runs faster, hits x2, and recharges only after 3 s of marching")
 
 	# Stealth: attacking breaks it, marching restores it, a watchtower reveals for good.
 	var sb := quiet(32)

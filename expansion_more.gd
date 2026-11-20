@@ -149,16 +149,16 @@ static func modify_attack(m, u: Dictionary, target: Dictionary, amount: float) -
 
 static func gate_amount(m, u: Dictionary, amount: float) -> float:
 	var d: Dictionary = B.CARDS[u.kind]
-	if d.has("charge_damage") and not u.get("charged",false) and not u.get("expansion_charged",false):
+	if d.get("charge",false) and not u.get("charged",false) and not u.get("expansion_charged",false):
 		u.charged = true
 		u.expansion_charged = true
 		u.march_time = 0.0
-		amount = d.charge_damage
+		amount *= B.CHARGE_MULT
 		if m.record_events: m.event("charge_impact",Vector2(L.gate_stop(1-u.team),u.pos.y),u.team,{"radius":26.0,"face":u.face})
 	elif u.get("granted_charge",false):
 		u.granted_charge = false
 		u.march_time = 0.0
-		amount *= 2.0
+		amount *= B.CHARGE_MULT
 		if m.record_events: m.event("charge_impact",Vector2(L.gate_stop(1-u.team),u.pos.y),u.team,{"radius":26.0,"face":u.face})
 	if d.has("damage_roll"): amount = m.rng.randf_range(B.tier_value("damage",d.damage_roll[0]),B.tier_value("damage",d.damage_roll[1]))
 	return amount*d.get("structure_mult",1.0)
@@ -428,7 +428,7 @@ static func cast_effects(m, s: Dictionary, d: Dictionary, lane: int, rect: Rect2
 				u.charged = false
 				u.expansion_charged = false
 				u.march_time = 0.0
-				if u.kind != "ox" and not B.CARDS[u.kind].has("charge_damage"):
+				if not B.CARDS[u.kind].get("charge",false):
 					u.granted_charge = true
 					u.granted_charge_stun = float(d.get("charge_stun",0.5))
 			if d.get("upgrade_hp",false):

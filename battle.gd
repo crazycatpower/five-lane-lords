@@ -1262,14 +1262,7 @@ func _execute_unit_strike(u: Dictionary, target: Dictionary, data: Dictionary) -
 	u.march_time = 0.0
 	u.strike_seq = u.get("strike_seq",0)+1
 	var amount: float = ExpansionMore.modify_attack(self,u,target,Expansion.attack_damage(self,u,target,u.get("damage",data.damage)))
-	if u.kind == "ox":
-		if not u.charged:
-			amount = B.OX_CHARGE
-			u.charged = true
-			u.expansion_charged = true
-			if not target.has("cell"): knockback_unit(target,u.face*B.OX_KNOCKBACK)
-			event("charge_impact",target.pos,u.team,{"radius":26.0,"face":u.face})
-		if target.has("cell"): amount *= B.OX_BUILDING_BONUS
+	if u.kind == "ox" and target.has("cell"): amount *= B.OX_BUILDING_BONUS # 耕牛 tears down buildings; its charge is the common one
 	if ExpansionMore.attack(self,u,target,data): return
 	if data.has("stun_on_hit"): Arcane.area_hit(self,u,target.pos)
 	elif data.get("pierce",false): Arcane.shoot_piercing_arrow(self,u,target)
@@ -1575,10 +1568,10 @@ func catapult_target(b: Dictionary) -> Dictionary:
 # Buff the actual marching speed (including a legion's formation or a slowed ox), once only.
 func movement_speed(u: Dictionary) -> float:
 	var data: Dictionary = B.CARDS[u.kind]
-	var base: float = B.OX_SLOW_SPEED if u.kind == "ox" and u.charged else u.get("march",u.get("speed",data.speed))
+	var base: float = u.get("march",u.get("speed",data.speed))
 	var steps := buff_steps(u)
 	u.inspired = steps > 0
-	var charge_step := 1 if ((data.has("charge_damage") and not u.get("charged",false) and not u.get("expansion_charged",false)) or u.get("granted_charge",false)) else 0
+	var charge_step := 1 if ((data.get("charge",false) and not u.get("charged",false) and not u.get("expansion_charged",false)) or u.get("granted_charge",false)) else 0
 	var total_steps := steps+charge_step
 	if total_steps > 0:
 		var index: int = B.TIERS.speed.find(base)
@@ -1940,7 +1933,7 @@ func advance_march_timers(u: Dictionary, data: Dictionary, spd: float, dt: float
 	if spd > 0.0:
 		u.march_time = u.get("march_time",0.0)+dt
 		if u.march_time >= B.CHARGE_RESET_TIME:
-			if (u.kind == "ox" or data.has("charge_damage")) and (u.get("charged",false) or u.get("expansion_charged",false)):
+			if data.get("charge",false) and (u.get("charged",false) or u.get("expansion_charged",false)):
 				u.charged = false
 				u.expansion_charged = false
 				event("charge_ready",u.pos,u.team,{"face":u.face})
@@ -1961,12 +1954,7 @@ func _execute_gate_strike(u: Dictionary, data: Dictionary, enemy: int) -> void:
 		return
 	if ExpansionMore.gate_attack(self,u,data,enemy): return
 	var amount: float = ExpansionMore.gate_amount(self,u,u.get("damage",data.damage))
-	if u.kind == "ox":
-		var was_charging: bool = not u.charged
-		amount = (B.OX_CHARGE if was_charging else data.damage)*B.OX_BUILDING_BONUS
-		u.charged = true
-		u.expansion_charged = true
-		if was_charging: event("charge_impact",Vector2(L.gate_stop(enemy),u.pos.y),u.team,{"radius":26.0,"face":u.face})
+	if u.kind == "ox": amount *= B.OX_BUILDING_BONUS
 	hit_gate(enemy,u.lane,amount,u.get("card",u.kind),u)
 	if data.get("splash","") == "column": column_slash(u,{"pos":Vector2(L.gate_stop(enemy),u.pos.y)},amount)
 

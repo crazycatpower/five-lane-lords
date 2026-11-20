@@ -1675,7 +1675,7 @@ func draw_unit(u: Dictionary) -> void:
 		for i: int in range(4):
 			var rp := pos+Vector2(0,16)+Vector2.from_angle(i*PI*0.5+PI*0.25)*(ring_r-2.0)
 			draw_line(rp,rp+Vector2(0,6),Color("3d2c3e",0.85),2.0)
-	if ((u.kind == "ox" or B.CARDS[u.kind].has("charge_damage")) and not u.get("charged",false) and not u.get("expansion_charged",false)) or u.get("granted_charge",false):
+	if (B.CARDS[u.kind].get("charge",false) and not u.get("charged",false) and not u.get("expansion_charged",false)) or u.get("granted_charge",false):
 		var c_dir: float = u.face
 		var c_col := Color("eb6b34",0.82)
 		draw_line(pos-Vector2(c_dir*18,14),pos-Vector2(c_dir*36,14),c_col,2.2)

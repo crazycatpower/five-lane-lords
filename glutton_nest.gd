@@ -139,8 +139,8 @@ static func draw_body(g, b: Dictionary, pos: Vector2, rect: Rect2, texture: Stri
 
 static func unit_building_damage(u: Dictionary, ud: Dictionary, first_hit: bool = false) -> float:
 	var dmg: float = u.get("damage",ud.get("damage",0.0))
-	if u.kind == "ox":
-		dmg = (B.OX_CHARGE if (first_hit and not u.get("charged",false)) else dmg)*B.OX_BUILDING_BONUS
+	if ud.get("charge",false) and first_hit and not u.get("charged",false): dmg *= B.CHARGE_MULT
+	if u.kind == "ox": dmg *= B.OX_BUILDING_BONUS
 	return dmg*ud.get("structure_mult",1.0)
 
 static func safe_coverage(s: Dictionary) -> Dictionary:
