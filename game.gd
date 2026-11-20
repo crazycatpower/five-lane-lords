@@ -153,7 +153,7 @@ var result_age := 0.0 # seconds since the match ended (the result panel and its 
 var result_seen: RefCounted # the model whose ending has been announced
 var intro_left := 0.0 # seconds left of the "who fights whom" banner at the start of a battle
 const INTRO_TIME := 2.4
-const VERSION := "0.2.0"
+const VERSION := "0.3.0"
 var hover_slot := -1
 var dragging := false
 var press_pos := Vector2.ZERO
