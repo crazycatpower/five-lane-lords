@@ -322,7 +322,7 @@ const CARD_OVERRIDES := {
 	"charge_horn": ["加速"],
 	"war_lodge": ["加速"],
 	"levy": ["召喚","加速"],
-	"assassin": ["潛行","獵殺"],
+	"assassin": ["潛行","衝鋒"],
 	"bandit": ["潛行","人海"],
 	"phase_rider": ["潛行","相位"],
 	"watchtower": ["偵查"],

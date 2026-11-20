@@ -94,7 +94,7 @@ const CARDS := {
 	"runaway_thrall":{"name":"逃亡血奴","faction":"dark","role":"弒主·騷擾","type":"unit","footprint":[2,3],"formation":"v_wide","cost":5,"cooldown":10.0,"count":3,"hp":130.0,"damage":36.0,"interval":0.85,"range":59.0,"speed":65.0,"expansion":true,"bonus_vs":{"dark":2.0}},
 	"renegade_artificer":{"name":"叛逃工匠","faction":"magic","role":"重拳·暈眩","type":"unit","cost":7,"cooldown":15.0,"count":1,"hp":350.0,"damage":140.0,"interval":1.4,"range":59.0,"speed":36.0,"expansion":true,"area_damage":140.0,"radius":37.0,"blast":"cell","stun_on_hit":0.5,"attack_style":"heavy"},
 	"oathless_imp":{"name":"無誓鬼","faction":"beast","role":"死撐·騷擾","type":"unit","cost":5,"cooldown":10.0,"count":2,"hp":350.0,"damage":50.0,"interval":0.85,"range":59.0,"speed":65.0,"expansion":true,"last_stand":true},
-	"assassin":{"name":"刺客","role":"潛行·刺王","type":"unit","cost":3,"cooldown":20.0,"count":1,"hp":130.0,"damage":95.0,"interval":0.85,"range":59.0,"speed":90.0,"expansion":true,"stealth":true,"bonus_vs":{"lord":3.0}},
+	"assassin":{"name":"刺客","role":"潛行·衝鋒","type":"unit","cost":3,"cooldown":20.0,"count":1,"hp":130.0,"damage":95.0,"interval":0.85,"range":59.0,"speed":90.0,"expansion":true,"stealth":true,"hits":"units","charge_damage":180.0,"charge_stun":0.5},
 	"vampire_hunter":{"name":"吸血鬼獵人","role":"獵殺·亡者","type":"unit","footprint":[2,1],"cost":14,"cooldown":10.0,"count":2,"hp":210.0,"damage":50.0,"interval":1.1,"range":354.0,"speed":36.0,"expansion":true,"projectile":true,"bonus_vs":{"dark":2.0},"attack_style":"bow"},
 	"old_witch":{"name":"老巫婆","role":"毒蝕·範圍","type":"unit","cost":4,"cooldown":10.0,"count":1,"hp":210.0,"damage":20.0,"area_damage":20.0,"radius":75.0,"blast":"cross","interval":1.9,"range":236.0,"speed":36.0,"expansion":true,"projectile":true,"dot_damage":20.0,"dot_interval":1.0,"dot_ticks":2,"attack_style":"cast","ai":["no_defend","hold"]},
 	"monster_hunter":{"name":"怪物獵人","role":"獵殺·魔物","type":"unit","cost":12,"cooldown":15.0,"count":2,"hp":350.0,"damage":70.0,"interval":1.1,"range":118.0,"speed":50.0,"expansion":true,"bonus_vs":{"beast":2.0}},
@@ -249,6 +249,7 @@ const CARDS := {
 # Behaviour fields a card may carry (read by battle.gd; a new card only needs the fields):
 #   "projectile": true            attacks fire an arrow (flight time ARROW_TIME) instead of hitting at once
 #   "hits": "buildings"           ignores troops; only attacks buildings, gates, and enemy lords
+#   "hits": "units"               ignores buildings; attacks troops, lords and gates (刺客 2026-11-20)
 #   "prefers": "farm"             walks to and attacks enemy farms in its lane first
 #   "target_rule": "lowest_serial" attacks the lowest serial in reach instead of the nearest
 #   "splash": "column"            each hit also strikes every enemy troop in the target's column,
@@ -327,7 +328,7 @@ static func has_tag(kind: String, tag: String) -> bool:
 const CARD_TYPES := ["unit","building","spell"]
 # Area effects use the "area_damage" tiers (a spell's "damage" too); troops use "damage".
 const AREA_DAMAGE_KEYS := ["damage","building_damage","gate_damage","tick_damage","explosion_damage","enemy_damage"]
-const BEHAVIOUR_VALUES := {"hits":["buildings"],"prefers":["farm"],"target_rule":["lowest_serial"],"splash":["column"]}
+const BEHAVIOUR_VALUES := {"hits":["buildings","units"],"prefers":["farm"],"target_rule":["lowest_serial"],"splash":["column"]}
 const AI_TAGS := ["defend_spell","wave_spell","raid","guard","defend_building","obstacle","no_defend","hold"]
 const NEEDS := {"unit":["count","hp","damage","interval","range","speed"],"building":["hp","expires"],"spell":["radius"]}
 const LORD_NEEDS := ["name","role","hp","damage","speed","skill","skill_desc"]
@@ -1159,6 +1160,7 @@ static func expansion_description(d: Dictionary) -> Array[String]:
 		lines.append("每 %s 秒對 %s 範圍施加%s%s%s；同類加成不疊加。" % [number(d.period),number(d.radius),effect,(" %s 點" % number(d.support_amount)) if d.has("support_amount") else "",("，持續 %s 秒" % number(d.duration)) if d.has("duration") else ""])
 	if d.has("thorns"): lines.append("每次被近戰攻擊時反傷攻擊者 %s 點。" % number(d.thorns))
 	if d.get("patrol",false): lines.append("在本路己方領地巡邏守衛。")
+	if d.get("hits","") == "units": lines.append("不攻擊建築（城牆除外），只打部隊、領主與城牆。")
 	if d.has("ward_share"): lines.append("結界：身邊 %s 範圍內的友軍受到傷害時，%d%% 改由最近的結界護衛承受。" % [number(d.ward_radius),int(d.ward_share*100)])
 	if d.get("construct",false): lines.append("構裝：工匠會優先修補，且免疫毒蝕。")
 	if d.has("blast"): lines.append("爆炸範圍：%s。" % blast_text(String(d.blast)))

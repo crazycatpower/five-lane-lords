@@ -1880,6 +1880,7 @@ func _choose_target_with_taunt(u: Dictionary, data: Dictionary, taunt: Dictionar
 	var can_fly: bool = data.range > B.MELEE_RANGE
 	var target: Dictionary = {} if data.get("hits","") == "buildings" else (_nearest_three_lane_lanes(u,data.range,foe_lanes,can_fly,-sr) if three_lane else _nearest_dir(u.pos,u.team,data.range,foe_lanes[u.lane],can_fly,sr,u.face,0.0))
 	var building := _nearest_three_lane_lanes(u,data.range,bld_lanes,true,-sr) if three_lane else _nearest_dir(u.pos,u.team,data.range,bld_lanes[u.lane],true,sr,u.face,0.0)
+	if data.get("hits","") == "units": building = {} # 刺客: walks past buildings, still strikes troops, lords and the gate
 	if data.get("prefers","") == "farm":
 		var farm := _nearest_dir(u.pos,u.team,INF,bld_lanes[u.lane],true,sr,u.face,-data.range,"farm")
 		if not farm.is_empty():
