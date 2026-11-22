@@ -38,6 +38,13 @@ class MockCinematicHost extends RefCounted:
 	func view_mirror() -> Transform2D:
 		return Transform2D.IDENTITY
 
+# Just enough of game.gd for tutorial_coach.gd: the battle, the selected card and the intro banner.
+class MockCoachHost extends RefCounted:
+	var model = null
+	var selected := -1
+	var intro_left := 0.0
+	var adventure = null
+
 # A quiet battlefield: no AI, no lords, optionally no starting buildings.
 func quiet(seed_value: int, lord_a := "lion", lord_b := "lion", clear_buildings := true) -> Battle:
 	var m := Battle.new(seed_value, [], [], lord_a, lord_b)
@@ -68,15 +75,97 @@ func run() -> void:
 		print("QUICK PASS: %d checks, 0 failures" % checks)
 		quit(0)
 
+# Adventure as tutorial (2026-11-21): lesson 1-1 played by following its prompts must keep the enemy wall
+# warded until the "break the wall" step, reach the last step and win; difficulties change the enemy
+# (簡單 income x0.75, 困難 AI 2, 極難 passives); a stage's new card is put into the player's deck.
+# Returns "" when all is well, otherwise what went wrong.
+func tutorial_lesson_ok() -> String:
+	var adv = preload("res://adventure.gd").new()
+	adv.progress_path = "user://quick_test_adventure_unused.json"
+	var host := MockCoachHost.new()
+	host.adventure = adv
+	adv.index = 0
+	var d: Dictionary = adv.STAGES[0]
+	host.model = adv.make_battle(0, d.deck.duplicate(), "adventure")
+	adv.coach.begin(host, d)
+	var m: Battle = host.model
+	var full: float = m.gates[1][2]
+	var ward_broke := false
+	var t := 0
+	while not m.ended and t < 60 * 90:
+		m.step(1.0 / 60.0)
+		m.events.clear()
+		adv.coach.update(host)
+		if adv.coach.warded() and m.gates[1][2] < full: ward_broke = true
+		if t % 30 == 0:
+			if adv.coach.step == 0: host.selected = 0
+			else:
+				host.selected = -1
+				m.play(0, 0, L.cell_center(Vector2i(1, 2)))
+		t += 1
+	if ward_broke: return "ward let the wall take damage"
+	if not (m.ended and m.winner == 0): return "lesson 1-1 not won (step %d)" % adv.coach.step
+	if adv.coach.step != adv.coach.steps.size() - 1: return "lesson 1-1 ended on step %d" % adv.coach.step
+	adv.difficulty = 0
+	var easy: Battle = adv.make_battle(10, B.DEFAULT_DECK, "lion")
+	if not is_equal_approx(float(easy.lord_mod(1, "gold_gain_mult", 1.0)), 0.75): return "簡單 does not cut enemy income"
+	adv.difficulty = 2
+	if adv.make_battle(10, B.DEFAULT_DECK, "lion").difficulty != 2: return "困難 does not force the hard AI"
+	adv.difficulty = 3
+	if adv.difficulty_passives(10).size() != 1 or adv.difficulty_passives(19).size() != 2: return "極難 passives: one per stage, two on exams"
+	adv.difficulty = 1
+	if not adv.difficulty_passives(10).is_empty(): return "普通 must add no passives"
+	adv.lord = "adventure"
+	var fed: Array = adv.with_featured(["militia","hunter","farmer","barricade","scarecrow","tower","rain","mob"], 10)
+	if not "macebreaker" in fed or not DS.valid(fed, "adventure") or not "farmer" in fed: return "stage 2-1 did not put 釘錘破甲兵 into the deck: %s" % str(fed)
+	return ""
+
 # ---------------- data and determinism (9) ----------------
 func data_checks() -> void:
 	var problems := B.validate()
 	check(problems.is_empty(), "balance.gd validate: " + str(problems))
 	var rogue_errors := preload("res://roguelike_catalog.gd").validate()
+	rogue_errors.append_array(preload("res://rogue_terrain.gd").validate()) # every foe has a battlefield
 	check(rogue_errors.is_empty(), "roguelike data: " + str(rogue_errors))
 	var catalog = preload("res://campaign_catalog.gd")
 	var campaign_errors: Array[String] = catalog.validate()
-	check(campaign_errors.is_empty(), "campaign data: " + str(campaign_errors))
+	var cb := Battle.new(91, ["barricade", "militia", "farmer", "hunter", "rain", "healer", "tower", "ox"], B.DEFAULT_DECK, "adventure", "card_enemy_barricade")
+	cb.ai_enabled = [false, false]
+	cb.apply_field_mutator({"wind_lanes": [1], "blocked_cells": [[0, 2]]}, 1)
+	var u_wind := ready_unit(cb, 0, 1, "militia", L.cell_center(Vector2i(1, 1)))
+	cb.decks[0][0] = "barricade"
+	cb.ink[0] = 20.0
+	var block_ok := cb.play_check(0, 0, L.cell_center(Vector2i(0, 2))) == Battle.Refusal.BLOCKED
+	var u_against := ready_unit(cb, 1, 1, "militia", L.cell_center(Vector2i(7, 1)))
+	var wind_ok := is_equal_approx(cb.movement_speed(u_wind), 65.0) and is_equal_approx(cb.movement_speed(u_against), 50.0) # wind blows one way only
+	cb.apply_campaign_mods(0, {"start_ink": 5.0, "farm_mult": 1.25, "gate_armor": 0.2})
+	cb.apply_campaign_mods(1, {"start_ink": 6.0})
+	var mods_ok: bool = is_equal_approx(cb.ink[0], 25.0) and is_equal_approx(float(cb.lord_mod(0, "farm_mult", 1.0)), 1.25) and is_equal_approx(float(cb.lord_mod(0, "gate_armor", 0.0)), 0.2) and not (cb.lord_mod(1, "start_buildings", []) as Array).is_empty()
+	cb.survive_time = 10.0
+	cb.elapsed = 9.5
+	cb.step(0.6)
+	var survive_ok := cb.ended and cb.winner == 0
+	var stage_list: Array = catalog.stages()
+	var special_ok: bool = stage_list.size() == 50
+	for si: int in range(stage_list.size()):
+		var sd: Dictionary = stage_list[si]
+		if bool(sd.get("special", false)) != (si % 10 == 4 or si % 10 == 9): special_ok = false
+	var single := Battle.new(92, ["farmer", "hunter", "militia", "farmer", "hunter", "militia", "rain", "barricade"], B.DEFAULT_DECK, "adventure", "iron")
+	single.ai_enabled = [false, false]
+	single.lord_active = [false, false]
+	single.buildings = single.buildings.filter(func(b: Dictionary) -> bool: return b.team == 0)
+	single.set_active_lanes([2])
+	single.decks[0][0] = "hunter"
+	single.hand_cd[0][0] = 0.0
+	single.ink[0] = 50.0
+	var single_farms_ok: bool = single.count_buildings(0, "farm") == 2 and single.buildings.all(func(b: Dictionary) -> bool: return b.cell.y == 2)
+	var hunter_ok: bool = single.play_check(0, 0, L.cell_center(Vector2i(1, 2))) == Battle.Refusal.OK and single.play(0, 0, L.cell_center(Vector2i(1, 2))) and single.units.filter(func(u: Dictionary) -> bool: return u.kind == "hunter" and u.lane == 2).size() == 3
+	single.units.clear()
+	single.decks[0][0] = "spearbow"
+	single.hand_cd[0][0] = 0.0
+	var spear_ok: bool = single.play_check(0, 0, L.cell_center(Vector2i(0, 2))) == Battle.Refusal.FOOTPRINT and single.play(0, 0, L.cell_center(Vector2i(1, 2))) and single.units.filter(func(u: Dictionary) -> bool: return u.kind == "militia" and u.lane == 2 and preload("res://grid_rules.gd").cell_of(u.pos).x == 1).size() == 4 and single.units.filter(func(u: Dictionary) -> bool: return u.kind == "archer" and u.lane == 2 and preload("res://grid_rules.gd").cell_of(u.pos).x == 0).size() == 2
+	var lesson_ok := tutorial_lesson_ok()
+	check(campaign_errors.is_empty() and special_ok and block_ok and wind_ok and mods_ok and survive_ok and single_farms_ok and hunter_ok and spear_ok and lesson_ok.is_empty(), "campaign data and mechanics: " + str(campaign_errors) + " spec=%s block=%s wind=%s mods=%s surv=%s 1lane=%s/%s/%s lesson=%s" % [special_ok, block_ok, wind_ok, mods_ok, survive_ok, single_farms_ok, hunter_ok, spear_ok, lesson_ok])
 	var obtainable := {}
 	for k: String in catalog.STARTER_CARDS: obtainable[k] = true
 	for stage: Dictionary in catalog.stages():
@@ -167,12 +256,20 @@ func combat_checks() -> void:
 	var broke: bool = not bandit.stealthed
 	for i: int in range(185): sb.step(1.0 / 60.0)
 	var restealthed: bool = bandit.stealthed
+	# While hidden it takes no troop, building or lord damage; spells still hit (使用者 2026-11-22).
+	var hp_before: float = bandit.hp
+	sb.damage(bandit, 50.0, 1, "militia")
+	sb.damage(bandit, 50.0, 1, "lord")
+	var stealth_immune: bool = is_equal_approx(bandit.hp, hp_before)
+	sb.damage(bandit, 10.0, 1, "rain")
+	var spell_hits: bool = bandit.hp < hp_before
+	bandit.hp = hp_before
 	var tower := sb.add_building(1, Vector2i(3, 2), "watchtower")
 	bandit.pos = tower.pos - Vector2(40, 0)
 	sb.step(1.0 / 60.0)
 	sb.buildings.clear()
 	for i: int in range(185): sb.step(1.0 / 60.0)
-	check(hidden_at_start and broke and restealthed and bandit.revealed and not bandit.stealthed, "stealth breaks on attack, returns after marching, and a watchtower reveals it for good")
+	check(hidden_at_start and broke and restealthed and stealth_immune and spell_hits and bandit.revealed and not bandit.stealthed, "stealth breaks on attack, returns after marching, only spells hurt it while hidden, and a watchtower reveals it for good (immune=%s spell=%s)" % [stealth_immune, spell_hits])
 
 	# Poison stacking, immunity for buildings and mechanical units, and healing; armor keeps a 1-damage floor.
 	var pb := quiet(33)
@@ -369,7 +466,7 @@ func combat_checks() -> void:
 	var back_refused: bool = fp.play_check(0, 0, L.cell_center(Vector2i(0, 2))) == Battle.Refusal.FOOTPRINT
 	fp.play(0, 0, L.cell_center(Vector2i(1, 2)))
 	var front: Array = fp.units.filter(func(u: Dictionary) -> bool: return u.kind == "militia" and Grid.cell_of(u.pos).x == 1)
-	var rear: Array = fp.units.filter(func(u: Dictionary) -> bool: return u.kind == "hunter" and Grid.cell_of(u.pos).x == 0)
+	var rear: Array = fp.units.filter(func(u: Dictionary) -> bool: return u.kind == "archer" and Grid.cell_of(u.pos).x == 0)
 	fp.units.clear()
 	fp.decks[0][0] = "necromancer"
 	fp.hand_cd[0][0] = 0.0
@@ -429,9 +526,12 @@ func combat_checks() -> void:
 	var aside := g.spawn_unit(1, 2, "knight", L.cell_center(Vector2i(6, 2)))
 	preload("res://expansion_more.gd").cast(g, {"kind": "mana_drain", "team": 0, "pos": L.cell_center(Vector2i(4, 2))})
 	var inside := g.spawn_unit(1, 2, "militia", L.cell_center(Vector2i(3, 2)))
+	var inside_top := g.spawn_unit(1, 1, "militia", L.cell_center(Vector2i(3, 1)))
+	var inside_bot := g.spawn_unit(1, 3, "militia", L.cell_center(Vector2i(4, 3)))
 	var far := g.spawn_unit(1, 0, "militia", L.cell_center(Vector2i(3, 0)))
+	var far_east := g.spawn_unit(1, 2, "militia", L.cell_center(Vector2i(5, 2)))
 	g.cast_spell({"kind": "rain", "team": 0, "pos": inside.pos})
-	check(top.hp < top.max_hp and bottom.hp < bottom.max_hp and aside.hp == aside.max_hp and inside.hp < inside.max_hp and far.hp == far.max_hp, "1x5 and 2x2 spells hit exactly their tiles")
+	check(top.hp < top.max_hp and bottom.hp < bottom.max_hp and aside.hp == aside.max_hp and inside.hp < inside.max_hp and inside_top.hp < inside_top.max_hp and inside_bot.hp < inside_bot.max_hp and far.hp == far.max_hp and far_east.hp == far_east.max_hp, "1x5 and 2x3 spells hit exactly their tiles")
 
 # ---------------- lords (6) ----------------
 func lord_checks() -> void:
@@ -462,7 +562,26 @@ func lord_checks() -> void:
 	ready_unit(ms, 0, 1, "militia", L.cell_center(Vector2i(6, 1)))
 	var planned: bool = EnemyAI.skill_plan(ms.skill_state(1)).cast
 	var before: int = ms.units.size()
-	check(planned and ms.cast_skill(1) and ms.units.size() > before and is_equal_approx(ms.skill_cd[1], B.MINION_SKILL_COOLDOWN), "AI plans a minion lord skill, which summons troops and starts its cooldown")
+	var minion_meta_ok := B.lord_name("card_enemy_rolling_boulder") == "巨石"
+	for mk: String in B.MINION_LORDS:
+		var mname: String = B.MINION_LORDS[mk].name
+		if B.passive_text(B.MINION_LORDS[mk]).is_empty() or "主人" in mname or "飼主" in mname or "首領" in mname or "領主" in mname:
+			minion_meta_ok = false
+	var gm := Battle.new(52, B.DEFAULT_DECK, B.DEFAULT_DECK, "lion", "card_enemy_gold_monster")
+	gm.ai_enabled = [false, false]
+	gm.skill_cd[1] = 0.0
+	gm.skill_charge[1] = gm.skill_need(1)
+	var gm_ok := gm.cast_skill(1) and gm.units.any(func(u: Dictionary) -> bool: return u.team == 1 and u.kind == "gold_monster" and int(u.get("gold_paid", 0)) == 16)
+	var sa := Battle.new(53, B.DEFAULT_DECK, B.DEFAULT_DECK, "lion", "card_enemy_seal_altar")
+	sa.ai_enabled = [false, false]
+	var altars_before := sa.buildings.filter(func(b: Dictionary) -> bool: return b.hp > 0 and b.team == 1 and b.kind == "seal_altar")
+	var souls_before: float = float(altars_before[0].get("souls", 0.0)) if altars_before.size() == 1 else -1.0
+	sa.skill_cd[1] = 0.0
+	sa.skill_charge[1] = sa.skill_need(1)
+	var sa_cast := sa.cast_skill(1)
+	var altars_after := sa.buildings.filter(func(b: Dictionary) -> bool: return b.hp > 0 and b.team == 1 and b.kind == "seal_altar")
+	var sa_ok := altars_before.size() == 1 and sa_cast and altars_after.size() == 1 and is_equal_approx(float(altars_after[0].get("souls", 0.0)), souls_before + 4.0)
+	check(planned and ms.cast_skill(1) and ms.units.size() > before and is_equal_approx(ms.skill_cd[1], B.MINION_SKILL_COOLDOWN) and minion_meta_ok and gm_ok and sa_ok, "AI plans a minion lord skill, minion lord names/passives/gold_monster/seal_altar skills behave properly (meta=%s gm=%s sa=%s)" % [minion_meta_ok, gm_ok, sa_ok])
 	var pack := Battle.new(21, [], [], "beast", "beast")
 	pack.record_events = false
 	pack.ink[0] = B.MAX_INK

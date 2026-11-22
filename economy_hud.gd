@@ -1,10 +1,9 @@
 extends RefCounted
 const B = preload("res://balance.gd")
-static func draw(g) -> void:
+# The plate itself is drawn by battle_hud.gd; pop (0..1) swells the count right after gold comes in.
+static func draw(g, pop: float = 0.0) -> void:
 	var m = g.model
 	var muted := Color("5a5040")
-	# A parchment plate under the purse and its text, so the stone joints never run through letters.
-	g.panel(PLATE,Color(0.92,0.86,0.72,0.92),Color("8a6f4a"))
 	# No help or notice text here any more (producer 2026-11-03): the panel is the purse.
 	var focus: int = g.selected if g.selected >= 0 else g.hover_slot
 	var need: float = preload("res://gold_monster.gd").need(m.kind_at(g.me,focus),m.ink[g.me]) if focus >= 0 and not g.spectating else 0.0
@@ -12,8 +11,9 @@ static func draw(g) -> void:
 	draw_purse(g,m.ink[g.me],need,m.get_instance_id(),g.purse_alarm,m.ink[g.me] >= B.MAX_INK-0.01)
 	var home: String = m.home_cards[g.me]
 	g.label_at(Vector2(232,756),"金幣",18,muted)
-	g.label_at(Vector2(230,806),str(int(m.ink[g.me])),50,g.INK)
-	g.label_at(Vector2(232+g.font.get_string_size(str(int(m.ink[g.me])),HORIZONTAL_ALIGNMENT_LEFT,-1,50).x+6,805),"/ %d" % B.MAX_INK,20,muted)
+	var big := 50+int(round(pop*10.0))
+	g.label_at(Vector2(230,806),str(int(m.ink[g.me])),big,g.INK.lerp(Color("b8862b"),pop))
+	g.label_at(Vector2(232+g.font.get_string_size(str(int(m.ink[g.me])),HORIZONTAL_ALIGNMENT_LEFT,-1,big).x+6,805),"/ %d" % B.MAX_INK,20,muted)
 	g.draw_line(Vector2(232,818),Vector2(388,818),Color("b69b6f"),1)
 	g.label_at(Vector2(232,842),"每秒 +%.1f" % m.production_rate(g.me),18,muted)
 	g.label_at(Vector2(232,866),"%s %d" % [B.CARDS[home].name,m.count_buildings(g.me,home)],18,muted)

@@ -129,6 +129,64 @@ func apply_ui_fade(g) -> void:
 		if c.get_meta("polish_skip_fade", false):
 			continue
 		c.modulate.a = float(c.get_meta("polish_base_a", 1.0)) * a
+	for c: Control in g.ui:
+		if is_instance_valid(c) and c is Button: restyle_button(c)
+
+# Menu pages rise a little into place as they open (2026-11-21); controls are children of the game
+# node, so they ride along with the drawing. Battle stays put.
+func page_offset(g) -> float:
+	if not g.is_processing() or DisplayServer.get_name() == "headless": return 0.0
+	return (1.0 - ease_out(screen_enter_t)) * 18.0
+
+# Every visible button becomes a slanted plate with a pressed lower edge and a drop shadow, pops a
+# little under the mouse and dips when pressed. Invisible overlay buttons are left alone.
+func restyle_button(b: Button) -> void:
+	if b.has_meta("ui_styled"):
+		return
+	b.set_meta("ui_styled", true)
+	# An invisible hit area (clear when idle, only a soft glow on hover) over a card or a banner stays square
+	# and still: slanting its glow left crooked boxes over the cards (使用者 2026-11-22：好多虛框都是歪斜的).
+	if b.has_theme_stylebox_override("normal"):
+		var idle: StyleBox = b.get_theme_stylebox("normal")
+		if not (idle is StyleBoxFlat) or (idle as StyleBoxFlat).bg_color.a < 0.05:
+			return
+	var visible_box := false
+	for state: String in ["normal", "hover", "pressed", "disabled"]:
+		if not b.has_theme_stylebox_override(state):
+			continue
+		var sb: StyleBox = b.get_theme_stylebox(state)
+		if not (sb is StyleBoxFlat) or (sb as StyleBoxFlat).bg_color.a < 0.05:
+			continue
+		var s: StyleBoxFlat = sb.duplicate()
+		visible_box = true
+		s.skew = Vector2(0.12, 0.0)
+		s.anti_aliasing = true
+		s.set_corner_radius_all(3)
+		s.shadow_color = Color(0.12, 0.08, 0.04, 0.0 if state == "disabled" else 0.26)
+		s.shadow_size = 1
+		s.shadow_offset = Vector2(2, 2) if state == "pressed" else Vector2(3, 5)
+		var edge: Color = s.border_color
+		if state == "pressed":
+			s.border_width_bottom = 2
+			s.content_margin_top = 4
+		elif state != "disabled":
+			s.border_width_bottom = maxi(s.border_width_bottom, 4)
+			s.border_color = edge
+		b.add_theme_stylebox_override(state, s)
+	if not visible_box or not b.is_inside_tree():
+		return
+	b.pivot_offset = b.size * 0.5
+	b.mouse_entered.connect(func(): pop(b, 1.05))
+	b.mouse_exited.connect(func(): pop(b, 1.0))
+	b.button_down.connect(func(): pop(b, 0.95))
+	b.button_up.connect(func(): pop(b, 1.05 if b.is_hovered() else 1.0))
+
+static func pop(b: Button, to: float) -> void:
+	if not is_instance_valid(b) or (b.disabled and to > 1.0):
+		return
+	b.pivot_offset = b.size * 0.5
+	var tw := b.create_tween()
+	tw.tween_property(b, "scale", Vector2(to, to), 0.14).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 func get_pause_fade(g) -> float:
 	if g.model == null or g.model.ended:
@@ -319,8 +377,10 @@ func gate_flash(team: int, lane: int) -> float:
 static func draw_card_hover_glow(g, rect: Rect2, strength: float, accent: Color = Color("d8b25c")) -> void:
 	if strength <= 0.01:
 		return
+	for k: int in range(4): # a soft warm halo behind the lifted card
+		g.draw_rect(rect.grow(3.0 + k * 3.0), Color(1.0, 0.86, 0.45, 0.12 * strength * (1.0 - k / 4.0)))
+	g.draw_rect(Rect2(rect.position + Vector2(3, 8 + 4 * strength), rect.size), Color(0.12, 0.08, 0.04, 0.25 * strength))
 	g.draw_rect(rect.grow(2.5), Color(accent, 0.72 * strength), false, 2.5)
-	g.draw_rect(rect.grow(5.5), Color(1.0, 0.94, 0.74, 0.25 * strength), false, 2.0)
 
 static func draw_ready_sheen(g, rect: Rect2, left: float) -> void:
 	if left <= 0.0:

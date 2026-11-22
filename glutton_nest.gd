@@ -148,8 +148,8 @@ static func safe_coverage(s: Dictionary) -> Dictionary:
 	var forward := 1.0 if team == 0 else -1.0
 	var d: Dictionary = B.CARDS.glutton_nest
 	var covered := {}
-	var bait_lanes := [false,false,false,false,false]
-	var bait_pos := [INF,INF,INF,INF,INF]
+	var bait_lanes := L.per_lane(false)
+	var bait_pos := L.per_lane(INF)
 	var has_armed_nest := false
 	for b: Dictionary in s.buildings:
 		if b.hp > 0 and b.team == team and b.kind == "glutton_nest" and (hidden(b) or b.get("nest_windup",0.0) > 0.0):

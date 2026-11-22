@@ -11,7 +11,7 @@ static func style(kind: String) -> String:
 	if d.has("attack_style"): return d.attack_style
 	match kind:
 		"axe_thrower", "funeral_grenadier", "beekeeper", "web_spinner": return "throw"
-		"hunter", "arcane_archer", "vampire_hunter", "arquebusier", "shroud_arbalist", "net_hunter", "orrery_walker", "ballista_tower": return "bow"
+		"hunter", "archer", "arcane_archer", "vampire_hunter", "arquebusier", "shroud_arbalist", "net_hunter", "orrery_walker", "ballista_tower": return "bow"
 		"tower": return "tower"
 		"lord_rune", "arcane_tower", "chronomancer", "plague_bishop", "spell_tide_magus", "prism_mage", "old_witch", "sigil_weaver", "bellbearer", "astrolabe_surveyor", "seal_bearer", "mourning_maid", "corpse_stitcher", "blood_attendant", "artificer", "renegade_artificer": return "cast"
 		"catapult", "dog_cannon": return "siege"

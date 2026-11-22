@@ -4,20 +4,38 @@ const VIEWPORT_SIZE := Vector2(1600, 900)
 const HUD_HEIGHT := 90.0
 const COMMAND_TOP := 700.0
 const GRID_ORIGIN := Vector2(269, 104)
-const CELL_SIZE := Vector2(118, 116)
 const GRID_COLUMNS := 9
-const GRID_ROWS := 5
 const DEPLOY_COLUMNS := 3
-const GRID_SIZE := CELL_SIZE * Vector2(GRID_COLUMNS, GRID_ROWS)
 const GATE_OFFSET := 20.0
 const LORD_START := Vector2(690, 394)
 const LORD_MIN := GRID_ORIGIN + Vector2(3, 4)
-const LORD_MAX := GRID_ORIGIN + GRID_SIZE - Vector2(3, 12)
+# The field is five lanes; adventure stages may use six (使用者 2026-11-21). The field keeps its height,
+# so six lanes are shorter. Per-lane arrays are sized MAX_ROWS so either fits. Only Battle sets the rows
+# (pending_rows, read once by Battle._init), so a five-lane match never inherits a six-lane layout.
+const MAX_ROWS := 6
+const FIELD_HEIGHT := 580.0
+static var GRID_ROWS := 5
+static var CELL_SIZE := Vector2(118, 116)
+static var GRID_SIZE := CELL_SIZE * Vector2(GRID_COLUMNS, GRID_ROWS)
+static var LORD_MAX := GRID_ORIGIN + GRID_SIZE - Vector2(3, 12)
+static var pending_rows := 5
+
+static func set_rows(rows: int) -> void:
+	GRID_ROWS = clampi(rows, 1, MAX_ROWS)
+	CELL_SIZE = Vector2(118, FIELD_HEIGHT / GRID_ROWS)
+	GRID_SIZE = CELL_SIZE * Vector2(GRID_COLUMNS, GRID_ROWS)
+	LORD_MAX = GRID_ORIGIN + GRID_SIZE - Vector2(3, 12)
+
+# One value per lane of the current field (arrays are copied, so lanes never share one).
+static func per_lane(value: Variant) -> Array:
+	var out: Array = []
+	for i: int in range(GRID_ROWS): out.append(value.duplicate() if value is Array else value)
+	return out
 const CARD_Y := 730.0
 const CARD_SIZE := Vector2(145, 202)
 const CARD_SCALE := Vector2(0.8, 0.8)
 const CARD_X := [500.0, 650.0, 800.0]
-const PAUSE_RECT := Rect2(866, 28, 48, 48)
+const PAUSE_RECT := Rect2(852, 24, 56, 56) # wax seal right of the dial (battle_hud.gd)
 const RESTART_RECT := Rect2(1450, 28, 90, 36)
 const PAGE_FRAME := Rect2(13, 13, 1574, 874)
 const FIELD_FRAME := Rect2(25, 96, 1550, 596)

@@ -5,6 +5,9 @@ const B = preload("res://balance.gd")
 const Battle = preload("res://battle.gd")
 const Catalog = preload("res://roguelike_catalog.gd")
 const Upgrades = preload("res://card_upgrades.gd")
+const L = preload("res://layout.gd")
+const Season = preload("res://season.gd")
+const Board = preload("res://rogue_board_ui.gd") # 命運牌陣與戰前簡報的畫面
 
 var run: Dictionary = {} # active run state; empty = no run
 var best := 0 # most battles won in one run
@@ -23,6 +26,14 @@ var camp_card_index := 0
 var camp_stat := ""
 var shop_stats: Dictionary = {} # kind -> chosen stat key in shop
 var confirm_abandon := false
+# 命運牌陣的旗幟動畫（rogue_board_ui.gd）：正在被斬的那面旗、各旗降下的時間，以及我方牌組面板。
+var slash_index := -1
+var slash_at := 0.0
+var slash_pending: Dictionary = {} # {"index", "slot"}: the banner we went into, cut once we are back on the board
+var slash_slot: Dictionary = {} # the old banner being cut right now
+var banner_sig: Array = []
+var banner_born: Array = []
+var deck_open := false
 var save_notice := ""
 var save_path := "user://roguelike.json"
 
@@ -162,6 +173,7 @@ func save_failed() -> bool:
 func begin(lord: String, seed_value: int = -1, contract_level: int = -1) -> void:
 	if not B.LORDS.has(lord): return
 	confirm_abandon = false
+	slash_pending = {}
 	if seed_value < 0: seed_value = randi() % 1000000
 	var c_lv := clampi(contract_level if contract_level >= 0 else pending_contract,0,Catalog.CONTRACTS.size()-1)
 	run = {
@@ -700,7 +712,9 @@ func lord_max_hp() -> float:
 
 func record_wounds(m) -> void:
 	if run.is_empty(): return
-	run.gates = m.gates[0].duplicate()
+	var walls: Array = m.gates[0].duplicate()
+	while walls.size() < 5: walls.append(B.GATE_HP)
+	run.gates = walls.slice(0,5) # the run keeps five walls; a six-lane field's extra wall is left behind
 	var lord: Dictionary = m.lords[0] if not m.lords.is_empty() else {}
 	run.lord_hp = maxf(1.0,lord.hp) if not lord.is_empty() and lord.hp > 0 else lord_max_hp()*Catalog.FALLEN_LORD_SHARE
 	var post: Dictionary = Catalog.side_mods(run.lord,run.relics).get("post_heal",{})
@@ -908,10 +922,18 @@ func buy_relic(relic: String) -> void:
 
 func abandon() -> void:
 	run = {}
+	slash_pending = {}
 	phase = "lord"
 	save_progress()
 
 # ---- battles ------------------------------------------------------------------------------------
+
+# The battle the selected slot leads to, with its rules already capped (rogue_terrain.plan).
+func battle_plan() -> Dictionary:
+	if run.is_empty() or is_boss(): return {}
+	var slot := active_slot()
+	var kind: String = "elite" if bool(run.get("elite",false)) else "battle"
+	return Catalog.Terrain.plan(foe(),kind,Catalog.mutator_data(slot))
 
 func battle_floor_number() -> int:
 	if run.is_empty(): return 1
@@ -920,10 +942,14 @@ func battle_floor_number() -> int:
 func make_battle() -> Battle:
 	var enemy := foe()
 	run.last_battle_floor = run.floor
+	var ground: Dictionary = battle_plan() # 這個怪的戰場：路數、季節、地形與招牌機制（已依規則上限刪減）
+	L.pending_rows = int(ground.get("rows",5))
 	var m := Battle.new(run.seed+run.floor*7919,run.deck.duplicate(),Catalog.foe_deck(enemy),run.lord,enemy)
 	m.apply_domestic(0,B.home_card(run.lord),Catalog.side_mods(run.lord,run.relics))
 	m.card_upgrades[0] = run.upgrades.duplicate(true)
-	m.gates[0] = run.get("gates",m.gates[0]).duplicate()
+	var carried: Array = run.get("gates",m.gates[0]).duplicate()
+	while carried.size() < m.gates[0].size(): carried.append(B.GATE_HP) # a sixth lane brings a fresh wall
+	m.gates[0] = carried.slice(0,m.gates[0].size())
 	m.lords[0].hp = minf(m.lords[0].max_hp,run.get("lord_hp",m.lords[0].max_hp))
 	m.refresh_territory()
 	var boss := is_boss()
@@ -959,12 +985,20 @@ func make_battle() -> Battle:
 	var mut := Catalog.mutator_data(active_slot())
 	if mut.has("mods"):
 		enemy_mods = Catalog.merge_mods(enemy_mods,mut.mods)
+	var elite_mod: Array = Catalog.Terrain.elite_trait(enemy) if bool(run.get("elite",false)) else []
+	if not elite_mod.is_empty():
+		enemy_mods = Catalog.merge_mods(enemy_mods,elite_mod[2]) # 精英特性
+		m.ink[1] = minf(B.MAX_INK,m.ink[1]+float(elite_mod[3]))
 	if not enemy_mods.is_empty():
 		m.team_mods[1] = enemy_mods
 	if not mut.is_empty():
 		m.apply_field_mutator(mut)
 	m.ai_enabled = [false,true]
 	m.night_decay = false
+	if not ground.is_empty():
+		m.set_active_lanes(ground.lanes)
+		Season.apply(m,String(ground.season),bool(ground.season_rule))
+		m.apply_field_mutator(ground.mutator)
 	return m
 
 func start_battle(game) -> void:
@@ -978,6 +1012,8 @@ func start_battle(game) -> void:
 	var scale_tag: String = (" · 敵軍金幣／冷卻 ×%.2f" % enemy_scale) if enemy_scale > 1.0 else ""
 	var mut := Catalog.mutator_data(active_slot())
 	var mut_tag: String = (" · 【%s】%s" % [mut.name,mut.desc]) if not mut.is_empty() else ""
+	var plan := battle_plan()
+	if not plan.is_empty(): mut_tag = " · 戰場：%s · 規則：%s" % [String(plan.name),"、".join(plan.rules.map(func(rule: Array) -> String: return String(rule[0])))]
 	game.enter_battle("肉鴿 第 %d / %d 場（%s）· 對手：%s%s%s" % [run.floor+1,Catalog.FLOORS,c_name,B.lord_name(foe()),scale_tag,mut_tag])
 
 func update(game) -> void:
@@ -1029,28 +1065,31 @@ func show(game) -> void:
 			game.title_button(Rect2(1180,800,300,56),"出發征討",func(): begin(pending_lord,pending_seed,pending_contract); show(game),true)
 			game.title_button(Rect2(100,820,230,46),"重選領主",func(): phase = "lord"; show(game))
 		"map":
+			if deck_open:
+				for i: int in range(run.deck.size()):
+					var tile := hit(game,Board.deck_tile(i),func(): pass)
+					tile.tooltip_text = desc(run.deck[i])
+				game.title_button(Rect2(680,640,240,50),"收起牌組",func(): deck_open = false; show(game),true)
+				game.queue_redraw()
+				return
 			for i: int in range(4):
 				var idx := i
-				var r := board_slot_rect(i)
-				var b := hit(game,r,func():
-					if int(run.get("selected_node",0)) == idx:
-						trigger_node(game)
-						if not in_battle: show(game)
+				var b := hit(game,Board.banner_rect(i),func():
+					if slash_index >= 0: return
+					if int(run.get("selected_node",0)) == idx: cut_banner(game)
 					else:
 						select_node(idx)
 						show(game))
-				b.tooltip_text = slot_tooltip(run.board[i])+"\n（點選查看詳情，再點一次或按右下按鈕立即執行）"
+				b.tooltip_text = slot_tooltip(run.board[i])
 			var sel := active_slot()
-			var act_label := "出戰：%s" % B.lord_name(foe()) if sel.get("kind","") in ["battle","elite","boss"] else "進入：%s" % slot_title(sel)
-			game.title_button(Rect2(1180,800,320,56),act_label,func():
-				trigger_node(game)
-				if not in_battle: show(game),true)
+			game.title_button(Rect2(1220,808,290,52),"出征：%s" % (B.lord_name(foe()) if sel.get("kind","") in ["battle","elite","boss"] else slot_title(sel)),func(): cut_banner(game),true)
+			game.title_button(Rect2(1010,808,190,46),"我的牌組",func(): deck_open = true; show(game))
 			var rw_err := board_reroll_error()
-			var rw_btn: Button = game.title_button(Rect2(360,808,240,46),("斥候換陣（%d 金）" % Catalog.BOARD_REROLL_PRICE) if rw_err.is_empty() else rw_err,func(): reroll_board(); show(game))
+			var rw_btn: Button = game.title_button(Rect2(345,808,215,46),("斥候換陣（%d 金）" % Catalog.BOARD_REROLL_PRICE) if rw_err.is_empty() else rw_err,func(): reroll_board(); show(game))
 			rw_btn.disabled = not rw_err.is_empty()
 			rw_btn.tooltip_text = "花費 %d 金幣刷新全部 4 個遭遇選項，並為新戰鬥附加 +25 懸賞金" % Catalog.BOARD_REROLL_PRICE
-			game.title_button(Rect2(620,808,250,46),"軍需商店（%d 金）" % run.gold,func(): open_shop(); show(game))
-			game.title_button(Rect2(890,808,260,46),"確定放棄這輪？" if confirm_abandon else "放棄這輪",func():
+			game.title_button(Rect2(575,808,215,46),"軍需商店（%d 金）" % run.gold,func(): open_shop(); show(game))
+			game.title_button(Rect2(805,808,190,46),"確定放棄？" if confirm_abandon else "放棄這輪",func():
 				if confirm_abandon: abandon()
 				else: confirm_abandon = true
 				show(game))
@@ -1072,15 +1111,15 @@ func show(game) -> void:
 			var forge_name: String = B.CARDS[target_kind].name
 			var forge_st: String = Upgrades.NAMES.get(camp_stat if camp_stat in opts else (opts[0] if not opts.is_empty() else ""),"隨機")
 			if is_camp_phase:
-				game.title_button(Rect2(830,330,630,90),"【休整築牆】城牆修復 45% 缺失血量 · 領主回復 50% 生命",func(): camp_action(0); show(game))
+				option_button(game,Rect2(830,330,630,90),"【休整築牆】城牆修復 45% 缺失血量 · 領主回復 50% 生命",func(): camp_action(0); show(game))
 				var camp_label := "【名匠鍛造】免費強化「%s」的【%s】+1 階" % [forge_name,forge_st] if (targeted and not opts.is_empty()) else "【名匠鍛造】免費隨機強化「%s」一項屬性 +1 階" % forge_name
-				game.title_button(Rect2(830,450,630,90),camp_label,func(): camp_action(1); show(game),true)
-				game.title_button(Rect2(830,570,630,90),"【軍資徵集】獲得 120 金幣，並隨機強化 1 張卡牌 +1",func(): camp_action(2); show(game))
+				option_button(game,Rect2(830,450,630,90),camp_label,func(): camp_action(1); show(game),true)
+				option_button(game,Rect2(830,570,630,90),"【軍資徵集】獲得 120 金幣，並隨機強化 1 張卡牌 +1",func(): camp_action(2); show(game))
 			else:
-				game.title_button(Rect2(830,330,630,90),"【開啟聖物匣】免費獲得 1 件未持有的遺物",func(): shrine_action(0); show(game),true)
+				option_button(game,Rect2(830,330,630,90),"【開啟聖物匣】免費獲得 1 件未持有的遺物",func(): shrine_action(0); show(game),true)
 				var shrine_label := "【精煉主力】強化「%s」的【%s】+1 階，並獲得 70 金幣" % [forge_name,forge_st] if (targeted and not opts.is_empty()) else "【精煉主力】隨機強化「%s」一項屬性 +1 階，並獲得 70 金幣" % forge_name
-				game.title_button(Rect2(830,450,630,90),shrine_label,func(): shrine_action(1); show(game))
-				game.title_button(Rect2(830,570,630,90),"【鮮血奉獻】領主損耗 25% 生命，換取 200 金幣與隨機 1 卡 +1",func(): shrine_action(2); show(game))
+				option_button(game,Rect2(830,450,630,90),shrine_label,func(): shrine_action(1); show(game))
+				option_button(game,Rect2(830,570,630,90),"【鮮血奉獻】領主損耗 25% 生命，換取 200 金幣與隨機 1 卡 +1",func(): shrine_action(2); show(game))
 		"event":
 			var ev_id: String = active_slot().get("event_id","wandering_smith")
 			var ev: Dictionary = Catalog.EVENTS.get(ev_id,Catalog.EVENTS.wandering_smith)
@@ -1163,17 +1202,6 @@ func show(game) -> void:
 	game.title_button(Rect2(350,820,230,46) if current == "confirm" else Rect2(100,808,230,46),"返回標題",game.show_title)
 	if current == "confirm":
 		deck_tooltips(game,Catalog.starter_deck(pending_lord,pending_seed),Vector2(860,300))
-	if current == "map":
-		var sel := active_slot()
-		if sel.get("kind","") in ["battle","elite","boss"]:
-			deck_tooltips(game,Catalog.foe_deck(foe()),Vector2(1010,352))
-		deck_tooltips(game,run.deck,Vector2(1010,574))
-		var r_tip_lines: Array[String] = []
-		for rk: String in run.get("relics",[]):
-			var rd: Dictionary = Catalog.RELICS[rk]
-			r_tip_lines.append("【%s】%s" % [rd.name,B.passive_text(rd.mods)])
-		var r_hit := hit(game,Rect2(883,704,124,80),func(): pass)
-		r_hit.tooltip_text = "\n".join(r_tip_lines) if not r_tip_lines.is_empty() else "尚未持有遺物（可於商店購買或自精英／古祠取得）"
 	game.queue_redraw()
 
 # ---- descriptions & layout helpers --------------------------------------------------------------
@@ -1210,10 +1238,8 @@ func slot_tooltip(slot: Dictionary) -> String:
 	var k: String = slot.get("kind","battle")
 	if k in ["battle","elite","boss"]:
 		var f: String = slot.get("foe",foe())
-		var rule: String = ("被動："+B.minion_text(f)) if B.is_minion(f) else B.skill_text(f)
-		var mut := Catalog.mutator_data(slot)
-		var m_line := ("\n戰場異變【%s】：%s" % [String(mut.name),String(mut.desc)]) if not mut.is_empty() else ""
-		return "%s\n%s\n%s%s" % [slot_title(slot),slot_subtitle(slot),rule,m_line]
+		var lines: Array = Board.battle_lines(self,slot).map(func(l: Array) -> String: return "・%s：%s" % [String(l[0]),String(l[1])])
+		return "%s\n%s\n%s" % [slot_title(slot),slot_subtitle(slot),"\n".join(lines)]
 	if k == "event":
 		var ev_id: String = slot.get("event_id","wandering_smith")
 		var ev: Dictionary = Catalog.EVENTS.get(ev_id,Catalog.EVENTS.wandering_smith)
@@ -1244,6 +1270,21 @@ func desc(kind: String) -> String:
 	if Upgrades.level(bonus_ups) > 0:
 		text += "\n獲得時附帶 +%d：%s" % [Upgrades.level(bonus_ups),Upgrades.text(bonus_ups)]
 	return text
+
+# Enter the chosen banner at once; the banner is cut down only when we come back to the board
+# (使用者 2026-11-22：先進入旗幟中，出來才劃掉). rogue_board_ui.paint_map plays the cut, then the new banner drops in.
+func option_button(game, rect: Rect2, caption: String, action: Callable, primary: bool = false) -> Button:
+	var b: Button = game.title_button(rect,caption,action,primary)
+	b.add_theme_font_size_override("font_size",19 if caption.length() > 22 else 21)
+	b.clip_text = true
+	return b
+
+func cut_banner(game) -> void:
+	if slash_index >= 0 or run.is_empty() or run.get("board",[]).is_empty(): return
+	var idx := int(run.get("selected_node",0))
+	slash_pending = {"index":idx,"slot":run.board[idx].duplicate(true)}
+	trigger_node(game)
+	if not in_battle: show(game)
 
 func deck_tooltips(game, cards: Array, origin: Vector2) -> void:
 	for i: int in range(cards.size()):
@@ -1278,9 +1319,6 @@ func shop_kinds() -> Array:
 		if not k in kinds: kinds.append(k)
 	return kinds
 
-func board_slot_rect(i: int) -> Rect2:
-	return Rect2(85+(i%2)*385,250+(i/2)*250,370,232)
-
 func upgrade_rect(i: int) -> Rect2:
 	return Rect2(90+(i%4)*190,215+(i/4)*270,175,255)
 
@@ -1308,7 +1346,7 @@ func paint(g) -> void:
 	match current:
 		"lord": paint_lords(g)
 		"confirm": paint_confirm(g)
-		"map": paint_map(g)
+		"map": Board.paint_map(g,self)
 		"camp": paint_camp(g)
 		"shrine": paint_shrine(g)
 		"event": paint_event(g)
@@ -1364,124 +1402,8 @@ func mini_deck(g, cards: Array, origin: Vector2, rows: int = 2, ups: Dictionary 
 		var lv: int = Upgrades.level(ups.get(cards[i],{}))
 		if lv > 0: g.draw_string(g.font,cell.position+Vector2(6,18),"+%d" % lv,HORIZONTAL_ALIGNMENT_LEFT,-1,16,g.RED)
 
-func paint_floors(g, y: float) -> void:
-	for i: int in range(Catalog.FLOORS):
-		var p := Vector2(440+i*105,y)
-		var done: bool = i < run.floor or (i == run.floor and run.phase == "won")
-		if i == run.floor and run.phase in ["map","camp","shrine","event","lost"]: g.draw_circle(p,29,Color("d2ad58",0.9))
-		g.draw_circle(p,23,g.RED if done else (Color("6f5a3e") if i == Catalog.FLOORS-1 else Color("a89a80")))
-		g.draw_arc(p,23,0,TAU,36,Color(g.INK,0.85),2.2,true)
-		g.draw_string(g.font,p+Vector2(-24,8),"魔王" if i == Catalog.FLOORS-1 else str(i+1),HORIZONTAL_ALIGNMENT_CENTER,48,17 if i == Catalog.FLOORS-1 else 20,Color("fff0ca"))
-		if i < Catalog.FLOORS-1: g.ink_line(p+Vector2(25,0),p+Vector2(80,0),i,Color(g.INK,0.5),2.0)
-
-func paint_status_strip(g) -> void:
-	var c_name: String = Catalog.CONTRACTS[clampi(int(run.get("contract",0)),0,Catalog.CONTRACTS.size()-1)].name
-	var strip := "第 %d / %d 層（%s） · 金幣 %d · %s · 本層剩餘支援行動：%d 次" % [run.floor+1,Catalog.FLOORS,c_name,run.gold,wounds_text(),int(run.get("march_steps",2))]
-	g.label_at(Vector2(90,192),strip,17,g.RED)
-	if not str(run.get("board_notice","")).is_empty():
-		g.label_at(Vector2(90,218),"牌陣動態："+str(run.board_notice),16,Color("6f5a3e"))
-
-func paint_map(g) -> void:
-	paint_floors(g,142)
-	paint_status_strip(g)
-	# Left: 4-slot Encounter Board (2x2 cards)
-	for i: int in range(4):
-		var slot: Dictionary = run.board[i]
-		var r := board_slot_rect(i)
-		var selected: bool = (i == int(run.get("selected_node",0)))
-		var k: String = slot.get("kind","battle")
-		var bg := Color("f6ead0")
-		var header_col := Color("6f5a3e")
-		var badge := "一般遭遇"
-		match k:
-			"boss":
-				bg = Color("f4dfcf")
-				header_col = g.RED
-				badge = "最終魔王決戰"
-			"elite":
-				bg = Color("f5e1cf")
-				header_col = g.RED
-				badge = "精英討伐 · 掉遺物"
-			"battle":
-				bg = Color("f6ead0")
-				header_col = Color("5a4632")
-				badge = "一般遭遇戰"
-			"camp":
-				bg = Color("f7ebd2")
-				header_col = Color("b5592a")
-				badge = "戰地營火 · 休整鍛造"
-			"shrine":
-				bg = Color("e9ead8")
-				header_col = Color("355b78")
-				badge = "秘寶古祠 · 聖物精煉"
-			"event":
-				bg = Color("ece6cf")
-				header_col = Color("4b6043")
-				badge = "手抄本奇遇 · 抉擇"
-		g.panel(r,bg,g.RED if selected else g.INK)
-		if selected:
-			g.draw_rect(r.grow(-4),Color("d2ad58"),false,3.5)
-		g.draw_rect(Rect2(r.position+Vector2(4,4),Vector2(r.size.x-8,34)),Color(header_col,0.9))
-		g.draw_string(g.font,r.position+Vector2(14,28),"【%d】%s" % [i+1,badge],HORIZONTAL_ALIGNMENT_LEFT,-1,17,Color("fff0ca"))
-		if int(slot.get("bounty",0)) > 0:
-			g.draw_string(g.font,r.position+Vector2(r.size.x-135,28),"懸賞 +%d金" % int(slot.bounty),HORIZONTAL_ALIGNMENT_RIGHT,125,16,Color("ffd97d"))
-		var art_rect := Rect2(r.position+Vector2(16,48),Vector2(105,115))
-		if k in ["battle","elite","boss"]:
-			var f_id: String = slot.get("foe",foe())
-			g.draw_fitted(g.lord_art(f_id,1),art_rect,Color.WHITE,true)
-			g.label_at(r.position+Vector2(132,76),B.lord_name(f_id),23,g.INK)
-			var ai_lv := clampi(Catalog.AI_LEVEL[run.floor]+int(Catalog.CONTRACTS[clampi(int(run.get("contract",0)),0,Catalog.CONTRACTS.size()-1)].get("ai_boost",0)),0,2)
-			g.label_at(r.position+Vector2(132,104),"%s · AI %s" % [B.lord_data(f_id).role,["簡單","普通","困難"][ai_lv]],15,Color("6f5a3e"))
-			var rule: String = (B.minion_text(f_id)+"\n"+B.skill_text(f_id)) if B.is_minion(f_id) else B.LORDS[f_id].skill
-			g.draw_multiline_string(g.font,r.position+Vector2(132,128),rule,HORIZONTAL_ALIGNMENT_LEFT,224,14,2,g.INK)
-		else:
-			var icon_card: String = "field_smithy" if k == "camp" else ("blood_altar" if k == "shrine" else str(Catalog.EVENTS.get(slot.get("event_id","wandering_smith"),Catalog.EVENTS.wandering_smith).art))
-			g.draw_fitted(g.art(icon_card),art_rect,Color.WHITE,true)
-			g.label_at(r.position+Vector2(132,76),slot_title(slot),22,g.INK)
-			var desc_txt: String = "休整築牆／鍛造卡牌／徵集軍資" if k == "camp" else ("免費聖物匣／主力精煉／鮮血奉獻" if k == "shrine" else str(Catalog.EVENTS.get(slot.get("event_id","wandering_smith"),Catalog.EVENTS.wandering_smith).story))
-			g.draw_multiline_string(g.font,r.position+Vector2(132,106),desc_txt,HORIZONTAL_ALIGNMENT_LEFT,224,14,3,Color("5a4632"))
-		g.draw_line(r.position+Vector2(12,176),r.position+Vector2(r.size.x-12,176),Color(g.INK,0.22),1.0)
-		g.draw_string(g.font,r.position+Vector2(14,200),slot_subtitle(slot),HORIZONTAL_ALIGNMENT_LEFT,r.size.x-28,15,g.RED if k in ["elite","boss"] else Color("5a4632"))
-		g.draw_string(g.font,r.position+Vector2(14,222),"▶ 已選取（再點一次立即觸發）" if selected else "點選查看詳情",HORIZONTAL_ALIGNMENT_LEFT,r.size.x-28,14,g.RED if selected else Color(g.INK,0.55))
-
-	# Right panel: Selected encounter details + My Army & Deck
-	var right := Rect2(865,250,650,535)
-	g.panel(right,Color("efe0bd"))
-	var sel := active_slot()
-	var sel_k: String = sel.get("kind","battle")
-	if sel_k in ["battle","elite","boss"]:
-		var enemy := foe()
-		g.draw_string(g.font,right.position+Vector2(0,32),"選中目標：%s（%s）" % [B.lord_name(enemy),"精英討伐" if sel_k == "elite" else ("最終魔王" if sel_k == "boss" else "一般遭遇")],HORIZONTAL_ALIGNMENT_CENTER,right.size.x,21,g.RED if sel_k != "battle" else g.INK)
-		var rule_line: String = ("敵方特性：%s\n敵方技能：%s" % [B.minion_text(enemy), B.skill_text(enemy)]) if B.is_minion(enemy) else ("敵方技能："+B.skill_text(enemy))
-		var sel_mut := Catalog.mutator_data(sel)
-		if not sel_mut.is_empty():
-			rule_line += "\n異變【%s】：%s" % [String(sel_mut.name),String(sel_mut.desc)]
-		g.draw_multiline_string(g.font,right.position+Vector2(20,54),rule_line,HORIZONTAL_ALIGNMENT_LEFT,right.size.x-40,14,3,g.RED if not sel_mut.is_empty() else Color("5a4632"))
-		var enemy_scale: float = Catalog.enemy_floor_scale(run.floor)
-		# The header sits in the narrow column left of the cards (it used to run under them).
-		g.label_at(right.position+Vector2(20,132),"敵方牌組",17,g.INK)
-		if enemy_scale > 1.0:
-			g.draw_multiline_string(g.font,right.position+Vector2(20,156),"金幣獲得與冷卻 ×%s" % B.number(snappedf(enemy_scale,0.01)),HORIZONTAL_ALIGNMENT_LEFT,110,13,3,Color("8a3a2c"))
-		mini_deck(g,Catalog.foe_deck(enemy),Vector2(1010,352),2,{},true)
-	else:
-		g.draw_string(g.font,right.position+Vector2(0,32),"選中遭遇：%s" % slot_title(sel),HORIZONTAL_ALIGNMENT_CENTER,right.size.x,22,g.RED)
-		g.draw_multiline_string(g.font,right.position+Vector2(24,68),slot_tooltip(sel),HORIZONTAL_ALIGNMENT_LEFT,right.size.x-48,16,7,g.INK)
-		g.label_at(right.position+Vector2(24,255),"觸發後僅此格替補新牌；本層還可進行 %d 次非戰鬥支援行動。" % int(run.get("march_steps",2)),16,Color("6f5a3e"))
-
-	g.draw_line(right.position+Vector2(16,288),right.position+Vector2(right.size.x-16,288),Color(g.INK,0.3),1.5)
-	g.draw_string(g.font,right.position+Vector2(0,314),"我軍編制 · %s" % B.lord_name(run.lord),HORIZONTAL_ALIGNMENT_CENTER,right.size.x,20,g.INK)
-	g.draw_fitted(g.lord_art(run.lord),Rect2(right.position+Vector2(28,332),Vector2(90,115)),Color.WHITE,true)
-	mini_deck(g,run.deck,Vector2(1010,574),2,run.upgrades,true)
-	# Relics: a count and the first two names; the full list is the tooltip over this corner.
-	g.label_at(right.position+Vector2(20,472),"持有遺物 %d 件" % run.relics.size(),15,g.INK)
-	var shown: Array = run.relics.slice(0,2).map(func(k: String) -> String: return Catalog.RELICS[k].name)
-	var relic_body: String = "尚無" if shown.is_empty() else ("、".join(shown) if run.relics.size() <= 2 else "%s 等\n指向查看全部" % shown[0])
-	g.draw_multiline_string(g.font,right.position+Vector2(20,494),relic_body,HORIZONTAL_ALIGNMENT_LEFT,108,13,2,Color("5a4632"))
-	g.label_at(right.position+Vector2(145,518),deck_summary(run.deck),15,Color("6f5a3e"))
-
 func paint_camp(g) -> void:
-	paint_floors(g,142)
-	paint_status_strip(g)
+	Board.header(g,self) # 不再畫樓層進度（使用者 2026-11-22）
 	var left := Rect2(90,250,680,500)
 	var right := Rect2(800,250,710,500)
 	g.panel(left,Color("efe0bd"))
@@ -1500,8 +1422,7 @@ func paint_camp(g) -> void:
 	g.label_at(right.position+Vector2(35,455),"提示：營火完成後，僅此格會替補新遭遇，場上其餘三格將保留。",17,Color("6f5a3e"))
 
 func paint_shrine(g) -> void:
-	paint_floors(g,142)
-	paint_status_strip(g)
+	Board.header(g,self) # 不再畫樓層進度（使用者 2026-11-22）
 	var left := Rect2(90,250,680,500)
 	var right := Rect2(800,250,710,500)
 	g.panel(left,Color("efe0bd"))
@@ -1520,8 +1441,7 @@ func paint_shrine(g) -> void:
 	g.label_at(right.position+Vector2(35,455),"提示：古祠賜福後，僅此格會替補新遭遇，場上其餘三格將保留。",17,Color("6f5a3e"))
 
 func paint_event(g) -> void:
-	paint_floors(g,142)
-	paint_status_strip(g)
+	Board.header(g,self) # 不再畫樓層進度（使用者 2026-11-22）
 	var ev_id: String = active_slot().get("event_id","wandering_smith")
 	var ev: Dictionary = Catalog.EVENTS.get(ev_id,Catalog.EVENTS.wandering_smith)
 	var panel_rect := Rect2(90,245,1425,520)
@@ -1532,7 +1452,7 @@ func paint_event(g) -> void:
 
 func paint_reward(g) -> void:
 	g.panel(Rect2(1145,260,395,455),Color("efe0bd"))
-	paint_floors(g,142)
+	Board.header(g,self)
 	if not outcome.is_empty():
 		g.draw_string(g.font,Vector2(0,196),outcome,HORIZONTAL_ALIGNMENT_CENTER,1600,20,g.RED)
 	var chance_info := Upgrades.drop_chance_info(run.lord,"",int(run.get("floor",0)),bool(run.get("last_elite",false)),int(run.get("contract",0)),run.get("relics",[]).size(),has_targeted_upgrade(),bool(run.get("from_event",false)),int(run.get("offer_rerolls",0)))
@@ -1543,6 +1463,10 @@ func paint_reward(g) -> void:
 	for i: int in range(run.offer.size()):
 		var kind: String = run.offer[i]
 		var r := offer_rect(i)
+		var hv: float = g.polish.hover_val("rogue_offer_%d" % i,r.has_point(g.get_global_mouse_position()),g.is_processing())
+		r.position.y -= 8.0*hv
+		r = r.grow(3.0*hv)
+		if hv > 0.01: g.polish.draw_card_hover_glow(g,r,hv)
 		g.draw_card(kind,r)
 		var bonus: Dictionary = run.get("offer_ups",{}).get(kind,{})
 		var bonus_lv := Upgrades.level(bonus)
@@ -1614,7 +1538,6 @@ func wounds_text() -> String:
 	return "城牆 %d/5 座 · 總血量 %d%% · 領主 %d/%d" % [standing,roundi(100.0*total/(5*B.GATE_HP)),int(run.get("lord_hp",0)),int(lord_max_hp())]
 
 func paint_end(g) -> void:
-	paint_floors(g,230)
 	var won: bool = run.phase == "won"
 	var c_name: String = Catalog.CONTRACTS[clampi(int(run.get("contract",0)),0,Catalog.CONTRACTS.size()-1)].name
 	g.draw_string(g.font,Vector2(0,370),"肉鴿通關！（%s）" % c_name if won else "本輪結束",HORIZONTAL_ALIGNMENT_CENTER,1600,52,g.RED if won else g.INK)

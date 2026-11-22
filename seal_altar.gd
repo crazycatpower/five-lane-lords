@@ -32,22 +32,27 @@ static func is_duplicate(m, team: int, kind: String, cell: Vector2i) -> bool:
 		if b.hp > 0 and b.team == team and b.kind == kind and b.cell != cell: return true
 	return false
 
+static func feed_souls(m, b: Dictionary, amount: float) -> void:
+	if b.hp <= 0 or b.kind != "seal_altar": return
+	var d: Dictionary = B.CARDS.seal_altar
+	var before: float = b.get("souls",0.0)
+	b.souls = before+amount
+	var seals: Array = d.seals
+	for s: int in range(seals.size()):
+		if before < float(seals[s]) and b.souls >= float(seals[s]):
+			if s == seals.size()-1:
+				release(m,b)
+				break
+			seal_break(m,b,s)
+
 static func on_death(m, dead: Dictionary) -> void:
 	var d: Dictionary = B.CARDS.seal_altar
 	var count: int = m.buildings.size()
 	for i: int in range(count):
 		var b: Dictionary = m.buildings[i]
 		if b.hp <= 0 or b.kind != "seal_altar": continue
-		var before: float = b.get("souls",0.0)
-		b.souls = before+float(d.soul_per_death)
 		m.link(dead.pos,b.pos,b.team,"soul")
-		var seals: Array = d.seals
-		for s: int in range(seals.size()):
-			if before < float(seals[s]) and b.souls >= float(seals[s]):
-				if s == seals.size()-1:
-					release(m,b)
-					break
-				seal_break(m,b,s)
+		feed_souls(m,b,float(d.soul_per_death))
 
 # enemy_ai: raise the altar at the back of the quietest lane (souls come from every lane, so keep it safe);
 # top up an existing one only when it is badly hurt. -INF = leave it to the normal rules.

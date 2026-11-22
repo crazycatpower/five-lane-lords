@@ -119,7 +119,7 @@ static func reach_area(m, kind: String, cell: Vector2i, team: int, b: Dictionary
 	var out: Array = []
 	for o: Vector2i in offsets(kind,bonus(m,b)):
 		var c := Vector2i(cell.x+o.x*fwd,cell.y+o.y)
-		if c.x >= 0 and c.x < L.GRID_COLUMNS and c.y >= 0 and c.y < L.GRID_ROWS: out.append(c)
+		if c.x >= 0 and c.x < L.GRID_COLUMNS and c.y >= 0 and c.y < L.GRID_ROWS and (m == null or c.y in m.active_lanes): out.append(c)
 	return out
 
 static func lane_length(kind: String) -> int:
@@ -136,49 +136,92 @@ static func reach_text(kind: String) -> String:
 	return "攻擊範圍：%s；沒有敵兵時改打敵方建築（不打城牆）。" % shape
 
 # ---------------- multi-lane footprints ----------------
+static func _max_contiguous_lanes(lanes: Array) -> int:
+	if lanes.is_empty(): return 0
+	var sorted := lanes.duplicate()
+	sorted.sort()
+	var best := 1
+	var cur := 1
+	var prev := int(sorted[0])
+	for i: int in range(1,sorted.size()):
+		var v := int(sorted[i])
+		if v == prev: continue
+		if v == prev+1:
+			cur += 1
+			if cur > best: best = cur
+		else: cur = 1
+		prev = v
+	return best
+
 static func footprint(kind: String) -> Vector2i:
 	var f: Array = B.CARDS.get(kind,{}).get("footprint",[1,1])
 	return Vector2i(int(f[0]),int(f[1]))
 
-static func footprint_cells(kind: String, cell: Vector2i, team: int) -> Array:
+static func footprint_cells(kind: String, cell: Vector2i, team: int, active_lanes: Array = []) -> Array:
 	var d: Dictionary = B.CARDS.get(kind,{})
 	var fm: String = d.get("formation","")
 	var back := -1 if team == 0 else 1
+	var raw: Array = []
 	match fm:
 		"t_front":
-			return [Vector2i(cell.x,cell.y-1),Vector2i(cell.x,cell.y),Vector2i(cell.x,cell.y+1),Vector2i(cell.x+back,cell.y)]
+			raw = [Vector2i(cell.x,cell.y-1),Vector2i(cell.x,cell.y),Vector2i(cell.x,cell.y+1),Vector2i(cell.x+back,cell.y)]
 		"t_back":
-			return [Vector2i(cell.x,cell.y),Vector2i(cell.x+back,cell.y-1),Vector2i(cell.x+back,cell.y),Vector2i(cell.x+back,cell.y+1)]
+			raw = [Vector2i(cell.x,cell.y),Vector2i(cell.x+back,cell.y-1),Vector2i(cell.x+back,cell.y),Vector2i(cell.x+back,cell.y+1)]
 		"v_wide":
-			return [Vector2i(cell.x,cell.y),Vector2i(cell.x+back,cell.y-1),Vector2i(cell.x+back,cell.y+1)]
+			raw = [Vector2i(cell.x,cell.y),Vector2i(cell.x+back,cell.y-1),Vector2i(cell.x+back,cell.y+1)]
 		"u_front":
-			return [Vector2i(cell.x,cell.y-1),Vector2i(cell.x,cell.y+1),Vector2i(cell.x+back,cell.y)]
+			raw = [Vector2i(cell.x,cell.y-1),Vector2i(cell.x,cell.y+1),Vector2i(cell.x+back,cell.y)]
 		"u_five":
-			return [Vector2i(cell.x,cell.y-1),Vector2i(cell.x,cell.y),Vector2i(cell.x,cell.y+1),Vector2i(cell.x+back,cell.y-1),Vector2i(cell.x+back,cell.y+1)]
+			raw = [Vector2i(cell.x,cell.y-1),Vector2i(cell.x,cell.y),Vector2i(cell.x,cell.y+1),Vector2i(cell.x+back,cell.y-1),Vector2i(cell.x+back,cell.y+1)]
 		"v_front":
-			return [Vector2i(cell.x,cell.y),Vector2i(cell.x,cell.y+1),Vector2i(cell.x+back,cell.y)]
+			raw = [Vector2i(cell.x,cell.y),Vector2i(cell.x,cell.y+1),Vector2i(cell.x+back,cell.y)]
 		"wedge":
-			return [Vector2i(cell.x,cell.y),Vector2i(cell.x+back,cell.y),Vector2i(cell.x+back,cell.y+1)]
-	var f := footprint(kind)
-	var top: int = cell.y-(f.y/2 if f.y % 2 == 1 else 0)
-	var out: Array = []
-	for row: int in range(top,top+f.y):
-		for i: int in range(f.x): out.append(Vector2i(cell.x+back*i,row))
-	return out
+			raw = [Vector2i(cell.x,cell.y),Vector2i(cell.x+back,cell.y),Vector2i(cell.x+back,cell.y+1)]
+		_:
+			var f := footprint(kind)
+			var top: int = cell.y-(f.y/2 if f.y % 2 == 1 else 0)
+			for row: int in range(top,top+f.y):
+				for i: int in range(f.x): raw.append(Vector2i(cell.x+back*i,row))
+	if not active_lanes.is_empty() and not raw.is_empty():
+		var min_y := 999
+		var max_y := -999
+		for c: Vector2i in raw:
+			if c.y < min_y: min_y = c.y
+			if c.y > max_y: max_y = c.y
+		var span_y := max_y-min_y+1
+		if _max_contiguous_lanes(active_lanes) < span_y:
+			var collapsed: Array = []
+			var seen := {}
+			for c: Vector2i in raw:
+				var best_lane := int(active_lanes[0])
+				if active_lanes.size() > 1:
+					var best_dist := 999
+					for al in active_lanes:
+						var ly := int(al)
+						var dist := absi(ly-c.y)
+						if dist < best_dist or (dist == best_dist and ((c.y > cell.y and ly > best_lane) or (c.y <= cell.y and ly < best_lane))):
+							best_dist = dist
+							best_lane = ly
+				var mc := Vector2i(c.x,best_lane)
+				if not seen.has(mc):
+					seen[mc] = true
+					collapsed.append(mc)
+			return collapsed
+	return raw
 
 static func footprint_ok(m, team: int, kind: String, cell: Vector2i) -> bool:
 	if footprint(kind) == Vector2i(1,1): return true
-	for c: Vector2i in footprint_cells(kind,cell,team):
+	for c: Vector2i in footprint_cells(kind,cell,team,m.active_lanes):
 		if c.x < 0 or c.x >= L.GRID_COLUMNS or not c.y in m.active_lanes or m.territory_owner(c) != team: return false
 	return true
 
 # How deploy() fields a footprint card: [{lane, col, kind, count, offset}] with the totals unchanged.
 # A single-kind card (or one whose members all stand together) is shared evenly over every covered cell.
 # A mixed legion over two columns puts its front-most members in the chosen column and the rest behind.
-static func plan(kind: String, cell: Vector2i, team: int, groups: Array) -> Array:
+static func plan(kind: String, cell: Vector2i, team: int, groups: Array, active_lanes: Array = []) -> Array:
 	var d: Dictionary = B.CARDS[kind]
 	var f := footprint(kind)
-	var cells := footprint_cells(kind,cell,team)
+	var cells := footprint_cells(kind,cell,team,active_lanes)
 	var front := INF
 	var mixed := false
 	for g: Array in groups: front = minf(front,float(g[2]))
@@ -208,7 +251,7 @@ static func spawn_preview(m, team: int, kind: String, cell: Vector2i) -> Array:
 	var out: Array = []
 	var rear := func(col: int, lane: int) -> Vector2: return L.cell_center(Vector2i(col,lane))-Vector2(forward*(L.CELL_SIZE.x*0.5-12.0),0)
 	if footprint(kind) != Vector2i(1,1):
-		for p: Dictionary in plan(kind,cell,team,groups): out.append([p.kind,p.count,rear.call(p.col,p.lane)])
+		for p: Dictionary in plan(kind,cell,team,groups,m.active_lanes): out.append([p.kind,p.count,rear.call(p.col,p.lane)])
 		return out
 	var front_offset := 0.0
 	for g: Array in groups: front_offset = minf(front_offset,float(g[2]))

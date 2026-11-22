@@ -1,11 +1,19 @@
 # Windows 玩家版
 
-目前版本 0.3.0，Godot 4.7.1。輸出於專案旁 `release/FiveLaneLords-0.3.0/FiveLaneLords.exe`，分享包為 `release/FiveLaneLords-Windows-0.3.0.zip`，更新說明在 `release/release-notes-0.3.0.md`。單一 x86_64 EXE，資源內嵌，保留所有舊版。
+目前版本 0.4.0，Godot 4.7.1。輸出於專案旁 `release/FiveLaneLords-0.4.0/FiveLaneLords.exe`，分享包為 `release/FiveLaneLords-Windows-0.4.0.zip`，更新說明在 `release/release-notes-0.4.0.md`。單一 x86_64 EXE，資源內嵌，保留所有舊版。
 
 ## 重建
 
 新增中文字先執行 `python tools/build_font.py`，改圖先執行 `godot_console --headless --path . -s tools/prepare_assets.gd`，再 `godot_console --headless --path . --import`。
-執行 `tools/build_windows.ps1 -Version 0.3.0`。模板在 `.runtime/windows-templates/windows_release_x86_64.exe`。圖示及檔案版本由 export_presets.cfg 設定。
+執行 `tools/build_windows.ps1 -Version 0.4.0`。模板在 `.runtime/windows-templates/windows_release_x86_64.exe`。圖示及檔案版本由 export_presets.cfg 設定。
+
+## 2026-11-22 驗收（0.4.0）
+
+- quick_test：50 項、0 失敗；test_startup 通過；test_net_match 22 項、0 失敗。
+- 冒險 50 關、肉鴿 159 個怪各自的戰場都以雙方 AI 模擬過（冒險 120 秒、肉鴿 90 秒），無腳本錯誤；冒險關卡資料驗證 0 錯誤。
+- 獨立 EXE 以隔離 APPDATA 啟動 120 幀，結束碼 0，日誌無錯誤或警告；檔案版本 0.4.0；EXE SHA256 `7711C5CFFB9D2BB5D0BC43D576EDE303008EB7D618D8F453193BAD1C3839BCF5`，364 MB，ZIP 296 MB。
+- 字型子集已重切（新增弓手、四季、地形與機制、旗幟牌陣等文字）。
+- 未量測冒險與肉鴿的新地形難度；按鈕滑入動畫與斬旗動畫未以真人操作確認。
 
 ## 2026-11-20 驗收（0.3.0）
 

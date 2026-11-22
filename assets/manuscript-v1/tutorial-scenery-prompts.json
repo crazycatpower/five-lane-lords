@@ -1,0 +1,25 @@
+{
+  "purpose": "Scenery for the adventure tutorial (2026-11-21): the bandit camp that replaces the enemy castle in chapter 1, and the rocky waste that fills lanes a stage leaves closed. Each file is picked up automatically once it exists under assets/manuscript-v1/ with exactly this name; until then the game draws a placeholder (camp_art.gd, closed_lanes.gd). After adding files run tools/prepare_assets.gd and --import.",
+  "items": [
+    {
+      "asset": "camp-backdrop.png",
+      "drawn_at": "Rect 185 x 580 px on the right edge of the battlefield, where the enemy castle normally stands (layout.gd CASTLE_RECTS[1]). The battlefield is to its LEFT.",
+      "prompt": "Create ONE isolated tall bandit-camp sprite for the RIGHT EDGE of a five-lane strategy battlefield, standing where a castle would. Narrow vertical composition roughly WIDTH:HEIGHT 1:3, everything inside the frame. From top to bottom: a patched canvas tent with a small blue pennant, a second smaller tent set slightly back, a low campfire ring with a cooking pot on a tripod, a third tent, and loot between them: a few barrels, crates and grain sacks. Behind them a rough wooden lookout platform on poles. The camp's open side faces LEFT toward the battlefield. Low viewpoint / shallow three-quarter view, the same flattened perspective as a manuscript illustration, not a bird's eye model. Hand-painted medieval illuminated manuscript style, confident dark umber ink outlines, muted ochre canvas, brown timber, ivory and olive, restrained flat gouache texture inside the objects, sparse hatching. BLUE only on small pennants and cloth patches (it is the enemy side). No people, no animals, no text, no frame. Readable when 180 px wide and 580 px tall. Actual transparent alpha background outside the camp; a small irregular patch of trodden earth directly under the objects is allowed, no rectangle of ground or sky."
+    },
+    {
+      "asset": "palisade.png",
+      "drawn_at": "Each lane's wall section on a camp side: 58 x 116 px, the same slot as lane-wall.png (680 x 1070 source). The battlefield is to its LEFT.",
+      "prompt": "Create ONE isolated vertical sprite of a single section of a log palisade wall for one lane of a strategy battlefield, the wooden counterpart of a stone curtain-wall section. Seen from slightly above and from the LEFT: a straight run of tall sharpened logs standing side by side, running from the top edge to the bottom edge of the image, their pointed tips leaning a little to the LEFT toward the enemy, lashed together by two rope bands, a few shorter stakes at the foot. Narrow vertical composition WIDTH:HEIGHT about 2:3 like a wall slice, filling the height edge to edge so sections stack seamlessly one under another. Hand-painted medieval illuminated manuscript style, dark umber ink outlines, muted brown and ochre timber, pale cut tips, sparse hatching, flat gouache texture. No flags, no people, no text. Transparent alpha background; the logs touch the top and bottom edges."
+    },
+    {
+      "asset": "palisade-broken.png",
+      "drawn_at": "Same slot as palisade.png, for a breached section (like lane-wall-broken.png).",
+      "prompt": "Same palisade section as palisade.png but breached: the middle logs knocked flat and splintered across the gap, two or three broken stumps still standing at the top and bottom, cut ropes, scattered wood chips. Same viewpoint, size, palette and manuscript ink style; the opening in the middle must read clearly as passable. Transparent alpha background; standing stumps touch the top and bottom edges so it lines up with intact sections."
+    },
+    {
+      "asset": "field-boulder.png",
+      "drawn_at": "About 30 to 90 px wide, scattered over closed lanes (rocky waste) and in a row along the edge of an open road. Drawn with its base near the bottom of the image.",
+      "prompt": "Create ONE small isolated sprite of a weathered field boulder: a single rounded grey-brown stone, slightly wider than tall, with a flattened base where it sits on the ground, one or two cracks, a few patches of pale lichen and a tuft of dry grass at its foot. Three-quarter view from slightly above, compact silhouette, light from the upper left. Hand-painted medieval illuminated manuscript style, dark umber ink outlines, muted warm greys and ochre, sparse hatching on the shaded side, flat gouache texture. Square framing with generous transparent padding. No people, no text, no ground patch beyond the grass tuft. Actual transparent alpha background. Readable at 40 pixels."
+    }
+  ]
+}

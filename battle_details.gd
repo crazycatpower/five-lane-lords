@@ -270,7 +270,7 @@ static func draw_projectile(g, arrow: Dictionary) -> void:
 static func draw_play(g, e: Dictionary, progress: float) -> void:
 	var card: String = e.card
 	var is_spell: bool = B.CARDS.get(card, {}).get("type", "") == "spell"
-	var hand_pos: Vector2 = g.to_model(g.card_rect(e.get("slot", 0)).get_center() if int(e.team) == g.me else Vector2(1240.0, 40.0))
+	var hand_pos: Vector2 = g.to_model(g.card_rect(e.get("slot", 0)).get_center() if int(e.team) == g.me else preload("res://battle_hud.gd").gold_anchor(1))
 	if is_spell:
 		# For spells, fly a fast glowing sigil to the Lord's hand so the Lord hurls the spell.
 		if progress < 0.45:
@@ -311,7 +311,7 @@ static func model_to_screen(g, model_pos: Vector2) -> Vector2:
 
 static func draw_ink_hud(g, e: Dictionary, progress: float) -> void:
 	var start: Vector2 = model_to_screen(g, e.pos)
-	var target: Vector2 = preload("res://economy_hud.gd").PURSE.get_center() if int(e.team) == g.me else Vector2(1322.0, 35.0)
+	var target: Vector2 = preload("res://economy_hud.gd").PURSE.get_center() if int(e.team) == g.me else preload("res://battle_hud.gd").gold_anchor(1)+Vector2(0,14)
 	var ease_t: float = 1.0 - pow(1.0 - clampf(progress, 0.0, 1.0), 2.0)
 	var pos: Vector2 = start.lerp(target, ease_t) - Vector2(0.0, sin(ease_t * PI) * 62.0)
 	var fade: float = 1.0 - clampf((progress - 0.85) / 0.15, 0.0, 1.0)

@@ -15,7 +15,9 @@ static func headline(g) -> String:
 	if g.net != null: return "線上對戰"
 	if not g.vs_ai_matched_name.is_empty(): return "配對對戰 · " + g.vs_ai_matched_name
 	if g.rogue.in_battle: return "肉鴿 · 第 %d / %d 場" % [g.rogue.battle_floor_number(),g.rogue.Catalog.FLOORS]
-	if g.adventure.index >= 0: return "征服 · %s" % g.adventure.STAGES[g.adventure.index].name
+	if g.adventure.index >= 0:
+		var st: Dictionary = g.adventure.STAGES[g.adventure.index]
+		return "遠征 %s · %s" % [st.get("code",""), st.name]
 	if g.spectating: return "觀戰"
 	return "自由對戰 · "+["簡單","普通","困難"][g.model.difficulty]
 

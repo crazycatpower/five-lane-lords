@@ -9,6 +9,7 @@ extends RefCounted
 # Drawing only; game.gd draw_wall_section() calls section() for every lane and side.
 const B = preload("res://balance.gd")
 const L = preload("res://layout.gd")
+const CampArt = preload("res://camp_art.gd")
 
 const WIDTH := 58.0
 const SHADE := Color(0.86,0.83,0.77)
@@ -26,6 +27,9 @@ static func centre_x(team: int) -> float:
 	return L.gate_icon_x(team)+facing(team)*1.0
 
 static func section(g, team: int, lane: int, broken: bool) -> void:
+	if CampArt.is_camp(g,team): # a bandit camp fences each lane with a palisade instead
+		CampArt.section(g,team,lane,broken)
+		return
 	var m = g.model
 	var dir := facing(team)
 	var x := centre_x(team)

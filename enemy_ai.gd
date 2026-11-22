@@ -7,6 +7,7 @@ const ExpansionMore = preload("res://expansion_more.gd")
 const GoldMonster = preload("res://gold_monster.gd")
 const SealAltar = preload("res://seal_altar.gd")
 const L = preload("res://layout.gd")
+const MapAI = preload("res://map_ai.gd") # 地圖機制：順風、水閘、泥沼、熔岩、符文、傳送門、落石、上坡
 
 # Pure decision: snapshot in, legal play out. No model mutation or random globals.
 # Lanes are scored separately so the AI defends whichever lane is in danger, spreads farms,
@@ -51,9 +52,11 @@ static func skill_plan(k: Dictionary) -> Dictionary:
 				var ms: Dictionary = B.minion_skill(k.lord)
 				match ms.skill_kind:
 					"unit": wanted = k.get("enemy_troops",0) >= 1 or k.elapsed >= 25.0
-					"building": wanted = k.get("minion_open_cell",false) or k.get("minion_damaged_buildings",0) > 0
+					"building": wanted = k.get("minion_open_cell",false) or k.get("minion_damaged_buildings",0) > 0 or k.get("minion_has_unique",false)
 					"spell":
 						if ms.skill_card == "harvest": wanted = k.farms > 0
+						elif ms.skill_card == "mana_spring": wanted = k.get("crystals",0) > 0
+						elif ms.skill_card == "grave_exchange": wanted = k.get("minion_nonhome_buildings",0) > 0
 						elif ms.skill_card in B.FRIENDLY_SPELLS: wanted = k.get("troops",0) >= 2
 						else: wanted = k.get("enemy_troops",0) >= 2 or k.broken > 0 or k.elapsed >= 45.0
 	# The skill costs no gold since the charge meter (2026-11-19), so the AI never hoards for it.
@@ -65,24 +68,24 @@ static func decide(s: Dictionary) -> Dictionary:
 	var team: int = s.team
 	var forward := 1.0 if team == 0 else -1.0
 	var home_x := L.gate_stop(team)
-	var ours := [0.0,0.0,0.0,0.0,0.0]
-	var foes := [0.0,0.0,0.0,0.0,0.0]
-	var urgency := [0.0,0.0,0.0,0.0,0.0]
-	var foe_x := [INF,INF,INF,INF,INF]
-	var foe_reach := [INF,INF,INF,INF,INF] # distance (px) of the closest enemy to our gate
-	var my_farms := [0,0,0,0,0]
-	var their_farms := [0,0,0,0,0]
-	var their_guard := [0.0,0.0,0.0,0.0,0.0]
+	var ours := L.per_lane(0.0)
+	var foes := L.per_lane(0.0)
+	var urgency := L.per_lane(0.0)
+	var foe_x := L.per_lane(INF)
+	var foe_reach := L.per_lane(INF) # distance (px) of the closest enemy to our gate
+	var my_farms := L.per_lane(0)
+	var their_farms := L.per_lane(0)
+	var their_guard := L.per_lane(0.0)
 	var farm_total := 0
 	var crystal_total := 0
-	var my_crystals := [0,0,0,0,0]
-	var my_graves := [0,0,0,0,0]
+	var my_crystals := L.per_lane(0)
+	var my_graves := L.per_lane(0)
 	var grave_total := 0
 	var own_buildings := 0
 	var has_own_nest := false
-	var my_troops := [0.0,0.0,0.0,0.0,0.0] # hp of our troops per lane (buildings excluded)
-	var my_guard := [0,0,0,0,0] # our towers and scarecrows per lane
-	var my_troop_x: Array = [[],[],[],[],[]] # x of our troops per lane, for the healer
+	var my_troops := L.per_lane(0.0) # hp of our troops per lane (buildings excluded)
+	var my_guard := L.per_lane(0) # our towers and scarecrows per lane
+	var my_troop_x: Array = L.per_lane([]) # x of our troops per lane, for the healer
 	var nest_plan := GluttonNest.safe_coverage(s)
 	var nest_covered: Dictionary = nest_plan.covered
 	var nest_bait: Array = nest_plan.bait_lanes
@@ -120,7 +123,7 @@ static func decide(s: Dictionary) -> Dictionary:
 				my_guard[b.cell.y] += 1
 		elif b.kind == "farm": their_farms[b.cell.y] += 1
 		elif B.has_tag(b.kind,"obstacle"): their_guard[b.cell.y] += b.hp
-	var active_lanes: Array = s.get("active_lanes", [0,1,2,3,4])
+	var active_lanes: Array = s.get("active_lanes", range(L.GRID_ROWS))
 	# Defence: the lane whose approaching enemies most outweigh what we have there.
 	var danger := -1
 	var largest := 0.0
@@ -132,13 +135,15 @@ static func decide(s: Dictionary) -> Dictionary:
 			largest = need
 			danger = lane
 	# Attack: score every lane instead of always hitting the lowest gate.
-	var attack := [-INF,-INF,-INF,-INF,-INF]
+	var attack := L.per_lane(-INF)
+	var terrain: bool = MapAI.any(s)
 	var recent: Array = s.get("recent",[])
 	for lane: int in active_lanes:
 		var gate: float = s.gates[1-team][lane]
 		attack[lane] = (1.0-gate/B.GATE_HP)*400.0*pr.get("atk_gate",0.4)+ours[lane]*0.3-foes[lane]*pr.get("atk_foes",0.8)-their_guard[lane]*0.5-recent.count(lane)*pr.get("atk_recent",140.0)+jitter(lane,s.elapsed)
 		if gate <= 0 and foes[lane] < 150: attack[lane] += 600 # an open gate with nobody guarding it: walk in
 		if my_graves[lane] > 0: attack[lane] += my_graves[lane] * 80.0 # fighting where graves are concentrated feeds their soul harvest
+		if terrain: attack[lane] += MapAI.lane_bonus(s,team,lane)
 	var target_lane: int = active_lanes[0]
 	var max_atk := -INF
 	for lane: int in active_lanes:
@@ -312,6 +317,7 @@ static func decide(s: Dictionary) -> Dictionary:
 			if defend < 0 and score == -INF and s.ink >= pr.get("spend_at",SPEND_AT):
 				score = spend_score(c,s,team,lane,col,target_lane,foes,urgency,my_farms,s.get("owned_cells",15)-own_buildings,nest_covered,nest_bait[lane])
 			if night and B.is_home_card(c.kind,s.get("lord","lion")): score -= pr.get("night_economy_penalty",0.0)
+			if terrain and score > -INF: score += MapAI.cell_bonus(c,s,team,data)
 			if score > best_score:
 				best_score = score
 				best = c.duplicate()

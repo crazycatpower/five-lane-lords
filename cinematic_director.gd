@@ -639,7 +639,7 @@ func paint_cutin(g, field: Rect2) -> void:
 	var left_side: bool = (cutin.team == 0) != g.mirror_view
 	var team_col: Color = g.RED if cutin.team == 0 else g.BLUE
 	var lord: String = cutin.lord
-	var lord_data: Dictionary = B.LORDS.get(lord, {})
+	var lord_data: Dictionary = B.lord_data(lord)
 	var band_h := 72.0
 	var band_w := 430.0
 	var base_y := field.position.y + 62.0

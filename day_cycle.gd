@@ -15,15 +15,22 @@ const DUSK := Color(0.93,0.50,0.22,0.17)
 const NIGHT := Color(0.07,0.11,0.33,0.34)
 static var glow_texture: GradientTexture2D
 
-# Where the day track ends: dawn, the roguelike's time limit, or (the first lesson) nowhere near.
+# Where the day track ends: survive timer, dawn, the roguelike's time limit, or ramp 2 + 120s.
 static func day_end(g) -> float:
-	if g.model.night_decay: return B.DAWN
+	if g.model.survive_time > 0.0: return g.model.survive_time
+	if g.model.night_decay: return g.model.dawn_time()
 	return RogueCatalog.TIME_LIMIT if g.rogue.in_battle else B.RAMP_2+120.0
 
 static func marks(g) -> Array:
-	var result: Array = [0.0,B.RAMP_1,B.RAMP_2]
-	if g.model.night_decay: result.append(B.NIGHT_START)
-	result.append(day_end(g))
+	var m = g.model
+	var end: float = day_end(g)
+	var pre_night: float = minf(end, m.night_start_time()) if m.night_decay else end
+	var result: Array = [0.0]
+	for t: float in [B.RAMP_1, B.RAMP_2]:
+		if t < pre_night - 1.0: result.append(t)
+	if m.night_decay and m.night_start_time() < end - 1.0:
+		result.append(m.night_start_time())
+	result.append(end)
 	return result
 
 # The day track in the top bar: one inked band per phase; the sun rides along it and hands over to
@@ -37,8 +44,10 @@ static func track(g) -> void:
 	for i: int in range(points.size()-1):
 		var x0: float = r.position.x+r.size.x*points[i]/end
 		var x1: float = r.position.x+r.size.x*points[i+1]/end
-		g.draw_rect(Rect2(x0,r.position.y,x1-x0,r.size.y),BANDS[i])
-		if g.model.night_decay and i == points.size()-2: # a few stars in the night band
+		var is_night_band: bool = m.night_decay and i == points.size()-2
+		var col: Color = BANDS[3] if is_night_band else BANDS[mini(i,BANDS.size()-2)]
+		g.draw_rect(Rect2(x0,r.position.y,x1-x0,r.size.y),col)
+		if is_night_band: # a few stars in the night band
 			for k: int in range(7):
 				var star := Vector2(lerpf(x0+5,x1-5,g.scenery_noise(k,91)),r.position.y+3+g.scenery_noise(k,92)*(r.size.y-6))
 				g.draw_circle(star,1.1,Color(1,0.97,0.82,0.55+0.4*sin(g.clock*2.0+k)))
@@ -90,14 +99,16 @@ static func moon(g, at: Vector2, radius: float) -> void:
 # The light lying over the field right now (alpha 0 = plain daylight).
 static func tint(m) -> Color:
 	var t: float = m.elapsed
+	var ns: float = m.night_start_time()
 	var c := Color(NOON,0.0).lerp(NOON,smoothstep(B.RAMP_1,B.RAMP_1+BLEND,t))
 	c = c.lerp(DUSK,smoothstep(B.RAMP_2,B.RAMP_2+BLEND,t))
-	if m.night_decay: c = c.lerp(NIGHT,smoothstep(B.NIGHT_START,B.NIGHT_START+BLEND,t))
+	if m.night_decay: c = c.lerp(NIGHT,smoothstep(ns,ns+BLEND,t))
 	return c
 
 # How dark it is, 0..1 (lights come on with it).
 static func darkness(m) -> float:
-	return smoothstep(B.NIGHT_START,B.NIGHT_START+BLEND,m.elapsed) if m.night_decay else 0.0
+	var ns: float = m.night_start_time()
+	return smoothstep(ns,ns+BLEND,m.elapsed) if m.night_decay else 0.0
 
 static func glow() -> GradientTexture2D:
 	if glow_texture == null:
@@ -176,7 +187,7 @@ static func toll_field(g, e: Dictionary, progress: float) -> void:
 		g.draw_rect(L.FIELD_FRAME.grow(-6),Color(0.05,0.07,0.22,0.22*veil))
 
 static func toll_hud(g, e: Dictionary, progress: float) -> void:
-	var at := Vector2(TRACK.position.x+TRACK.size.x*clampf(e.time/day_end(g),0,1),TRACK.get_center().y)
+	var at: Vector2 = preload("res://battle_hud.gd").dial_point(g,e.time) # the bell rings where the sun stood on the dial
 	for k: int in range(3):
 		var ring: float = fmod(progress*1.6+k/3.0,1.0)
 		g.draw_arc(at,14+ring*46,0,TAU,32,Color(0.86,0.84,0.98,(1-progress)*(1-ring)*0.9),3,true)

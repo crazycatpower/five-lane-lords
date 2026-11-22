@@ -25,22 +25,29 @@ func setup_stage_story(idx: int, recruit: String, won: bool) -> void:
 	var stage: Dictionary = catalog.stages()[idx]
 	foe = stage.enemy_lord
 	camp = stage.enemy_camp
-	heading = stage.name
-	opening_caption = "%s · 守將 %s" % [catalog.CHAPTERS[stage.chapter].name,"強盜" if camp else cards.lord_name(foe)]
-	victory_caption = "征服 · "+catalog.CHAPTERS[stage.chapter].name
-	next_caption = "返回征服地圖"
+	heading = "%s · %s" % [stage.get("code",""), stage.name]
+	opening_caption = ("新兵訓練 · 本課：%s" % stage.rule_tag) if stage.world == 0 else ("%s · 本關教學：%s" % [catalog.WORLDS[stage.world].name,stage.rule_tag])
+	victory_caption = "凱旋 · "+catalog.WORLDS[stage.world].name
+	next_caption = "返回遠征地圖"
 	lines = preload("res://campaign_story_data.gd").dialogue(stage.id,recruit,won)
 	if won and not stage.rewards.is_empty():
-		var names: Array = stage.rewards.map(func(k): return cards.CARDS[k].name)
-		lines.append(["征服獎勵","解鎖卡牌："+"、".join(names)+"。\n可在出征牌組中選用。","lord","foe"])
+		# One line per new card: what it is for, in the stage's own words when it has them.
+		var names: Array = stage.rewards.map(func(k): return "「%s」（%s）" % [cards.CARDS[k].name,cards.CARDS[k].role])
+		var note: String = stage.get("card_note","")
+		lines.append(["新卡入庫","、".join(names)+"正式加入你的卡池。"+("\n"+note if not note.is_empty() else "\n往後可以放進出征牌組。"),"lord",stage.rewards[0]])
 	var prize: String = catalog.UNLOCK_LORDS.get(stage.id,"")
-	if won and cards.LORDS.has(prize): lines.append(["新的領主",cards.lord_name(prize)+"願意為你出戰。\n在「編成牌組」的領主分頁換上，就能使用"+cards.FACTIONS[cards.lord_faction(prize)]+"陣營的卡牌。","foe","lord"])
+	if won and cards.LORDS.has(prize): lines.append(["新的領主",cards.lord_name(prize)+"願意為你出戰。\n在遠征畫面或「編成牌組」換上，就能率領"+cards.FACTIONS[cards.lord_faction(prize)]+"陣營出征。","foe","lord"])
 
 func advance(g) -> void:
 	if g.screen != "road_toll_story": return
 	step += 1
 	if step < lines.size(): show(g)
 	elif victory: g.show_adventure()
+	else: g.enter_battle(g.adventure.STAGES[g.adventure.index].goal)
+
+func skip(g) -> void:
+	if g.screen != "road_toll_story": return
+	if victory: g.show_adventure()
 	else: g.enter_battle(g.adventure.STAGES[g.adventure.index].goal)
 
 func show(g) -> void:
@@ -52,6 +59,7 @@ func show(g) -> void:
 	text.scroll_active = false
 	var caption := "繼續"
 	if step == lines.size()-1: caption = next_caption if victory else "開始戰鬥"
+	g.title_button(Rect2(1010,784,170,54),"跳過",func(): skip(g))
 	g.title_button(Rect2(1200,784,280,54),caption,func(): advance(g),true).grab_focus()
 	g.queue_redraw()
 

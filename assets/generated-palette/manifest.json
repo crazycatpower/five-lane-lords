@@ -29,9 +29,15 @@
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/arcane_tower.png"
 	},
+	"archer": {
+		"revision": "team-material-v2",
+		"sha256": "99e3d750c14947485b431ee6d8d387454c360f3e5883abfe27fe3ade0410f625",
+		"size": 384.0,
+		"source": "res://assets/manuscript-v1/archer.png"
+	},
 	"arquebusier": {
 		"revision": "team-material-v2",
-		"sha256": "5d886a3d0eee5ec004fbeb3affddcb8c045013424e59eaa9024f25e23ef6cc09",
+		"sha256": "2fa379489f12150229495d30f3db84b06f2ceb7caccca7382dab7e0d1e28d321",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/arquebusier.png"
 	},
@@ -539,9 +545,15 @@
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/arcane_tower.png"
 	},
+	"lord_card_enemy_archer": {
+		"revision": "team-material-v2",
+		"sha256": "99e3d750c14947485b431ee6d8d387454c360f3e5883abfe27fe3ade0410f625",
+		"size": 384.0,
+		"source": "res://assets/manuscript-v1/archer.png"
+	},
 	"lord_card_enemy_arquebusier": {
 		"revision": "team-material-v2",
-		"sha256": "5d886a3d0eee5ec004fbeb3affddcb8c045013424e59eaa9024f25e23ef6cc09",
+		"sha256": "2fa379489f12150229495d30f3db84b06f2ceb7caccca7382dab7e0d1e28d321",
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/arquebusier.png"
 	},
@@ -1085,6 +1097,12 @@
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/reaper.png"
 	},
+	"lord_card_enemy_recruit_camp": {
+		"revision": "team-material-v2",
+		"sha256": "2817af7cc02d5be784df6ad5a15e8e1f9cdb02541630e26756a608ef36ab03b0",
+		"size": 384.0,
+		"source": "res://assets/manuscript-v1/supply_depot.png"
+	},
 	"lord_card_enemy_renegade_artificer": {
 		"revision": "team-material-v2",
 		"sha256": "c9f0cdf2348b38b2ee8bbdbf6e806045a9a2524f42099667d44f84a3a1c8f507",
@@ -1268,13 +1286,13 @@
 	"lord_card_enemy_ward_guard": {
 		"revision": "team-material-v2",
 		"sha256": "9bf60ade9011d9f6051315618fe5a567300164b0f629487f615b6e4e71d3c0be",
-		"size": 384,
+		"size": 384.0,
 		"source": "res://assets/manuscript-v1/ward_guard.png"
 	},
 	"lord_card_enemy_ward_phalanx": {
 		"revision": "team-material-v2",
 		"sha256": "9bf60ade9011d9f6051315618fe5a567300164b0f629487f615b6e4e71d3c0be",
-		"size": 384,
+		"size": 384.0,
 		"source": "res://assets/manuscript-v1/ward_guard.png"
 	},
 	"lord_card_enemy_warp_beacon": {
@@ -1703,6 +1721,12 @@
 		"size": 384.0,
 		"source": "res://assets/manuscript-v1/reaper.png"
 	},
+	"recruit_camp": {
+		"revision": "team-material-v2",
+		"sha256": "2817af7cc02d5be784df6ad5a15e8e1f9cdb02541630e26756a608ef36ab03b0",
+		"size": 384.0,
+		"source": "res://assets/manuscript-v1/supply_depot.png"
+	},
 	"renegade_artificer": {
 		"revision": "team-material-v2",
 		"sha256": "c9f0cdf2348b38b2ee8bbdbf6e806045a9a2524f42099667d44f84a3a1c8f507",
@@ -1910,13 +1934,13 @@
 	"ward_guard": {
 		"revision": "team-material-v2",
 		"sha256": "9bf60ade9011d9f6051315618fe5a567300164b0f629487f615b6e4e71d3c0be",
-		"size": 384,
+		"size": 384.0,
 		"source": "res://assets/manuscript-v1/ward_guard.png"
 	},
 	"ward_phalanx": {
 		"revision": "team-material-v2",
 		"sha256": "9bf60ade9011d9f6051315618fe5a567300164b0f629487f615b6e4e71d3c0be",
-		"size": 384,
+		"size": 384.0,
 		"source": "res://assets/manuscript-v1/ward_guard.png"
 	},
 	"warp_beacon": {

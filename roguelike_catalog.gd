@@ -3,6 +3,7 @@ extends RefCounted
 # A run is 8 battles: floors 1-7 against 小怪領主 (B.MINION_LORDS) of rising tier, floor 8 against a
 # normal lord as the boss. One loss ends the run. Each win offers 3 cards; the player swaps one in.
 const B = preload("res://balance.gd")
+const Terrain = preload("res://rogue_terrain.gd") # 每個怪的戰場與精英名單
 const DeckStore = preload("res://deck_store.gd")
 
 const FLOORS := 8
@@ -393,6 +394,7 @@ const MINIONS := {
 	"bandit_chief":{"tier":1,"deck":["bandit","bandit","bandit","bandit","militia","militia","hunter","hunter"]},
 	"militia_captain":{"tier":1,"deck":["militia","militia","militia","militia","militia","hunter","hunter","rain"]},
 	"hunter_master":{"tier":3,"deck":["hunter","hunter","hunter","hunter","militia","militia","barricade","barricade"]},
+	"card_enemy_archer":{"tier":1,"deck":["archer","archer","archer","militia","militia","shieldguard","barricade","farmer"]},
 	"raven_mother":{"tier":2,"deck":["raven","raven","raven","bandit","bandit","bandit","skeleton","skeleton"]},
 	"card_enemy_pouch_beast":{"tier":3,"deck":["pouch_beast","pouch_beast","pouch_beast","fishbeak","fishbeak","bearded_imp","net_hunter","monster_hatchery"]},
 	"fishbeak_boss":{"tier":3,"deck":["fishbeak","fishbeak","fishbeak","fishbeak","bearded_imp","bearded_imp","militia","militia"]},
@@ -463,6 +465,7 @@ const MINIONS := {
 	"card_enemy_old_witch":{"tier":1,"deck":["old_witch","old_witch","shieldguard","net_hunter","barricade","healer","tower","rain"]},
 	"card_enemy_halberdier":{"tier":1,"deck":["halberdier","halberdier","field_smithy","shieldguard","hunter","healer","barricade","counter_charge"]},
 	"card_enemy_ballista_tower":{"tier":2,"deck":["ballista_tower","ballista_tower","barricade","shieldguard","manor_retainer","net_hunter","healer","rain"]},
+	"card_enemy_recruit_camp":{"tier":1,"deck":["recruit_camp","recruit_camp","militia","farmer","hunter","shieldguard","barricade","rain"]},
 	"card_enemy_supply_depot":{"tier":1,"deck":["supply_depot","supply_depot","militia","bandit","ox","halberdier","hunter","charge_horn"]},
 	"card_enemy_counter_charge":{"tier":1,"deck":["counter_charge","counter_charge","knight","halberdier","arquebusier","healer","ox","barricade"]},
 	"card_enemy_flaming_pitch":{"tier":2,"deck":["flaming_pitch","flaming_pitch","scarecrow","shieldguard","net_hunter","hunter","barricade","militia"]},
@@ -517,7 +520,7 @@ static func schedule(seed_value: int) -> Array:
 	rng.seed = seed_value
 	var result: Array = []
 	for tier: int in FLOOR_TIER:
-		var choices: Array = MINIONS.keys().filter(func(k: String) -> bool: return MINIONS[k].get("enabled",true) and MINIONS[k].tier == tier and not k in result)
+		var choices: Array = MINIONS.keys().filter(func(k: String) -> bool: return MINIONS[k].get("enabled",true) and MINIONS[k].tier == tier and not k in result and not Terrain.is_elite(k))
 		result.append(choices[rng.randi_range(0,choices.size()-1)])
 	var bosses: Array = BOSSES.keys()
 	result.append(bosses[rng.randi_range(0,bosses.size()-1)])
@@ -532,7 +535,8 @@ static func elite_schedule(seed_value: int, foes: Array) -> Array:
 	rng.seed = seed_value*17+5
 	var result: Array = []
 	for i: int in range(FLOOR_TIER.size()):
-		var choices: Array = MINIONS.keys().filter(func(k: String) -> bool: return MINIONS[k].get("enabled",true) and MINIONS[k].tier == elite_tier(i) and not k in foes and not k in result)
+		var choices: Array = MINIONS.keys().filter(func(k: String) -> bool: return MINIONS[k].get("enabled",true) and MINIONS[k].tier == elite_tier(i) and not k in foes and not k in result and Terrain.is_elite(k))
+		if choices.is_empty(): choices = MINIONS.keys().filter(func(k: String) -> bool: return MINIONS[k].get("enabled",true) and MINIONS[k].tier == elite_tier(i) and not k in foes and not k in result)
 		choices.sort()
 		result.append(choices[rng.randi_range(0,choices.size()-1)])
 	return result
@@ -620,8 +624,9 @@ static func pick_free_relic(seed_value: int, salt: int, owned: Array, max_price:
 
 # ---- 4-slot encounter board (四選一命運牌陣：觸發單格遞補、特殊情況連鎖變異) -------------------------
 
-static func pick_minion(tier: int, seed_value: int, salt: int, avoid: Array) -> String:
-	var pool: Array = MINIONS.keys().filter(func(k: String) -> bool: return MINIONS[k].get("enabled",true) and MINIONS[k].tier == tier and not k in avoid)
+# elite: draw from the 精英怪 (rogue_terrain.ELITES) only; otherwise from the ordinary foes only.
+static func pick_minion(tier: int, seed_value: int, salt: int, avoid: Array, elite: bool = false) -> String:
+	var pool: Array = MINIONS.keys().filter(func(k: String) -> bool: return MINIONS[k].get("enabled",true) and MINIONS[k].tier == tier and not k in avoid and Terrain.is_elite(k) == elite)
 	if pool.is_empty(): pool = MINIONS.keys().filter(func(k: String) -> bool: return MINIONS[k].get("enabled",true) and MINIONS[k].tier == tier)
 	pool.sort()
 	var rng := RandomNumberGenerator.new()
@@ -715,10 +720,7 @@ static func mutator_data(slot: Dictionary) -> Dictionary:
 	if k == "boss":
 		var fk := String(slot.get("foe","")) if mid.is_empty() else mid
 		return BOSS_VARIANTS.get(fk,BOSS_MUTATORS.get(fk,{}))
-	if k == "elite":
-		return ELITE_MUTATORS.get(mid,{})
-	if k == "battle":
-		return BATTLE_MUTATORS.get(mid,{})
+	# 一般戰與精英戰不再有異變（使用者 2026-11-22）；精英改帶固定的精英特性（rogue_terrain.ELITE_TRAITS）。
 	return {}
 
 # The boss's face for this run: its classic mutator or its second variant, fixed by the seed.
@@ -754,11 +756,11 @@ static func make_slot(kind: String, r: Dictionary, salt: int = 0) -> Dictionary:
 	if kind == "battle":
 		var foe: String = r.foes[fl]
 		if foe in used_foes: foe = pick_minion(FLOOR_TIER[fl],seed_val,draws+salt+fl*11,used_foes)
-		return {"kind":"battle","foe":foe,"mutator":roll_battle_mutator(fl,seed_val,draws+salt),"event_id":"","bounty":0,"age":0}
+		return {"kind":"battle","foe":foe,"mutator":"","event_id":"","bounty":0,"age":0}
 	if kind == "elite":
-		var e_foe: String = r.elites[fl] if r.get("elites",[]).size() > fl else pick_minion(elite_tier(fl),seed_val,draws+salt,used_foes)
-		if e_foe in used_foes: e_foe = pick_minion(elite_tier(fl),seed_val,draws+salt+fl*19,used_foes)
-		return {"kind":"elite","foe":e_foe,"mutator":roll_elite_mutator(e_foe,seed_val,draws+salt+fl*37),"event_id":"","bounty":0,"age":0}
+		var e_foe: String = r.elites[fl] if r.get("elites",[]).size() > fl else pick_minion(elite_tier(fl),seed_val,draws+salt,used_foes,true)
+		if e_foe in used_foes: e_foe = pick_minion(elite_tier(fl),seed_val,draws+salt+fl*19,used_foes,true)
+		return {"kind":"elite","foe":e_foe,"mutator":"","event_id":"","bounty":0,"age":0}
 	if kind == "event":
 		var keys: Array = EVENTS.keys().filter(func(k: String) -> bool: return not k in used_events)
 		if keys.is_empty(): keys = EVENTS.keys()

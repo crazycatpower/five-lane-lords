@@ -1,5 +1,7 @@
 extends RefCounted
 const Windup = preload("res://attack_windup.gd")
+const Season = preload("res://season.gd")
+const MapMech = preload("res://map_mech.gd")
 const WardRules = preload("res://ward_rules.gd")
 const RelicTriggers = preload("res://relic_triggers.gd")
 const Frontier = preload("res://frontier_cards.gd")
@@ -117,7 +119,18 @@ var has_borrowed_unit := false
 var has_expansion_building := false
 var water_lanes: Array[int] = []
 var water_cols: Array[int] = []
+var water_cells: Array[Vector2i] = [] # single pond cells: no building, ground troops slowed like any water
+var wind_lanes: Array[int] = []
+var wind_dir: Dictionary = {} # lane -> 1 blowing right (helps red, who march right) or -1 blowing left (helps blue)
+var blocked_cells: Array[Vector2i] = []
+var mech: Dictionary = {} # 地圖機制的狀態（map_mech.gd）：上坡、水閘、符文格、傳送門、濃霧、泥沼、熔岩、火山噴石
 var field_mutators: Array[Dictionary] = []
+var survive_time := 0.0
+var night_start_override := -1.0
+var biome := ""
+var season := "" # 春夏秋冬 (season.gd): "", "spring", "summer", "autumn" or "winter"
+var season_rule := true # false: the season is scenery only (season.gd)
+var stage_rule_tag := ""
 
 # Hand slots 0..3 rotate; FARM_SLOT is the permanent farmland slot (never rotates, own cooldown).
 const FARM_SLOT := 4
@@ -131,6 +144,12 @@ var team_drum_until: Array = [0.0,0.0] # latest end of any drum on this team (ke
 var team_drums: Array = [[],[]] # end time of every drum beat still sounding; each one is a speed tier
 
 func _init(seed_value: int = 1, deck_a: Array = [], deck_b: Array = [], lord_a: String = "", lord_b: String = "") -> void:
+	# The field's lane count: five unless an adventure stage asked for six just before this match.
+	L.set_rows(L.pending_rows)
+	L.pending_rows = 5
+	active_lanes.assign(range(L.GRID_ROWS))
+	alarm = per_lane(0.0)
+	building_alarm = per_lane(0.0)
 	territory.resize(L.GRID_COLUMNS*L.GRID_ROWS)
 	territory.fill(-1)
 	for team: int in range(2):
@@ -151,18 +170,25 @@ func _init(seed_value: int = 1, deck_a: Array = [], deck_b: Array = [], lord_a: 
 		lords.append(Lord.create(team,lord_kind))
 		home_cards[team] = B.home_card(lord_kind)
 		decks.append(deck)
-		gates.append([B.GATE_HP,B.GATE_HP,B.GATE_HP,B.GATE_HP,B.GATE_HP])
+		gates.append(per_lane(B.GATE_HP))
 		stats.append({"produced":0.0,"wasted":0.0,"planted":0,"burned":0,"plays":0,"used":{},"damage":{},"spent":{},"cultivated":0,"drops":0,"farms_lost_early":0,"gate_damage":{},"breach_card":"","invaded_card":""})
 	# Both sides start with two of their home buildings (farms, or tombstones for the underworld lord);
 	# they are not counted as planted.
 	for team: int in range(2):
 		if not home_cards[team].is_empty():
 			for cell: Vector2i in B.START_FARMS:
-				add_building(team,Vector2i(cell.x if team == 0 else 8-cell.x,cell.y),home_cards[team])
+				add_building(team,Vector2i(cell.x if team == 0 else 8-cell.x,cell.y),home_cards[team]).start_home = true
 		# A 小怪領主 may start with its own buildings (columns counted from its back edge).
 		for b: Array in lord_mod(team,"start_buildings",[]):
 			add_building(team,Vector2i(b[0] if team == 0 else 8-b[0],b[1]),b[2])
 		stats[team].planted = 0
+	if L.GRID_ROWS != 5:
+		place_start_homes()
+		refresh_territory()
+
+# One value per lane of this field (five, or six on a six-lane stage).
+static func per_lane(value: Variant) -> Array:
+	return L.per_lane(value)
 
 # A visible tie between a cause and what it affects: a death feeding a tombstone or a ghoul, a
 # necromancer raising a skeleton, a herbalist healing, 豐收 doubling a farm. Drawing only.
@@ -195,28 +221,154 @@ func apply_domestic(team: int, home: String, mods: Dictionary) -> void:
 	RelicTriggers.battle_start(self,team)
 	refresh_territory()
 
+# Applies campaign decrees, difficulty mods, and stage-wide modifiers without replacing home_cards or minion passives.
+func apply_campaign_mods(team: int, mods: Dictionary) -> void:
+	if mods.is_empty(): return
+	for key in mods:
+		var val = mods[key]
+		if key in ["farm_mult","cd_speed_mult","income_mult","skill_charge_mult","skill_haste","gold_gain_mult"]:
+			team_mods[team][key] = float(lord_mod(team,key,1.0))*float(val)
+		elif key in ["thorns_gate","kill_bounty","skill_discount","kill_charge","skill_echo_gold"]:
+			team_mods[team][key] = float(lord_mod(team,key,0.0))+float(val)
+		elif key == "gate_armor":
+			team_mods[team][key] = minf(0.6,float(lord_mod(team,key,0.0))+float(val))
+		elif key in ["toughen","haste"]:
+			var merged: Array = lord_mod(team,key,[]).duplicate()
+			for item in val:
+				if not item in merged: merged.append(item)
+			team_mods[team][key] = merged
+	if mods.has("start_ink"):
+		ink[team] = minf(B.MAX_INK,ink[team]+float(mods.start_ink))
+	var boost := int(mods.get("lord_boost",0))
+	if boost > 0 and team < lords.size():
+		lords[team].max_hp = Upgrades.shifted("hp",lords[team].max_hp,boost)
+		lords[team].hp = lords[team].max_hp
+		lords[team].damage = Upgrades.shifted("damage",lords[team].damage,boost)
+	for b: Array in mods.get("start_buildings",[]):
+		var col := int(b[0]) if team == 0 else L.GRID_COLUMNS-1-int(b[0])
+		var lane := int(b[1])
+		var cell := Vector2i(col,lane)
+		if cell.x >= 0 and cell.x < L.GRID_COLUMNS and lane in active_lanes and not is_no_build_cell(cell) and building_at(cell).is_empty():
+			add_building(team,cell,String(b[2]))
+	for fm: Dictionary in mods.get("field_mutators",[]):
+		apply_field_mutator(fm,team)
+	refresh_territory()
+
+func set_active_lanes(lanes: Array) -> void:
+	active_lanes.assign(lanes if not lanes.is_empty() else range(L.GRID_ROWS))
+	place_start_homes()
+	var kept: Array[Dictionary] = []
+	var evicted: Array[Dictionary] = []
+	for b: Dictionary in buildings:
+		if b.cell.y in active_lanes: kept.append(b)
+		else: evicted.append(b)
+	buildings = kept
+	territory.fill(-1)
+	for team: int in range(2):
+		for lane: int in active_lanes:
+			if gates[team][lane] > 0:
+				claim_around(team,Vector2i(-1 if team == 0 else L.GRID_COLUMNS,lane))
+	for b: Dictionary in buildings:
+		claim_around(b.team,b.cell)
+	for eb: Dictionary in evicted:
+		var team: int = int(eb.team)
+		var orig_lane: int = int(eb.cell.y)
+		var cols: Array = [0,1,2,3,4,5,6,7,8] if team == 0 else [8,7,6,5,4,3,2,1,0]
+		var ordered_lanes: Array = active_lanes.duplicate()
+		ordered_lanes.sort_custom(func(a: int, b: int) -> bool:
+			var da := absi(a-orig_lane)
+			var db := absi(b-orig_lane)
+			return a < b if da == db else da < db)
+		var placed := false
+		for col: int in cols:
+			for dry_lane: int in ordered_lanes:
+				var cell := Vector2i(col,dry_lane)
+				if is_no_build_cell(cell) or not building_at(cell).is_empty(): continue
+				eb.cell = cell
+				eb.pos = L.cell_center(cell)
+				buildings.append(eb)
+				claim_around(team,cell)
+				placed = true
+				break
+			if placed: break
+	if active_lanes.size() == 1:
+		var only_lane: int = int(active_lanes[0])
+		var lane_y: float = L.cell_center(Vector2i(0,only_lane)).y
+		for l: Dictionary in lords:
+			l.lane = only_lane
+			l.pos.y = lane_y
+	refresh_territory()
+
+# The two opening farms sit symmetrically on the open lanes (使用者 2026-11-22：偶數路的初始經濟建築要改):
+# the second lane from each edge (II and IV of five, II and V of six, the inner two of four), both ends of
+# three, one each of two. A single lane keeps the eviction rule in set_active_lanes (two in a row).
+func place_start_homes() -> void:
+	var open: Array = active_lanes.duplicate()
+	open.sort()
+	var n := open.size()
+	if n < 2: return
+	var want: Array = [open[1],open[n-2]] if n >= 4 else [open[0],open[n-1]]
+	for team: int in range(2):
+		var col := 0 if team == 0 else L.GRID_COLUMNS-1
+		var homes: Array = buildings.filter(func(b: Dictionary) -> bool: return b.team == team and b.get("start_home",false) and b.cell.x == col)
+		var free_lanes: Array = want.filter(func(lane: int) -> bool: return not homes.any(func(b: Dictionary) -> bool: return b.cell.y == lane))
+		for b: Dictionary in homes:
+			if b.cell.y in want or free_lanes.is_empty(): continue
+			var cell := Vector2i(col,int(free_lanes.pop_front()))
+			if not building_at(cell).is_empty(): continue
+			b.cell = cell
+			b.pos = L.cell_center(cell)
+
 func is_water_cell(cell: Vector2i) -> bool:
-	return cell.y in water_lanes or cell.x in water_cols
+	return cell.y in water_lanes or cell.x in water_cols or cell in water_cells
+
+func is_blocked_cell(cell: Vector2i) -> bool:
+	return cell in blocked_cells
+
+func is_no_build_cell(cell: Vector2i) -> bool:
+	return is_water_cell(cell) or is_blocked_cell(cell) or MapMech.no_build(self,cell)
+
+func night_start_time() -> float:
+	return night_start_override if night_start_override > 0.0 else B.NIGHT_START
+
+func dawn_time() -> float:
+	return (night_start_time() + (B.DAWN - B.NIGHT_START)) if night_start_override > 0.0 else B.DAWN
 
 func apply_field_mutator(mut: Dictionary, default_team: int = 1) -> void:
 	if mut.is_empty(): return
 	var target_team := int(mut.get("team",default_team))
-	var water_added := false
+	var terrain_added := false
 	for wl in mut.get("water_lanes",[]):
 		var l := clampi(int(wl),0,L.GRID_ROWS-1)
 		if not l in water_lanes:
 			water_lanes.append(l)
-			water_added = true
+			terrain_added = true
 	for wc in mut.get("water_cols",[]):
 		var c := clampi(int(wc),0,L.GRID_COLUMNS-1)
 		if not c in water_cols:
 			water_cols.append(c)
-			water_added = true
-	if water_added:
+			terrain_added = true
+	for wc in mut.get("water_cells",[]):
+		var wcell := Vector2i(clampi(int(wc[0]),0,L.GRID_COLUMNS-1),clampi(int(wc[1]),0,L.GRID_ROWS-1))
+		if not wcell in water_cells:
+			water_cells.append(wcell)
+			terrain_added = true
+	# 順風 has a direction (使用者 2026-11-22：箭頭向右卻兩方都加速): wind_lanes blow right, wind_left_lanes left.
+	for wkey: String in ["wind_lanes","wind_left_lanes"]:
+		for wd in mut.get(wkey,[]):
+			var l := clampi(int(wd),0,L.GRID_ROWS-1)
+			if not l in wind_lanes: wind_lanes.append(l)
+			wind_dir[l] = -1 if wkey == "wind_left_lanes" else 1
+	for bc in mut.get("blocked_cells",[]):
+		var bcell := Vector2i(clampi(int(bc[0]),0,L.GRID_COLUMNS-1),clampi(int(bc[1]),0,L.GRID_ROWS-1))
+		if not bcell in blocked_cells:
+			blocked_cells.append(bcell)
+			terrain_added = true
+	if terrain_added:
 		var removed := [0,0]
 		var kept: Array[Dictionary] = []
 		for b: Dictionary in buildings:
-			if is_water_cell(b.cell):
+			if is_no_build_cell(b.cell):
 				removed[b.team] += 1
 			else:
 				kept.append(b)
@@ -227,9 +379,9 @@ func apply_field_mutator(mut: Dictionary, default_team: int = 1) -> void:
 			var cols: Array = [0,1,2,3,4,5,6,7,8] if team == 0 else [8,7,6,5,4,3,2,1,0]
 			var placed := 0
 			for col: int in cols:
-				for dry_lane: int in [0,4,2,1,3]:
+				for dry_lane: int in ([0,4,2,1,3] if L.GRID_ROWS == 5 else range(L.GRID_ROWS)):
 					var cell := Vector2i(col,dry_lane)
-					if is_water_cell(cell) or not dry_lane in active_lanes: continue
+					if is_no_build_cell(cell) or not dry_lane in active_lanes: continue
 					if not building_at(cell).is_empty(): continue
 					add_building(team,cell,hc)
 					placed += 1
@@ -242,15 +394,19 @@ func apply_field_mutator(mut: Dictionary, default_team: int = 1) -> void:
 			var col := col_off if target_team == 0 else L.GRID_COLUMNS-1-col_off
 			for lane: int in active_lanes:
 				var cell := Vector2i(col,lane)
-				if is_water_cell(cell): continue
+				if is_no_build_cell(cell): continue
 				if building_at(cell).is_empty():
 					add_building(target_team,cell,hc)
 	for b: Array in mut.get("enemy_buildings",[]):
 		var col := int(b[0]) if target_team == 0 else L.GRID_COLUMNS-1-int(b[0])
 		var cell := Vector2i(col,int(b[1]))
-		if cell.x >= 0 and cell.x < L.GRID_COLUMNS and cell.y in active_lanes and not is_water_cell(cell):
+		if cell.x >= 0 and cell.x < L.GRID_COLUMNS and cell.y in active_lanes and not is_no_build_cell(cell):
 			if building_at(cell).is_empty():
 				add_building(target_team,cell,String(b[2]))
+	for pb: Array in mut.get("player_buildings",[]):
+		var cell := Vector2i(clampi(int(pb[0]),0,L.GRID_COLUMNS-1),int(pb[1]))
+		if cell.y in active_lanes and not is_no_build_cell(cell) and building_at(cell).is_empty():
+			add_building(0,cell,String(pb[2]))
 	for u_spec: Array in mut.get("enemy_units",[]):
 		var lane := int(u_spec[1])
 		if lane in active_lanes:
@@ -266,6 +422,7 @@ func apply_field_mutator(mut: Dictionary, default_team: int = 1) -> void:
 		p["team"] = int(p.get("team",target_team))
 		p["timer"] = float(p.get("interval",30.0))
 		field_mutators.append(p)
+	MapMech.setup(self,mut) # 上坡、水閘、符文格、傳送門、濃霧、泥沼、熔岩、火山噴石
 	if mut.has("periodic_spell"):
 		var ps: Dictionary = mut.periodic_spell.duplicate(true)
 		ps["mode"] = "spell"
@@ -294,13 +451,16 @@ func update_field_mutators(dt: float) -> void:
 			event("spell",pos,team,{"card":sp_kind})
 			continue
 		var kind := String(fm.get("kind","grave"))
+		if fm.has("kinds"):
+			var ks: Array = fm.kinds
+			if not ks.is_empty(): kind = String(ks[rng.randi_range(0,ks.size()-1)])
 		var c0 := clampi(int(fm.get("min_col",1)),0,L.GRID_COLUMNS-1)
 		var c1 := clampi(int(fm.get("max_col",7)),c0,L.GRID_COLUMNS-1)
 		var open_cells: Array[Vector2i] = []
 		for row: int in active_lanes:
 			for col: int in range(c0,c1+1):
 				var cell := Vector2i(col,row)
-				if is_water_cell(cell): continue
+				if is_no_build_cell(cell): continue
 				if building_at(cell).is_empty(): open_cells.append(cell)
 		if not open_cells.is_empty():
 			var chosen: Vector2i = open_cells[rng.randi_range(0,open_cells.size()-1)]
@@ -336,7 +496,7 @@ func claim_around(team: int, center: Vector2i) -> void:
 	for dy: int in range(-1,2):
 		for dx: int in range(-1,2):
 			var cell := center+Vector2i(dx,dy)
-			if cell.x < 0 or cell.x >= L.GRID_COLUMNS or cell.y < 0 or cell.y >= L.GRID_ROWS: continue
+			if cell.x < 0 or cell.x >= L.GRID_COLUMNS or cell.y < 0 or cell.y >= L.GRID_ROWS or not cell.y in active_lanes: continue
 			var index := cell.y*L.GRID_COLUMNS+cell.x
 			if territory[index] == -1: territory[index] = team
 
@@ -344,17 +504,22 @@ func refresh_territory() -> void:
 	# Keep the current owner while any living allied structure supports the tile.
 	# Otherwise the oldest surviving claimant takes over, or the tile becomes neutral.
 	for row: int in range(L.GRID_ROWS):
+		if not row in active_lanes:
+			for col: int in range(L.GRID_COLUMNS):
+				territory[row*L.GRID_COLUMNS+col] = -1
+			continue
 		for col: int in range(L.GRID_COLUMNS):
 			var support := 0
 			var first := -1
 			for team: int in range(2):
 				if col != (0 if team == 0 else L.GRID_COLUMNS-1): continue
 				for lane: int in range(maxi(0,row-1),mini(L.GRID_ROWS,row+2)):
+					if not lane in active_lanes: continue
 					if gates[team][lane] > 0:
 						support |= 1 << team
 						if first < 0: first = team
 			for b: Dictionary in buildings:
-				if b.hp <= 0 or absi(b.cell.x-col) > 1 or absi(b.cell.y-row) > 1: continue
+				if b.hp <= 0 or not b.cell.y in active_lanes or absi(b.cell.x-col) > 1 or absi(b.cell.y-row) > 1: continue
 				support |= 1 << int(b.team)
 				if first < 0: first = b.team
 			var index := row*L.GRID_COLUMNS+col
@@ -379,7 +544,7 @@ func building_at(cell: Vector2i) -> Dictionary:
 	return {}
 
 func multiplier() -> float:
-	if night_decay and elapsed >= B.NIGHT_START: return B.NIGHT_GOLD
+	if night_decay and elapsed >= night_start_time(): return B.NIGHT_GOLD
 	return B.DUSK_GOLD if elapsed >= B.RAMP_2 else (B.NOON_GOLD if elapsed >= B.RAMP_1 else B.START_GOLD)
 
 func production_rate(team: int) -> float:
@@ -418,10 +583,10 @@ func farm_speed_with(b: Dictionary, mills: int) -> float:
 
 func build_lookups() -> void:
 	foe_units = [[],[]]
-	lane_foes = [[[],[],[],[],[]],[[],[],[],[],[]]]
-	lane_foe_buildings = [[[],[],[],[],[]],[[],[],[],[],[]]]
-	lane_foe_taunts = [[[],[],[],[],[]],[[],[],[],[],[]]]
-	lane_mill = [[0,0,0,0,0],[0,0,0,0,0]]
+	lane_foes = [per_lane([]),per_lane([])]
+	lane_foe_buildings = [per_lane([]),per_lane([])]
+	lane_foe_taunts = [per_lane([]),per_lane([])]
+	lane_mill = [per_lane(0),per_lane(0)]
 	has_watchtower = [false,false]
 	has_taunt = [false,false]
 	wards = [[],[]]
@@ -480,7 +645,7 @@ func slot_cd(team: int, slot: int) -> float:
 # Placement rules live in one place: play_check() says why a card cannot go here (Refusal.OK = it
 # can). can_play() is the cheap yes/no the AI asks hundreds of times per decision; play_error()
 # turns the reason into the sentence the player sees.
-enum Refusal {OK, ENDED, PAUSED, NO_CARD, COOLDOWN, GOLD, OFF_GRID, WATER, NOT_OURS, OCCUPIED, UNIQUE, FOOTPRINT}
+enum Refusal {OK, ENDED, PAUSED, NO_CARD, COOLDOWN, GOLD, OFF_GRID, WATER, BLOCKED, NOT_OURS, OCCUPIED, UNIQUE, FOOTPRINT}
 
 func play_check(team: int, slot: int, pos: Vector2) -> Refusal:
 	if ended: return Refusal.ENDED
@@ -507,6 +672,7 @@ func play_check(team: int, slot: int, pos: Vector2) -> Refusal:
 	var cell := cell_at(pos)
 	if cell.x < 0 or not cell.y in active_lanes: return Refusal.OFF_GRID
 	if card.type == "building" and is_water_cell(cell): return Refusal.WATER
+	if card.type == "building" and is_blocked_cell(cell): return Refusal.BLOCKED
 	if territory_owner(cell) != team: return Refusal.NOT_OURS
 	if card.type == "unit" and not GridRules.footprint_ok(self,team,kind,cell): return Refusal.FOOTPRINT # 佔位 cards need every cell
 	if card.type == "building":
@@ -528,6 +694,7 @@ func play_error(team: int, slot: int, pos: Vector2) -> String:
 		Refusal.NO_CARD: return "先選一張手牌。"
 		Refusal.OFF_GRID: return "要放在戰場的格子上。"
 		Refusal.WATER: return "水域路線無法建造建築。"
+		Refusal.BLOCKED: return "古碑封鎖了這格，無法建造建築。"
 		Refusal.NOT_OURS: return "只能部署在我方領地；建築與城牆周圍八格可擴張，先佔先得。"
 		Refusal.OCCUPIED: return "這格已經有別的建築；只有同一種建築可以覆蓋回血。"
 		Refusal.FOOTPRINT: return "%s要佔的每一格都必須是我方領地，這裡放不下。" % B.CARDS[kind_at(team,slot)].name
@@ -570,7 +737,7 @@ func play(team: int, slot: int, pos: Vector2) -> bool:
 	else:
 		var spell_origin: Vector2 = lords[team].pos+Vector2((1.0 if team == 0 else -1.0)*20.0,-34.0) if (lord_active[team] and float(lords[team].hp) > 0.0) else Vector2(L.gate_icon_x(team),clampf(pos.y,L.GRID_ORIGIN.y+36.0,L.GRID_ORIGIN.y+L.GRID_SIZE.y-36.0)-44.0)
 		spells.append({"kind":kind,"team":team,"pos":pos,"origin":spell_origin,"delay":B.SPELL_DELAY})
-	memory[1-team] = {"card":kind,"lane":cell.y if cell.y in active_lanes else clampi(int((pos.y-L.GRID_ORIGIN.y)/L.CELL_SIZE.y),0,4)}
+	memory[1-team] = {"card":kind,"lane":cell.y if cell.y in active_lanes else clampi(int((pos.y-L.GRID_ORIGIN.y)/L.CELL_SIZE.y),0,L.GRID_ROWS-1)}
 	if card.type == "unit":
 		recent_lanes[team].append(cell.y)
 		if recent_lanes[team].size() > 3: recent_lanes[team].pop_front()
@@ -643,7 +810,7 @@ func deploy(team: int, kind: String, cell: Vector2i, gold: int = 0) -> void:
 		# share lands exactly on its cell; nothing is shifted inward or back. (A lord skill summoning the
 		# card where the formation does not fit falls back to the single-cell squad below.)
 		var cells: Dictionary = {}
-		for p: Dictionary in GridRules.plan(kind,cell,team,groups):
+		for p: Dictionary in GridRules.plan(kind,cell,team,groups,active_lanes):
 			var at := Vector2i(p.col,p.lane)
 			if not cells.has(at): cells[at] = []
 			cells[at].append([p.kind,p.count,p.offset])
@@ -728,6 +895,7 @@ func effective_armor(target: Dictionary) -> float:
 func damage(target: Dictionary, amount: float, team: int, kind: String, source: Dictionary = {}, sacrifice: bool = false) -> void:
 	if target.hp <= 0 or GluttonNest.hidden(target): return
 	if amount <= 0: return
+	if not sacrifice and target.get("stealthed",false) and not stealth_breaker(kind): return # 潛行中無敵，只有法術（與天災）打得到
 	if not sacrifice:
 		amount *= 1.0-Arcane.resonance(self,target)
 		var total_armor := effective_armor(target)
@@ -1029,7 +1197,7 @@ func _minion_open_cell(team: int) -> Vector2i:
 		var c := col
 		while c >= 0 and c < L.GRID_COLUMNS:
 			var cell := Vector2i(c,lane)
-			if territory_owner(cell) == team and building_at(cell).is_empty(): return cell
+			if territory_owner(cell) == team and building_at(cell).is_empty() and not is_no_build_cell(cell): return cell
 			c += step_back
 	return Vector2i(-1,-1)
 
@@ -1040,6 +1208,16 @@ func _minion_spell_target(team: int, card_kind: String) -> Vector2:
 		var foes := Faction.intruders(self,team)
 		if not foes.is_empty(): return foes[0].pos
 	if card_kind in B.FRIENDLY_SPELLS:
+		if card_kind == "grave_exchange":
+			var best_b: Dictionary = {}
+			var best_ratio := INF
+			for b: Dictionary in buildings:
+				if b.hp <= 0 or b.team != team or B.is_home_card(b.kind,lords[team].lord): continue
+				var ratio: float = b.hp/maxf(1.0,b.max_hp)
+				if ratio < best_ratio:
+					best_ratio = ratio
+					best_b = b
+			if not best_b.is_empty(): return best_b.pos
 		var pref_kind := "farm" if card_kind == "harvest" else ("crystal" if card_kind == "mana_spring" else "")
 		if not pref_kind.is_empty():
 			for b: Dictionary in buildings:
@@ -1086,7 +1264,7 @@ func _cast_minion_skill(team: int, kind: String, visual_targets: Array[Vector2])
 				var col: int = front_column(team,lane)
 				if col < 0: col = 0 if team == 0 else L.GRID_COLUMNS-1
 				var cell := Vector2i(col,lane)
-				deploy(team,card_kind,cell)
+				deploy(team,card_kind,cell,int(info.get("skill_gold",0)))
 				visual_targets.append(L.cell_center(cell))
 		"spell":
 			var target_pos := _minion_spell_target(team,card_kind)
@@ -1094,10 +1272,23 @@ func _cast_minion_skill(team: int, kind: String, visual_targets: Array[Vector2])
 			spells.append({"kind":card_kind,"team":team,"pos":target_pos,"origin":spell_origin,"delay":B.SPELL_DELAY})
 			visual_targets.append(target_pos)
 		"building":
-			var cell := _minion_open_cell(team)
-			if cell.x >= 0:
-				add_building(team,cell,card_kind)
-				visual_targets.append(L.cell_center(cell))
+			var existing_unique: Dictionary = {}
+			if B.CARDS[card_kind].get("unique",false):
+				for b: Dictionary in buildings:
+					if b.hp > 0 and b.team == team and b.kind == card_kind:
+						existing_unique = b
+						break
+			var cell := Vector2i(-1,-1)
+			if not existing_unique.is_empty():
+				if card_kind == "seal_altar":
+					SealAltar.feed_souls(self,existing_unique,4.0)
+					link(lords[team].pos,existing_unique.pos,team,"soul")
+				visual_targets.append(existing_unique.pos)
+			else:
+				cell = _minion_open_cell(team)
+				if cell.x >= 0:
+					add_building(team,cell,card_kind)
+					visual_targets.append(L.cell_center(cell))
 			for b: Dictionary in buildings:
 				if b.hp <= 0 or b.team != team: continue
 				var heal_amt: float = b.max_hp*0.25
@@ -1163,7 +1354,7 @@ func cast_skill(team: int) -> bool:
 			for lane: int in active_lanes:
 				for col: int in range(L.GRID_COLUMNS):
 					var cell := Vector2i(col if team == 0 else 8-col,lane)
-					if territory_owner(cell) == team and building_at(cell).is_empty():
+					if territory_owner(cell) == team and building_at(cell).is_empty() and not is_no_build_cell(cell):
 						add_building(team,cell,"farm")
 						break
 			for b: Dictionary in buildings:
@@ -1187,7 +1378,7 @@ func iron_tower_cells(team: int) -> Array[Vector2i]:
 	for lane: int in active_lanes:
 		for col: int in range(L.GRID_COLUMNS):
 			var cell := Vector2i(col,lane)
-			if territory_owner(cell) == team and building_at(cell).is_empty() and not is_water_cell(cell): cells.append(cell)
+			if territory_owner(cell) == team and building_at(cell).is_empty() and not is_no_build_cell(cell): cells.append(cell)
 	return cells
 
 func finish(side: int) -> void:
@@ -1249,8 +1440,15 @@ func nearest(pos: Vector2, team: int, radius: float, candidates: Array, lane: in
 func lord_lane(lord: Dictionary) -> int:
 	return clampi(floori((lord.pos.y-L.GRID_ORIGIN.y)/L.CELL_SIZE.y),0,L.GRID_ROWS-1)
 
+# Whom the lord strikes: lords see a hidden troop and walk up to it (lord_ai.select_target), but cannot hit it.
 func lord_target(lord: Dictionary) -> Dictionary:
-	return Lord.AI.select_target(lord,lane_foes[lord.team][lord_lane(lord)],B.lord_attack_range(lord.lord))
+	var visible: Array = lane_foes[lord.team][lord_lane(lord)].filter(func(u: Dictionary) -> bool: return not u.get("stealthed",false))
+	return Lord.AI.select_target(lord,visible,B.lord_attack_range(lord.lord))
+
+# Damage that reaches a troop in stealth (使用者 2026-11-22：潛行中無敵，除了法術): spell cards, their poison and
+# fire, and the field's own hazards (lava, lightning, falling rock).
+static func stealth_breaker(kind: String) -> bool:
+	return B.CARDS.get(kind,{}).get("type","") == "spell" or kind in ["lava","storm","eruption"]
 
 func shoot_lord(lord: Dictionary, target: Dictionary, amount: float) -> void:
 	shoot(lord,target,amount)
@@ -1421,6 +1619,7 @@ func step(dt: float) -> void:
 	Arcane.update_traps(self)
 	update_buildings(dt)
 	update_field_mutators(dt)
+	MapMech.update(self,dt)
 	update_spells(dt)
 	update_zones(dt)
 	Faction.update(self,dt)
@@ -1473,13 +1672,14 @@ func tick_clocks(dt: float) -> void:
 
 # Phase of the day: 0 morning (x1.5), 1 noon (gold x2.0), 2 dusk (gold x2.5), 3 night (gates crumble, x3.0).
 func day_phase() -> int:
-	if night_decay and elapsed >= B.NIGHT_START: return 3
+	if night_decay and elapsed >= night_start_time(): return 3
 	return 2 if elapsed >= B.RAMP_2 else (1 if elapsed >= B.RAMP_1 else 0)
 
 # Gate hp every standing gate loses per second right now (0 before nightfall).
 func night_rate() -> float:
-	if not night_decay or elapsed < B.NIGHT_START: return 0.0
-	return B.NIGHT_DECAY*pow(2.0,floorf((elapsed-B.NIGHT_START)/B.NIGHT_STEP))
+	var ns := night_start_time()
+	if not night_decay or elapsed < ns: return 0.0
+	return B.NIGHT_DECAY*pow(2.0,floorf((elapsed-ns)/B.NIGHT_STEP))
 
 # Night: both sides' gates wear down on their own; one that reaches 0 falls like any breached gate.
 func crumble_gates(dt: float) -> void:
@@ -1572,19 +1772,21 @@ func movement_speed(u: Dictionary) -> float:
 	var steps := buff_steps(u)
 	u.inspired = steps > 0
 	var charge_step := 1 if ((data.get("charge",false) and not u.get("charged",false) and not u.get("expansion_charged",false)) or u.get("granted_charge",false)) else 0
-	var total_steps := steps+charge_step
-	if total_steps > 0:
+	var wind_step := 1 if (not wind_lanes.is_empty() and u.lane in wind_lanes and int(wind_dir.get(u.lane,1)) == (1 if u.team == 0 else -1)) else 0
+	var total_steps := steps+charge_step+wind_step-Season.snow_step(self,u)
+	if total_steps != 0:
 		var index: int = B.TIERS.speed.find(base)
-		if index >= 0: base = B.TIERS.speed[maxi(B.tier_index("S"),index-total_steps)] # one tier per buff, never past S
+		if index >= 0: base = B.TIERS.speed[clampi(index-total_steps,B.tier_index("S"),B.TIERS.speed.size()-1)] # one tier per buff, never past S
 	if u.get("slow_left",0.0) > 0:
 		base *= 0.5
-	if (not water_lanes.is_empty() or not water_cols.is_empty()) and not u.get("flying",false):
+	if (not water_lanes.is_empty() or not water_cols.is_empty() or not water_cells.is_empty()) and not u.get("flying",false):
 		var ulane := clampi(floori((u.pos.y-L.GRID_ORIGIN.y)/L.CELL_SIZE.y),0,L.GRID_ROWS-1)
 		var ucol := clampi(floori((u.pos.x-L.GRID_ORIGIN.x)/L.CELL_SIZE.x),0,L.GRID_COLUMNS-1)
-		if ulane in water_lanes or ucol in water_cols:
+		if ulane in water_lanes or ucol in water_cols or Vector2i(ucol,ulane) in water_cells:
 			base *= 0.4 # water zones slow non-flying troops by 60%
 	if u.get("root_left",0.0) > 0.0: return 0.0
 	if not fields.is_empty() and Faction.in_time_field(self,u): base *= 0.5
+	if not mech.is_empty(): base *= MapMech.speed_mult(self,u)
 	return base
 
 func attack_interval(u: Dictionary) -> float:
@@ -1771,6 +1973,11 @@ func _unit_reach_data(u: Dictionary, data: Dictionary) -> Dictionary:
 	if u.has("range"): # an upgraded card reaches one tier further
 		reach = data.duplicate()
 		reach.range = u.range
+	if not mech.is_empty() and B.CARDS[u.kind].get("projectile",false) and MapMech.range_steps(self,u) > 0:
+		var tier_m: int = B.TIERS.range.find(reach.range)
+		if tier_m > B.tier_index("S"):
+			if is_same(reach,data): reach = data.duplicate()
+			reach.range = B.TIERS.range[tier_m-1]
 	if u.get("expansion_range_until",0.0) > elapsed and B.CARDS[u.kind].get("projectile",false):
 		var tier: int = B.TIERS.range.find(reach.range)
 		if tier > B.tier_index("S"):
@@ -1814,7 +2021,7 @@ func _nearest_three_lane(u: Dictionary, max_range: float, candidates: Array, can
 	for other: Dictionary in candidates:
 		if other.team == u.team or other.hp <= 0 or other.get("stealthed",false) or GluttonNest.hidden(other): continue
 		if not can_hit_flying and other.get("flying",false): continue
-		var other_lane: int = clampi(roundi((other.pos.y-L.GRID_ORIGIN.y)/L.CELL_SIZE.y-0.5),0,4) if other.get("kind","") == "lord" else int(other.get("lane",other.get("cell",Vector2i(-1,-1)).y))
+		var other_lane: int = clampi(roundi((other.pos.y-L.GRID_ORIGIN.y)/L.CELL_SIZE.y-0.5),0,L.GRID_ROWS-1) if other.get("kind","") == "lord" else int(other.get("lane",other.get("cell",Vector2i(-1,-1)).y))
 		if absi(other_lane-u.lane) > 1: continue
 		if (other.pos.x-u.pos.x)*u.face < -sr: continue
 		var d := maxf(0.0,absf(other.pos.x-u.pos.x)-sr-B.actor_radius(other))
@@ -1926,7 +2133,7 @@ func nearest_enemy_lane(u: Dictionary, _data: Dictionary) -> int:
 			var d: float = u.pos.distance_to(l.pos)
 			if d < best_d:
 				best_d = d
-				best_lane = clampi(roundi((l.pos.y-L.GRID_ORIGIN.y)/L.CELL_SIZE.y-0.5),0,4)
+				best_lane = clampi(roundi((l.pos.y-L.GRID_ORIGIN.y)/L.CELL_SIZE.y-0.5),0,L.GRID_ROWS-1)
 	return best_lane
 
 func advance_march_timers(u: Dictionary, data: Dictionary, spd: float, dt: float) -> void:
@@ -1974,7 +2181,7 @@ func _march_with_taunt(u: Dictionary, data: Dictionary, dt: float, taunt: Dictio
 			u.pos.y = target_y
 			u.lane = target_lane
 		else:
-			var new_lane: int = clampi(roundi((u.pos.y-L.GRID_ORIGIN.y)/L.CELL_SIZE.y-0.5),0,4)
+			var new_lane: int = clampi(roundi((u.pos.y-L.GRID_ORIGIN.y)/L.CELL_SIZE.y-0.5),0,L.GRID_ROWS-1)
 			if new_lane != u.lane: u.lane = new_lane
 		if not taunt.is_empty():
 			Windup.cancel(u)
@@ -2073,13 +2280,17 @@ func cast_spell(s: Dictionary) -> void:
 
 func update_clock() -> void:
 	if ended: return
+	if survive_time > 0.0 and elapsed >= survive_time:
+		finish(0)
+		return
 	for ramp: float in [B.RAMP_1,B.RAMP_2]:
 		if elapsed >= ramp and elapsed-last_dt < ramp: event("ramp",Vector2(800,50),0,{"multiplier":multiplier()})
-	if night_decay and elapsed >= B.NIGHT_START:
+	var ns := night_start_time()
+	if night_decay and elapsed >= ns:
 		# Nightfall, then one toll each time the crumbling doubles.
-		var before: float = elapsed-last_dt-B.NIGHT_START
-		if before < 0 or floorf(before/B.NIGHT_STEP) != floorf((elapsed-B.NIGHT_START)/B.NIGHT_STEP): event("nightfall",Vector2(800,50),0,{"rate":night_rate(),"first":before < 0})
-		if elapsed >= B.DAWN: dawn_verdict()
+		var before: float = elapsed-last_dt-ns
+		if before < 0 or floorf(before/B.NIGHT_STEP) != floorf((elapsed-ns)/B.NIGHT_STEP): event("nightfall",Vector2(800,50),0,{"rate":night_rate(),"first":before < 0})
+		if elapsed >= dawn_time(): dawn_verdict()
 
 # Land each side holds: territory cells in the lanes being played.
 func land(team: int) -> int:
@@ -2100,12 +2311,20 @@ func dawn_verdict() -> void:
 func skill_state(team: int) -> Dictionary:
 	var farms := 0
 	var graves := 0
+	var crystals := 0
 	var damaged_blds := 0
+	var nonhome_blds := 0
+	var has_unique := false
+	var lord_kind: String = lords[team].lord
+	var unique_card: String = B.MINION_LORDS[lord_kind].card if B.is_minion(lord_kind) else ""
 	for b: Dictionary in buildings:
 		if b.hp <= 0 or b.team != team: continue
 		if b.kind == "farm": farms += 1
 		elif b.kind == "grave": graves += 1
+		elif b.kind == "crystal": crystals += 1
 		if b.hp < b.max_hp: damaged_blds += 1
+		if not B.is_home_card(b.kind,lord_kind): nonhome_blds += 1
+		if not unique_card.is_empty() and b.kind == unique_card and B.CARDS[b.kind].get("unique",false): has_unique = true
 	var gate_total := 0.0
 	var broken := 0
 	for hp: float in gates[team]:
@@ -2115,7 +2334,6 @@ func skill_state(team: int) -> Dictionary:
 	var my_army_hp := 0.0
 	var enemy_troops := 0
 	var slash_targets := 0
-	var lord_kind: String = lords[team].lord
 	var is_adv := lord_kind == "adventure"
 	var lpos: Vector2 = lords[team].pos
 	var Slash = preload("res://hero_slash.gd") if is_adv else null
@@ -2127,9 +2345,9 @@ func skill_state(team: int) -> Dictionary:
 				my_army_hp += u.hp
 		elif u.spawn_delay <= 0:
 			enemy_troops += 1
-			if is_adv and Slash.contains(lpos,u.pos,team): slash_targets += 1
+			if is_adv and not u.get("stealthed",false) and Slash.contains(lpos,u.pos,team): slash_targets += 1 # the slash cannot hurt a hidden troop
 	var has_open := _minion_open_cell(team).x >= 0 if B.is_minion(lord_kind) else false
-	return {"rune_lanes":LordExpansion.rune_cells(self,team).size() if lord_kind == "rune" else 0,"slash_targets":slash_targets,"troops":my_army_count,"troop_hp":my_army_hp,"enemy_troops":enemy_troops,"minion_open_cell":has_open,"minion_damaged_buildings":damaged_blds,"lord":lord_kind,"ready":lords[team].hp > 0 and skill_cd[team] <= 0,"ink":ink[team],"charge":skill_charge[team],"need":skill_need(team),"elapsed":elapsed,"farms":farms,"graves":graves,"gate_share":gate_total/(5*B.GATE_HP),"broken":broken,"difficulty":difficulty,"params":ai_params[team]}
+	return {"rune_lanes":LordExpansion.rune_cells(self,team).size() if lord_kind == "rune" else 0,"slash_targets":slash_targets,"troops":my_army_count,"troop_hp":my_army_hp,"enemy_troops":enemy_troops,"minion_open_cell":has_open,"minion_damaged_buildings":damaged_blds,"crystals":crystals,"minion_nonhome_buildings":nonhome_blds,"minion_has_unique":has_unique,"lord":lord_kind,"ready":lords[team].hp > 0 and skill_cd[team] <= 0,"ink":ink[team],"charge":skill_charge[team],"need":skill_need(team),"elapsed":elapsed,"farms":farms,"graves":graves,"gate_share":gate_total/(gates[team].size()*B.GATE_HP),"broken":broken,"difficulty":difficulty,"params":ai_params[team]}
 
 func snapshot(team: int) -> Dictionary:
 	var candidates: Array = []
@@ -2147,7 +2365,7 @@ func snapshot(team: int) -> Dictionary:
 		if data.get("summon_only",false) or slot_cd(team,slot) > 0.00001 or ink[team] < data.cost: continue
 		if data.get("rolling",false):
 			var rcol := 0 if team == 0 else L.GRID_COLUMNS-1
-			for row: int in range(5):
+			for row: int in range(L.GRID_ROWS):
 				if not row in active_lanes: continue
 				var cell := Vector2i(rcol,row)
 				var pos := L.cell_center(cell)
@@ -2170,7 +2388,7 @@ func snapshot(team: int) -> Dictionary:
 						break
 			if not has_ally_unit: continue
 		var is_spell: bool = data.type == "spell"
-		for row: int in range(5):
+		for row: int in range(L.GRID_ROWS):
 			if not row in active_lanes: continue
 			var row_off := row*L.GRID_COLUMNS
 			for col: int in range(9):
@@ -2181,7 +2399,7 @@ func snapshot(team: int) -> Dictionary:
 	var active_lords: Array = []
 	for l: Dictionary in lords:
 		if lord_active[l.team]: active_lords.append(l)
-	return {"team":team,"lord":lords[team].lord,"night_decay":night_decay,"ink":ink[team],"enemy_ink":ink[1-team],"difficulty":difficulty,"elapsed":elapsed,"wave_until":wave_until[team],"memory":memory[team].duplicate(),"recent":recent_lanes[team].duplicate(),"saving":ai_save[team],"params":ai_params[team],"units":units,"buildings":buildings,"lords":active_lords,"gates":gates,"candidates":candidates,"owned_cells":territory.count(team),"active_lanes":active_lanes.duplicate()}
+	return {"team":team,"lord":lords[team].lord,"night_decay":night_decay,"ink":ink[team],"enemy_ink":ink[1-team],"difficulty":difficulty,"elapsed":elapsed,"wave_until":wave_until[team],"memory":memory[team].duplicate(),"recent":recent_lanes[team].duplicate(),"saving":ai_save[team],"params":ai_params[team],"units":units,"buildings":buildings,"lords":active_lords,"gates":gates,"candidates":candidates,"owned_cells":territory.count(team),"active_lanes":active_lanes.duplicate(),"mech":mech,"water_lanes":water_lanes,"wind_dir":wind_dir}
 
 func update_ai(dt: float) -> void:
 	if elapsed < ai_start: return

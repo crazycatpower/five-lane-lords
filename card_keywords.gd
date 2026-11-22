@@ -139,7 +139,7 @@ const KEYWORDS := {
 		"color": Color("32485c"),
 		"fill": Color("cbd6e0"),
 		"fx": Color("7494b3"),
-		"desc": "隱匿行蹤無法被敵軍直接鎖定；攻擊後現形，若未被偵查揭露則脫戰持續移動 3 秒後再次潛行。",
+		"desc": "潛行中無敵，只有法術打得到（領主看得見、會去攔，但打不到）；攻擊後現形，若未被偵查揭露則脫戰持續移動 3 秒後再次潛行。",
 		"terms": ["潛行","再次潛行","無法被敵方直接鎖定"]
 	},
 	"偵查": {
@@ -346,6 +346,7 @@ const CARD_OVERRIDES := {
 	"ossuary": ["召喚"],
 	"borrowed_bones": ["召喚"],
 	"curse": ["召喚"],
+	"recruit_camp": ["召喚"],
 	"monster_hatchery": ["召喚"],
 	"mimic_egg": ["召喚","爆破"],
 	"summon_trap": ["召喚"],
@@ -411,6 +412,7 @@ const CARD_OVERRIDES := {
 	"knight": ["重裝"],
 	"pouch_beast": ["重裝"],
 	"hunter": ["遠射"],
+	"archer": ["遠射"],
 	"arquebusier": ["遠射"],
 	"shroud_arbalist": ["遠射"],
 	"tower": ["遠射"],

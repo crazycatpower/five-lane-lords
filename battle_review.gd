@@ -56,7 +56,7 @@ func draw_pressure(game) -> void:
 	# Danger near our gates only (warnings about the enemy's gates are theirs, not ours): the whole
 	# lane pulses red, harder and faster once that gate is already broken. No words.
 	var t: float = Time.get_ticks_msec()/1000.0
-	for lane: int in range(5):
+	for lane: int in range(L.GRID_ROWS):
 		var level := pressure(game.model,game.me,lane)
 		if level == 0: continue
 		var beat := 0.5+0.5*sin(t*(9.0 if level == 2 else 5.0))

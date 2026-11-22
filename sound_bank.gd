@@ -299,7 +299,7 @@ func cue_event(e: Dictionary) -> void:
 			cue("wall_hit")
 		elif attacker in ["corpse_giant", "arcane_golem", "bog_troll", "thorn_dragon", "dire_hydra", "tusk_boar", "gold_monster", "thorn_mother", "lord_iron", "lord_beast", "lord_lion", "lord_vampire"]:
 			cue("heavy_hit")
-		elif attacker in ["hunter", "arcane_archer", "tower", "watchtower", "shroud_arbalist", "vampire_hunter", "ballista_tower"]:
+		elif attacker in ["hunter", "archer", "arcane_archer", "tower", "watchtower", "shroud_arbalist", "vampire_hunter", "ballista_tower"]:
 			cue("arrow_hit")
 		elif attacker in ["axe_thrower", "macebreaker", "halberdier"]:
 			cue("axe_hit")

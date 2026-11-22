@@ -13,10 +13,13 @@
 | 畫面、動畫、材質 | `game.gd` 及其載入模組 |
 | 牌組驗證與隨機牌組 | `deck_store.gd` |
 | 圖鑑、趣聞 | `card_library.gd`、`card_lore.gd` |
-| 冒險（大地圖征服）資料、劇情、執行 | `campaign_catalog.gd`、`campaign_story_data.gd`、`adventure.gd`、`road_toll_story.gd`、`adventure_finale.gd` |
+| 冒險（新手教學，5 章 × 10 關）資料、劇情、執行 | `campaign_catalog.gd`（關卡、難度、極難被動）、`campaign_story_data.gd`、`adventure.gd`、`road_toll_story.gd`、`adventure_finale.gd` |
+| 冒險教學：第一章逐步指引腳本、教練（提示框、高亮、結界、新敵人說明、失敗提示） | `tutorial_lessons.gd`（純資料）、`tutorial_coach.gd`；`game.gd` 只在 `draw_battle()` 末行呼叫 `adventure.coach.paint()` |
 | 一日戰役的畫面（日晷、光線、朽壞） | `day_cycle.gd`；規則在 `battle.gd` 的 `day_phase()`、`crumble_gates()`、`dawn_verdict()` |
 | 開戰橫幅、結算頁 | `battle_ceremony.gd` |
 | 城牆畫法 | `wall_art.gd`（`game.gd` 的 `draw_wall_section()` 只是一行呼叫） |
+| 未開放的路（冒險單路／三路關卡）：五段城牆照畫，路面畫成有柵欄、樹籬的麥田 | `closed_lanes.gd`（`draw_battle()` 地面之後一行呼叫） |
+| 強盜營地（冒險第一章）：取代敵方城堡、城牆段畫成木柵；關卡 `"camp":true` → 對局 meta `camp_team` | `camp_art.gd`（`draw_battle()` 畫城堡那行與 `wall_art.section()` 開頭各一個判斷） |
 | 配樂、音量、設定頁 | `music_player.gd`、`settings_screen.gd`、`tools/make_music.py` |
 | 建築攻擊範圍（`reach` 格子形狀、優先打部隊再打建築）、多路陣型（`footprint`）、放置預覽站位 | `grid_rules.gd` |
 | 金幣怪物（花光金幣、階段表 `B.GOLD_MONSTER_STAGES`） | `gold_monster.gd` |
@@ -37,7 +40,8 @@
 - 卡牌趣聞採完全獨立的幽默諷刺風格，徹底刪除所有暗線、陰謀伏筆與跨卡角色暗號。
 
 - 一日戰役：入夜（`B.NIGHT_START`）後 `multiplier()` 回傳 `B.NIGHT_GOLD`，城牆每秒掉 `night_rate()`；`B.DAWN` 時 `dawn_verdict()` 以 `land()` 定勝負，平手 `winner = -1`。`night_decay = false` 可關掉整套（肉鴿與教學關已關）。讀 `winner` 的地方要能處理 -1。
-- 冒險的領地資料用 `Catalog.stages()` 取得（不是常數）；敵方領主可以是 `B.MINION_LORDS`。能否進攻看 `adventure.unlocked(i)`：鄰居已征服，王都另需四座首府。出征領主是 `adventure.lord`，可選的牌用 `adventure.card_pool()`，不要寫死 `"adventure"`。
+- 冒險的關卡資料用 `Catalog.stages()` 取得（不是常數）；敵方領主可以是 `B.MINION_LORDS`。關卡依序解鎖（`adventure.unlocked(i)`：上一關已過）。出征領主是 `adventure.lord`，可選的牌用 `adventure.card_pool()`，不要寫死 `"adventure"`。對局一律用 `adventure.make_battle(i,deck,lord)` 建（難度、極難被動、詔令都在裡面）；本關新卡由 `with_featured()` 在出征時放進牌組，不寫回存檔。
+- 冒險就是新手教學：每關只教一件事，新卡、新敵人一次一個；不要再加只在冒險出現的場地機關。第一章教學腳本的完成條件只讀對局狀態（統計、建築、領地、城牆），腳本敵軍用 `deploy` 派出；改第一章內容後跑一次 quick_test（含 1-1 照提示打完的檢查）。
 - 畫面演出（轉場、音樂、結算動畫）走 `game.gd` 的 `present()`，用真實時間 `clock`，不讀也不改對局狀態。
 - 僅保留 `quick_test.gd`、`test_art_palette.gd`、`test_startup.gd`、`test_net_match.gd` 四支核心測試；`test_art_palette.gd` 為 `extends RefCounted` 模組，由 `quick_test.gd` 載入，不可直接以 `-s` 執行。勿再為單一改動新增 `test_*.gd` 檔案。
 - `quick_test.gd` 上限 50 項（2026-11-18 從 1493 項精簡，舊版備份在 `.runtime/quick-test-before/`）。素材檢查把比對過的原圖／衍生圖雜湊快取在 `user://art_palette_verified.json`，圖沒變就跳過解碼；第一次執行較慢。

@@ -37,7 +37,7 @@ static var art_sources: Dictionary = {}
 static var art_aliases: Dictionary = {}
 # Bump only when team_material or palette conversion changes, not for UI/gameplay edits.
 const PALETTE_REVISION := "team-material-v2"
-const ROMAN := ["I","II","III","IV","V"]
+const ROMAN := ["I","II","III","IV","V","VI"]
 var selected := -1
 var notice := "1–4 選牌 · 點戰場放置 · 右鍵取消 · 空白鍵暫停"
 # No text prompts in battle (producer 2026-11-03): events and refusals show as visual cues.
@@ -153,7 +153,7 @@ var result_age := 0.0 # seconds since the match ended (the result panel and its 
 var result_seen: RefCounted # the model whose ending has been announced
 var intro_left := 0.0 # seconds left of the "who fights whom" banner at the start of a battle
 const INTRO_TIME := 2.4
-const VERSION := "0.3.0"
+const VERSION := "0.4.0"
 var hover_slot := -1
 var dragging := false
 var press_pos := Vector2.ZERO
@@ -161,10 +161,10 @@ var press_was_selected := false
 var speed := 1
 const RESULT_RECT := Rect2(310,110,980,506) # the closing page (battle_ceremony.gd PANEL)
 const SPEEDS := [1,2,4,8]
-const SPEED_RECTS := [Rect2(1360,736,46,32),Rect2(1412,736,46,32),Rect2(1464,736,46,32),Rect2(1516,736,46,32)]
+const SPEED_RECTS := [Rect2(1380,734,42,30),Rect2(1426,734,42,30),Rect2(1472,734,42,30),Rect2(1518,734,42,30)]
 const NEXT_RECT := Rect2(1102,748,96,128)
-const SKILL_RECT := Rect2(1214,720,344,54)
-const LORD_PLATE := Rect2(1206,712,360,166)
+const SKILL_RECT := Rect2(1334,722,226,74) # battle_hud.gd: right of the lord's portrait
+const LORD_PLATE := Rect2(1210,712,356,166)
 
 const TITLE_ART_KEYS := ["militia","farm","hunter","grave","skeleton","ghoul","reaper"]
 const PRIORITY_BATTLE_KEYS := ["castle_red","castle_blue","castle_wall","gate","gate_broken","crest","farmer"]
@@ -431,9 +431,10 @@ func enter_battle(message: String) -> void:
 func view_mirror() -> Transform2D:
 	return Transform2D(Vector2(-1,0),Vector2(0,1),Vector2(L.VIEWPORT_SIZE.x,0))
 
+var ui_xform := Transform2D.IDENTITY # a tilted or lifted hand card: helpers that call tf() stay inside it
 func tf(pos: Vector2 = Vector2.ZERO, rot: float = 0.0, scl: Vector2 = Vector2.ONE) -> void:
 	var t := Transform2D(rot,scl,0.0,pos)
-	draw_set_transform_matrix(cinematic.field_transform(self)*t)
+	draw_set_transform_matrix(ui_xform*cinematic.field_transform(self)*t)
 
 # Screen point -> battle point (and back: the mirror is its own inverse).
 func to_model(p: Vector2) -> Vector2:
@@ -582,7 +583,7 @@ func consume_events() -> void:
 				# Sacrifice links end at the cast point; blood-tower links retain their target.
 				for cast_event: Dictionary in model.events:
 					if cast_event.kind == "spell" and cast_event.get("card","") == "sacrifice" and cast_event.team == e.team and cast_event.pos == e.to:
-						copy.to = to_model(preload("res://economy_hud.gd").PURSE.get_center() if e.team == me else Vector2(1322,35))
+						copy.to = to_model(preload("res://economy_hud.gd").PURSE.get_center() if e.team == me else preload("res://battle_hud.gd").gold_anchor(1)+Vector2(0,14))
 						copy.life = 0.85
 						break
 			if e.kind == "summoned" and model.units.any(func(u: Dictionary) -> bool: return u.get("levy",false) and u.team == e.team and u.pos.is_equal_approx(e.pos)):
@@ -642,7 +643,7 @@ func _process(dt: float) -> void:
 	for k: int in card_shake.keys():
 		card_shake[k] -= dt
 		if card_shake[k] <= 0: card_shake.erase(k)
-	position = Vector2.ZERO
+	position = Vector2(0,0.0 if screen == "battle" else polish.page_offset(self)) # menu pages rise into place
 	cinematic.step(self,dt)
 	var fx_step: float = cinematic.fx_dt(dt)
 	for t_idx: int in range(2): lord_cast_left[t_idx] = maxf(0.0, lord_cast_left[t_idx] - fx_step)
@@ -718,7 +719,7 @@ func try_play(slot: int, pos: Vector2) -> bool:
 		Battle.Refusal.COOLDOWN:
 			card_shake[slot] = 0.45
 			show_cursor_hint("冷卻中 %.1f秒" % model.slot_cd(me,slot), Color("7d4f1c"))
-		Battle.Refusal.NOT_OURS, Battle.Refusal.OFF_GRID, Battle.Refusal.OCCUPIED:
+		Battle.Refusal.NOT_OURS, Battle.Refusal.OFF_GRID, Battle.Refusal.OCCUPIED, Battle.Refusal.WATER, Battle.Refusal.BLOCKED:
 			place_flash = 1.0
 			show_cursor_hint(reason, Color("7d4f1c"))
 	effects.append({"kind":"fail","pos":pos,"life":0.5,"duration":0.5})
@@ -842,13 +843,22 @@ func label_at(pos: Vector2, text: String, size: int = 20, color: Color = INK) ->
 	draw_string(font,pos,text,HORIZONTAL_ALIGNMENT_LEFT,-1,size,color)
 
 func panel(rect: Rect2, fill: Color = Color("ecdcb6"), border: Color = INK) -> void:
+	if rect.size.x > 140 and rect.size.y > 70 and fill.a > 0.5:
+		draw_rect(Rect2(rect.position+Vector2(4,6),rect.size),Color(0.12,0.08,0.04,0.16*fill.a))
 	var style := StyleBoxFlat.new()
 	style.bg_color = fill
 	style.border_color = Color(border,0.85)
 	style.set_border_width_all(2)
 	style.set_corner_radius_all(4)
 	draw_style_box(style,rect)
+	# Large panels (2026-11-21 restyle): a drop shadow, paper grain, a fine inner rule and ink corner marks.
+	var big := rect.size.x > 140 and rect.size.y > 70 and fill.a > 0.5
+	if big:
+		draw_texture_rect(PAPER,rect.grow(-2),false,Color(1,1,1,0.10*fill.a))
 	if rect.size.x > 30 and rect.size.y > 20: draw_rect(rect.grow(-4),Color(border,0.3),false,1)
+	if big:
+		for c: Vector2 in [rect.position+Vector2(9,9),Vector2(rect.end.x-9,rect.position.y+9),rect.end-Vector2(9,9),Vector2(rect.position.x+9,rect.end.y-9)]:
+			draw_colored_polygon(PackedVector2Array([c+Vector2(0,-3.5),c+Vector2(3.5,0),c+Vector2(0,3.5),c+Vector2(-3.5,0)]),Color(border,0.55*border.a))
 
 func bar(rect: Rect2, value: float, maximum: float, color: Color) -> void:
 	draw_rect(rect.grow(1),Color(INK,0.8))
@@ -1191,9 +1201,14 @@ func curtain(r: Rect2, closed: float) -> void:
 
 func _draw() -> void:
 	if font == null or model == null: return
+	# The page, its sky and frame hold still while a menu page's content rises in (see _process).
+	ui_xform = Transform2D(0.0,Vector2(0,-position.y)) # tf() inside the landscape keeps this offset
+	draw_set_transform_matrix(ui_xform)
 	draw_texture_rect(PAPER,Rect2(Vector2.ZERO,L.VIEWPORT_SIZE),false,PAPER_TINT)
 	if screen != "battle": draw_landscape(L.PAGE_FRAME.grow(-7),0.46)
 	panel(L.PAGE_FRAME,Color(0.85,0.74,0.53,0.15))
+	ui_xform = Transform2D.IDENTITY
+	draw_set_transform_matrix(ui_xform)
 	if screen == "battle": draw_battle()
 	elif screen == "adventure": adventure.paint(self)
 	elif screen == "rogue": rogue.paint(self)
@@ -1252,18 +1267,32 @@ func ground_wash(center: Vector2, size: Vector2, pigment: Color, seed_value: int
 			points.append(center+Vector2(cos(angle),sin(angle))*size*radius)
 		draw_colored_polygon(points,Color(pigment,opacity))
 
+func biome_palette() -> Array:
+	return preload("res://season.gd").tint(base_biome_palette(),model.season if model != null else "")
+
+func base_biome_palette() -> Array:
+	var bm: String = model.biome if model != null else ""
+	match bm:
+		"river": return [Color("7c9268"), Color("4a7378"), Color("c6bc8c"), Color("446858"), Color("c5bf8a")]
+		"spire": return [Color("7a828f"), Color("4c5b7c"), Color("b6b3c7"), Color("4c5875"), Color("b2b7ce")]
+		"marsh": return [Color("686670"), Color("4b3e5a"), Color("7d856a"), Color("483f57"), Color("7d8968")]
+		"crater": return [Color("8d745a"), Color("6b4532"), Color("c29b68"), Color("6b4832"), Color("c49f6c")]
+	return [Color("81975e"), Color("566f40"), Color("bcc78a"), Color("4f683b"), Color("c2cb8d")]
+
 func draw_battle_landscape(field: Rect2) -> void:
-	draw_rect(field,Color("81975e"))
+	var pal := biome_palette()
+	draw_rect(field,pal[0])
 	# Stable pigment washes and ground details; never touch the simulation RNG.
 	for i: int in range(42):
 		var center := field.position+Vector2(60+scenery_noise(i,1)*(field.size.x-120),35+scenery_noise(i,2)*(field.size.y-70))
-		ground_wash(center,Vector2(35+scenery_noise(i,3)*65,14+scenery_noise(i,4)*22),Color("566f40") if i%3 == 0 else Color("bcc78a"),i,0.035)
-	for lane: int in range(5):
+		ground_wash(center,Vector2(35+scenery_noise(i,3)*65,14+scenery_noise(i,4)*22),pal[1] if i%3 == 0 else pal[2],i,0.035)
+	for lane: int in range(L.GRID_ROWS):
 		var path := PackedVector2Array()
 		for i: int in range(33):
 			path.append(Vector2(220+i*36.25,L.cell_center(Vector2i(0,lane)).y+25+sin(i*0.34+lane)*5))
 		draw_polyline(path,Color(0.68,0.60,0.40,0.09),20,true)
 		draw_polyline(path,Color(0.74,0.67,0.45,0.07),9,true)
+	preload("res://season.gd").ground(self,Rect2(L.GRID_ORIGIN,L.GRID_SIZE)) # 春花、夏草、秋葉、冬雪
 	for b: Dictionary in model.buildings:
 		if b.hp <= 0: continue
 		if b.hp > 0: ground_wash(b.pos+Vector2(0,26),Vector2(53,17),Color("8f7952"),int(b.cell.x+b.cell.y*9),0.13)
@@ -1333,13 +1362,22 @@ func draw_battle() -> void:
 	draw_texture_rect(ART.ornament(3),Rect2(field.end-Vector2(8,8)-corner,corner),false,Color(1,1,1,0.85))
 	# The castles are scenery: drawn a little muted so the gates and troops lead the eye.
 	draw_texture_rect(art("castle_wall",0),L.CASTLE_RECTS[0],false,CASTLE_SHADE)
-	draw_mirrored(art("castle_wall",1),L.CASTLE_RECTS[1],CASTLE_SHADE)
+	if not preload("res://camp_art.gd").backdrop(self,1): draw_mirrored(art("castle_wall",1),L.CASTLE_RECTS[1],CASTLE_SHADE) # 強盜關畫營地（camp_art.gd）
 	var grid := Rect2(L.GRID_ORIGIN,L.GRID_SIZE)
 	draw_ground(grid)
 	for lane: int in model.water_lanes:
 		draw_water_band(Rect2(grid.position.x,grid.position.y+lane*L.CELL_SIZE.y,grid.size.x,L.CELL_SIZE.y),false)
 	for col: int in model.water_cols:
 		draw_water_band(Rect2(grid.position.x+col*L.CELL_SIZE.x,grid.position.y,L.CELL_SIZE.x,grid.size.y),true)
+	preload("res://terrain_art.gd").mechanics(self) # 上坡、泥沼、熔岩、符文、傳送門、水閘、落石
+	for wcell: Vector2i in model.water_cells:
+		if wcell.y in model.active_lanes: preload("res://terrain_art.gd").pond(self,Rect2(L.GRID_ORIGIN+Vector2(wcell)*L.CELL_SIZE,L.CELL_SIZE))
+	for lane: int in model.wind_lanes:
+		draw_wind_band(Rect2(grid.position.x,grid.position.y+lane*L.CELL_SIZE.y,grid.size.x,L.CELL_SIZE.y),int(model.wind_dir.get(lane,1)))
+	for bcell: Vector2i in model.blocked_cells:
+		if bcell.y in model.active_lanes:
+			preload("res://terrain_art.gd").outcrop(self,Rect2(L.GRID_ORIGIN+Vector2(bcell)*L.CELL_SIZE,L.CELL_SIZE))
+	preload("res://closed_lanes.gd").draw(self) # 未開放的路：五段城牆照畫，路面封死（closed_lanes.gd）
 	for row: int in range(L.GRID_ROWS):
 		for col: int in range(L.GRID_COLUMNS):
 			var cell := Vector2i(col,row)
@@ -1364,7 +1402,7 @@ func draw_battle() -> void:
 		var sel_kind: String = model.kind_at(me,selected)
 		var is_spell: bool = B.CARDS.get(sel_kind,{}).get("type","") == "spell"
 		if not is_spell or B.CARDS[sel_kind].get("rolling",false):
-			for row: int in range(5):
+			for row: int in range(L.GRID_ROWS):
 				for col: int in range(9):
 					var cell := Vector2i(col,row)
 					if model.can_play(me,selected,L.cell_center(cell)):
@@ -1372,10 +1410,10 @@ func draw_battle() -> void:
 						var glow := 0.0 if place_flash <= 0 else 0.5+0.5*sin(place_flash*18)
 						draw_rect(r,Color(1.0,0.93,0.55,0.22+0.30*glow))
 						draw_rect(r,Color(0.85,0.65,0.15,0.7+0.3*glow),false,2+3*glow)
-	for lane: int in range(6):
+	for lane: int in range(L.GRID_ROWS+1):
 		if not lane in model.active_lanes and not lane-1 in model.active_lanes: continue
 		var y := grid.position.y+lane*L.CELL_SIZE.y
-		ink_line(Vector2(grid.position.x,y),Vector2(grid.end.x,y),lane,Color(INK,0.55 if lane == 0 or lane == 5 else 0.38),2.0)
+		ink_line(Vector2(grid.position.x,y),Vector2(grid.end.x,y),lane,Color(INK,0.55 if lane == 0 or lane == L.GRID_ROWS else 0.38),2.0)
 	for lane: int in model.active_lanes:
 		var tab := Rect2((grid.end.x-34) if mirror_view else (grid.position.x+4),grid.position.y+lane*L.CELL_SIZE.y+5,30,20)
 		draw_rect(tab,Color(0.95,0.90,0.78,0.85))
@@ -1422,7 +1460,9 @@ func draw_battle() -> void:
 	layout_formations()
 	var ordered: Array = model.units.duplicate()
 	ordered.sort_custom(func(a: Dictionary,b: Dictionary) -> bool: return a.draw.y < b.draw.y)
-	for u: Dictionary in ordered: draw_unit(u)
+	for u: Dictionary in ordered:
+		if not model.mech.is_empty() and preload("res://map_mech.gd").hidden(model,u,me): continue # 濃霧裡的敵兵
+		draw_unit(u)
 	preload("res://faction_cards.gd").draw_over(self)
 	var pulse := 0.5+0.5*sin(model.elapsed*10.0)
 	for lane: int in model.active_lanes:
@@ -1444,6 +1484,9 @@ func draw_battle() -> void:
 	draw_preview()
 	if selected < 0: preload("res://grid_rules.gd").draw_hover(self,field_mouse()) # a damage building's reach
 	draw_effects()
+	preload("res://season.gd").weather(self,Rect2(L.GRID_ORIGIN,L.GRID_SIZE)) # 飄落的花瓣、落葉、雪
+	preload("res://terrain_art.gd").storms(self)
+	preload("res://terrain_art.gd").fog(self)
 	DayCycle.light(self,L.FIELD_FRAME.grow(-7))
 	cinematic.paint_atmosphere(self,field)
 	cinematic.end_field(self)
@@ -1451,37 +1494,57 @@ func draw_battle() -> void:
 	ink_frame(field)
 	cinematic.paint_screen_overlay(self,field)
 	if not cinematic.theater_mode:
-		draw_hud()
-		var info_hover: bool = library.INFO_RECT.has_point(get_global_mouse_position())
-		panel(library.INFO_RECT,Color("f7eacf") if info_hover else Color("ecdcb6"),Color("b8862b") if info_hover else INK)
-		draw_string(font,library.INFO_RECT.position+Vector2(0,21),"戰局資料",HORIZONTAL_ALIGNMENT_CENTER,library.INFO_RECT.size.x,16,INK)
-		draw_string(font,library.INFO_RECT.position+Vector2(0,39),["簡單","普通","困難"][model.difficulty],HORIZONTAL_ALIGNMENT_CENTER,library.INFO_RECT.size.x,13,Color("6f5a3e"))
+		draw_hud() # includes the 戰局資料 seal beside the dial
 		draw_hud_effects()
 	Ceremony.intro(self)
 	if net != null: draw_net_status()
 	if model.ended and not model.time_stopped(): draw_result()
 	else: draw_pause_overlay()
+	adventure.coach.paint(self) # 冒險教學：步驟提示、高亮、新敵人說明、失敗提示（tutorial_coach.gd）
 
+# Pause (2026-11-21 restyle): the field dims and a walnut banner unrolls from the middle, its
+# buttons slanted vellum plates that rise under the mouse.
 func draw_pause_overlay() -> void:
 	if model.ended and not model.time_stopped(): return
 	var pf: float = polish.get_pause_fade(self)
 	if pf <= 0.01: return
 	var ease_pf: float = polish.ease_out(pf)
-	draw_rect(Rect2(Vector2.ZERO,L.VIEWPORT_SIZE),Color(0.14,0.10,0.06,0.28*pf))
-	var lift := Vector2(0.0,(1.0-ease_pf)*-18.0)
-	var box := Rect2(L.OVERLAY_RECT.position+lift,L.OVERLAY_RECT.size)
-	panel(box,Color(0.94,0.88,0.74,pf),Color(INK,pf))
-	# Manuscript finish: a fine inner rule and the vine ornament over the title, like the other panels.
-	draw_rect(box.grow(-6),Color(INK,0.35*pf),false,1.0)
-	draw_fitted(ART.ornament(4),Rect2(box.position.x+box.size.x*0.5-90,box.position.y+8,180,24),Color(1,1,1,pf))
-	draw_string(font,box.position+Vector2(0,58),"戰局暫停",HORIZONTAL_ALIGNMENT_CENTER,box.size.x,30,Color(INK,pf))
-	draw_string(font,Vector2(box.position.x,box.end.y+26),"空白鍵繼續",HORIZONTAL_ALIGNMENT_CENTER,box.size.x,16,Color(1.0,0.96,0.86,0.85*pf))
+	draw_rect(Rect2(Vector2.ZERO,L.VIEWPORT_SIZE),Color(0.10,0.07,0.04,0.36*pf))
+	var box := L.OVERLAY_RECT
+	var half := (box.size.x*0.5+70.0)*ease_pf
+	var cx := box.get_center().x
+	var y0 := box.position.y-6.0
+	var y1 := box.end.y+6.0
+	var notch := 26.0*ease_pf
+	var banner := PackedVector2Array([Vector2(cx-half,y0),Vector2(cx+half,y0),Vector2(cx+half-notch,(y0+y1)*0.5),Vector2(cx+half,y1),Vector2(cx-half,y1),Vector2(cx-half+notch,(y0+y1)*0.5)])
+	var shadow := PackedVector2Array()
+	for p: Vector2 in banner: shadow.append(p+Vector2(4,7))
+	draw_colored_polygon(shadow,Color(0,0,0,0.30*pf))
+	draw_colored_polygon(banner,Color(Color("3a2a1c"),0.97*pf))
+	draw_texture_rect(PAPER,Rect2(cx-half,y0,half*2.0,y1-y0),false,Color(1,0.9,0.75,0.06*pf))
+	for y: float in [y0+7.0,y1-7.0]: draw_line(Vector2(cx-half+12,y),Vector2(cx+half-12,y),Color(Color("d2ad58"),0.85*pf),1.6,true)
+	var rim := banner.duplicate()
+	rim.append(banner[0])
+	draw_polyline(rim,Color(0.08,0.05,0.03,pf),2.0,true)
+	if ease_pf < 0.6: return
+	var ta := (ease_pf-0.6)/0.4*pf
+	draw_fitted(ART.ornament(4),Rect2(cx-90,box.position.y+4,180,24),Color(1,0.9,0.7,ta))
+	draw_string(font,Vector2(box.position.x,box.position.y+62),"戰局暫停",HORIZONTAL_ALIGNMENT_CENTER,box.size.x,32,Color(Color("fff0ca"),ta))
+	draw_string(font,Vector2(box.position.x,y1+28),"空白鍵繼續",HORIZONTAL_ALIGNMENT_CENTER,box.size.x,16,Color(1.0,0.96,0.86,0.85*ta))
+	var mouse := get_global_mouse_position()
 	for item: Array in overlay_buttons():
-		var br := Rect2(item[0].position+lift,item[0].size)
-		var hover := br.has_point(get_global_mouse_position())
-		panel(br,Color("fbf1d8",pf) if hover else Color("f3e6c6",pf),Color(RED,pf) if hover else Color(INK,pf))
-		if hover: draw_rect(br.grow(2),Color(0.84,0.68,0.32,0.5*pf),false,2)
-		draw_string(font,br.position+Vector2(0,27),item[1],HORIZONTAL_ALIGNMENT_CENTER,br.size.x,20,Color(INK,pf))
+		var br: Rect2 = item[0]
+		var hv: float = polish.hover_val("pause_"+String(item[1]),br.has_point(mouse),is_processing())
+		br.position.y -= 3.0*hv
+		var plate := PackedVector2Array([br.position+Vector2(8,0),Vector2(br.end.x,br.position.y),Vector2(br.end.x-8,br.end.y),Vector2(br.position.x,br.end.y)])
+		var ps := PackedVector2Array()
+		for p: Vector2 in plate: ps.append(p+Vector2(2,4+2*hv))
+		draw_colored_polygon(ps,Color(0,0,0,0.35*ta))
+		draw_colored_polygon(plate,Color(Color("eedfba").lerp(Color("fff6de"),hv),ta))
+		var pr := plate.duplicate()
+		pr.append(plate[0])
+		draw_polyline(pr,Color(Color("d2ad58") if hv > 0.01 else INK,ta),1.6+hv,true)
+		draw_string(font,br.position+Vector2(0,27),item[1],HORIZONTAL_ALIGNMENT_CENTER,br.size.x,20,Color(RED if hv > 0.5 else INK,ta))
 
 func draw_hud_effects() -> void:
 	if not fx_enabled: return
@@ -1490,7 +1553,7 @@ func draw_hud_effects() -> void:
 		match e.kind:
 			"ink": Details.draw_ink_hud(self,e,progress)
 			"ramp":
-				var dial := Rect2(712,24,140,58).get_center()
+				var dial: Vector2 = preload("res://battle_hud.gd").DIAL
 				for k: int in range(3):
 					draw_arc(dial,34+fmod(progress*1.5+k/3.0,1.0)*64,0,TAU,40,Color(0.88,0.69,0.17,(1-progress)*0.7),3)
 			"nightfall": DayCycle.toll_hud(self,e,progress)
@@ -1578,11 +1641,23 @@ func draw_water_band(lr: Rect2, vertical: bool) -> void:
 			draw_line(Vector2(wx+10.0,wy+6.0),Vector2(wx+32.0,wy+6.0),Color("8bc9ea",0.38),1.3,true)
 		field_text(lr.position+Vector2(44.0,22.0),"水路 · 禁建／非飛行 -60% 速",HORIZONTAL_ALIGNMENT_LEFT,320.0,13,Color("e8f6ff",0.86))
 
+func draw_wind_band(lr: Rect2, dir: int = 1) -> void:
+	draw_rect(lr,Color("d8a93e",0.16))
+	var flow := fmod(clock*95.0,96.0)
+	for wi: int in range(12):
+		var wx := lr.position.x + fmod(wi*96.0 + flow, lr.size.x - 42.0) + 12.0
+		if dir < 0: wx = lr.end.x - (wx - lr.position.x)
+		var wy := lr.position.y + 18.0 + float((wi*23)%48)
+		draw_polyline(PackedVector2Array([Vector2(wx,wy-5),Vector2(wx+9*dir,wy),Vector2(wx,wy+5)]),Color("fff2c4",0.58),2.0,true)
+	var tag := "順風 → 往右走的部隊移速升一檔" if dir > 0 else "← 順風 · 往左走的部隊移速升一檔"
+	field_text(lr.position+Vector2(44.0,22.0),tag,HORIZONTAL_ALIGNMENT_LEFT,360.0,13,Color("6e4a10",0.88))
+
 # The battlefield floor: tinted zones, alternating lane shade, grass and pebbles, darker edges.
 func draw_ground(grid: Rect2) -> void:
+	var pal := biome_palette()
 	var cw: float = L.CELL_SIZE.x
 	var ch: float = L.CELL_SIZE.y
-	for lane: int in range(5):
+	for lane: int in range(L.GRID_ROWS):
 		var row := Rect2(grid.position+Vector2(0,lane*ch),Vector2(grid.size.x,ch))
 		if lane % 2 == 1: draw_rect(row,Color(0.25,0.16,0.06,0.06))
 	# Irregular clumps rather than identical decorations in every grid cell.
@@ -1591,7 +1666,7 @@ func draw_ground(grid: Rect2) -> void:
 		var lane_y := fposmod(p.y-grid.position.y,ch)
 		if absf(lane_y-ch*0.5-25) < 14: continue # leave worn paths sparse
 		var height := 3.5+scenery_noise(i,13)*6
-		var shade := Color("4f683b") if i%3 == 0 else Color("c2cb8d")
+		var shade: Color = pal[3] if i%3 == 0 else pal[4]
 		tuft(p,Color(shade,0.36),height)
 		if i%4 == 0:
 			tuft(p+Vector2(5,-2),Color(shade,0.30),height*0.65)
@@ -1739,7 +1814,7 @@ func draw_preview() -> void:
 	var color := Color(0.2,0.7,0.3,0.35) if model.can_play(me,selected,pos) else Color(0.8,0.1,0.1,0.35)
 	if data.type == "spell":
 		if data.get("rolling",false):
-			var lane := clampi(floori((pos.y-L.GRID_ORIGIN.y)/L.CELL_SIZE.y),0,4)
+			var lane := clampi(floori((pos.y-L.GRID_ORIGIN.y)/L.CELL_SIZE.y),0,L.GRID_ROWS-1)
 			var start := Vector2(Frontier.start_x(0),L.cell_center(Vector2i(0,lane)).y)
 			var finish := Vector2(L.gate_stop(1),start.y)
 			draw_line(start,finish,Color(0.8,0.3,0.1,0.18),data.radius*2)
@@ -1771,7 +1846,7 @@ func draw_preview() -> void:
 		Grid.draw_reach(self,kind,cell,me) # cells it will shoot at
 	if data.type == "unit" and Grid.footprint(kind) != Vector2i(1,1):
 		var fits: bool = model.can_play(me,selected,pos)
-		Grid.draw_cells(self,Grid.footprint_cells(kind,cell,me),Color(0.2,0.7,0.3,0.22) if fits else Color(0.8,0.1,0.1,0.22),Color(0.28,0.85,0.42,0.9) if fits else Color(0.92,0.22,0.18,0.9))
+		Grid.draw_cells(self,Grid.footprint_cells(kind,cell,me,model.active_lanes),Color(0.2,0.7,0.3,0.22) if fits else Color(0.8,0.1,0.1,0.22),Color(0.28,0.85,0.42,0.9) if fits else Color(0.92,0.22,0.18,0.9))
 		if fits: Grid.draw_spawn_preview(self,kind,cell,me) # ghosts where the squads will stand
 		return
 	if data.type == "unit" and model.can_play(me,selected,pos): Grid.draw_spawn_preview(self,kind,cell,me)
@@ -1789,6 +1864,7 @@ func draw_preview() -> void:
 			var middle := clampi(cell.y,1,3)
 			lanes = [middle-1,middle,middle+1]
 		for lane: int in lanes:
+			if not lane in model.active_lanes: continue
 			var col: int = model.deployment_column(me,lane,cell.x)
 			if col >= 0: draw_line(L.cell_center(Vector2i(col,lane)),Vector2(L.gate_stop(1),L.cell_center(Vector2i(0,lane)).y),color,3)
 		if kind == "farmer":
@@ -2012,183 +2088,12 @@ func draw_skill_effect(e: Dictionary, progress: float) -> void:
 				draw_circle(point+Vector2(0,-16),20.0+progress*36.0,Color(team_col.lightened(0.35),strength*0.24))
 				draw_arc(point+Vector2(0,-16),16.0+progress*42.0,0.0,TAU,32,gold,2.4,true)
 
+# The whole battle HUD lives in battle_hud.gd (redone 2026-11-21); this stays as the hook.
 func draw_hud(single_lane: bool = false, hide_bottom: bool = false) -> void:
-	# Lighter band and fainter diamonds: the red and blue team text needs the contrast.
-	draw_rect(L.HUD_FRAME,Color("c4dbe7"))
-	for x: int in range(48,1550,58):
-		draw_polyline(PackedVector2Array([Vector2(x,24),Vector2(x+16,34),Vector2(x,44),Vector2(x-16,34),Vector2(x,24)]),Color(0.92,0.97,1,0.12),1.2,true)
-	draw_texture_rect(PAPER,L.HUD_FRAME,false,Color(1,1,1,0.06))
-	ink_frame(L.HUD_FRAME)
-	if not single_lane:
-		for team: int in range(2):
-			var x := 95.0 if team == me else 1070.0
-			draw_texture_rect(art("crest",team),Rect2(x-58,21,48,50),false)
-			draw_texture_rect(ART.object_icon(0),Rect2(x+238,20,28,30),false)
-			var standing: int = model.active_lanes.filter(func(lane: int) -> bool: return model.gates[team][lane] > 0).size()
-			var s_name: String = Ceremony.short_name(self,team)
-			var name_sz := 16 if s_name.length() >= 5 else (19 if s_name.length() >= 3 else 23)
-			label_at(Vector2(x,43),"%s  城牆 %d / %d" % [s_name,standing,model.active_lanes.size()],name_sz,RED if team == 0 else BLUE)
-			for lane: int in model.active_lanes: bar(Rect2(x+model.active_lanes.find(lane)*70,53,62,10),model.gates[team][lane],B.GATE_HP,RED if team == 0 else BLUE)
-			label_at(Vector2(x+270,43),"%d / 50" % model.ink[team],18)
-	var mouse := get_global_mouse_position()
-	panel(Rect2(712,24,140,58),Color("f2e3c0"))
-	var time := int(model.elapsed)
-	# Faster income shows as coins beside the clock: one for noon, two for dusk, three for night.
-	var coins: int = model.day_phase()
-	var clock_w := 140.0 if coins == 0 else 108.0
-	draw_string(font,Vector2(712,62),"%02d:%02d" % [time/60,time%60],HORIZONTAL_ALIGNMENT_CENTER,clock_w,30,RED if model.multiplier() > B.START_GOLD else INK)
-	for i: int in range(coins):
-		draw_texture_rect(preload("res://economy_hud.gd").coin_texture(),Rect2(822,(49-coins*8)+i*16,20,20),false)
-	if not single_lane: DayCycle.track(self)
-	var pause_hover := L.PAUSE_RECT.has_point(mouse)
-	panel(L.PAUSE_RECT,Color("f7eacf") if pause_hover else Color("ecdcb6"),Color("b8862b") if pause_hover else INK)
-	draw_string(font,L.PAUSE_RECT.position+Vector2(0,32),"▶" if model.paused else "Ⅱ",HORIZONTAL_ALIGNMENT_CENTER,L.PAUSE_RECT.size.x,22,INK)
-	if not single_lane and not model.night_decay and not model.field_mutators.is_empty():
-		var px := 474.0
-		for mi: int in range(mini(2,model.field_mutators.size())):
-			var fm: Dictionary = model.field_mutators[mi]
-			var fk := String(fm.get("kind",""))
-			var f_name := String(B.CARDS.get(fk,{}).get("name",fk))
-			var pill := Rect2(px,64,106,18)
-			var f_col: Color = RED if int(fm.get("team",1)) == 0 else BLUE
-			panel(pill,Color("f5ebd2"),f_col)
-			draw_string(font,pill.position+Vector2(3,13),"%s %ds" % [f_name.left(3),ceili(maxf(0.0,float(fm.get("timer",0.0))))],HORIZONTAL_ALIGNMENT_CENTER,pill.size.x-6,12,f_col)
-			px += 112.0
-	if hide_bottom: return
-	preload("res://command_style.gd").stone(self,L.COMMAND_FRAME)
-	preload("res://economy_hud.gd").draw(self)
-	if not single_lane: panel(LORD_PLATE,Color(0.92,0.86,0.72,0.92),Color("8a6f4a")) # plain backing for the lord text
-	var Ornament = preload("res://interface_ornament.gd")
-	var Style = preload("res://command_style.gd")
-	# Permanent home slot: faction-tinted vellum niche and a swallowtail "常駐" ribbon on the bottom sill.
-	var farm_rect := card_rect(Battle.FARM_SLOT)
-	var home_kind: String = model.kind_at(me,Battle.FARM_SLOT)
-	var home_col: Color = Style.tag_color(home_kind)
-	var home_blocked: bool = model.ink[me] < B.CARDS[home_kind].cost or model.slot_cd(me,Battle.FARM_SLOT) > 0
-	panel(farm_rect.grow(5),Color("b5b5b5") if home_blocked else Color("e8d9b5").lerp(home_col,0.22),Color("6b6b6b") if home_blocked else home_col.darkened(0.18))
-	var fr := farm_rect
-	fr.position.y += polish.get_slot_lift(self,Battle.FARM_SLOT)
-	draw_card(home_kind,fr,Battle.FARM_SLOT)
-	if fx_enabled and polish.slot_ready_flash.get(Battle.FARM_SLOT,0.0) > 0.0:
-		polish.draw_ready_sheen(self,fr,float(polish.slot_ready_flash[Battle.FARM_SLOT]))
-	var tag := Rect2(fr.position.x+fr.size.x*0.5-22,fr.end.y-12,44,16)
-	Ornament.ribbon_tag(self,tag,"常駐",Color("5e5e5e") if home_blocked else home_col.darkened(0.10),12)
-	Ornament.vertical_rule(self,551,728,888,INK)
-	for i: int in range(4):
-		var r := card_rect(i)
-		r.position.y += polish.get_slot_lift(self,i)
-		var entry_left := float(polish.slot_entry.get(i,0.0))
-		if entry_left > 0.0 and is_processing() and DisplayServer.get_name() != "headless":
-			var ep := 1.0 - clampf(entry_left / 0.26, 0.0, 1.0)
-			r.position.x += (1.0 - polish.ease_out(ep)) * 38.0
-		draw_card(model.decks[me][i],r,i)
-		if fx_enabled and polish.slot_ready_flash.get(i,0.0) > 0.0:
-			polish.draw_ready_sheen(self,r,float(polish.slot_ready_flash[i]))
-	# Next card: smaller, faded, labelled with a manuscript rule.
-	Ornament.vertical_rule(self,1093,728,888,INK)
-	draw_string(font,Vector2(NEXT_RECT.position.x,740),"下一張",HORIZONTAL_ALIGNMENT_CENTER,NEXT_RECT.size.x,14,Color("5a4630"))
-	Ornament.rule(self,Vector2(NEXT_RECT.position.x+8,745),Vector2(NEXT_RECT.end.x-8,745),Color("82663c"))
-	draw_card(model.decks[me][4],NEXT_RECT)
-	# It cannot be played yet, so it recedes evenly under a soft vellum wash.
-	draw_rect(NEXT_RECT.grow(2),Color(0.88,0.82,0.70,0.40))
-	draw_rect(NEXT_RECT,Color("82663c",0.45),false,1.2)
-	var focus_slot: int = selected if selected >= 0 else hover_slot
-	var strip_kind := ""
-	var strip_alpha := 1.0
-	if is_processing() and DisplayServer.get_name() != "headless":
-		strip_alpha = polish.hover_strip_alpha
-		strip_kind = polish.hover_strip_kind
-	elif focus_slot >= 0:
-		strip_kind = model.kind_at(me,focus_slot)
-	if not strip_kind.is_empty() and strip_alpha > 0.01 and not spectating and not single_lane:
-		if B.CARDS.has(strip_kind):
-			var fkws: Array[String] = Keywords.for_card(strip_kind)
-			var strip := Rect2(414,682,674,32)
-			panel(strip,Color(0.95,0.90,0.77,0.94*strip_alpha),Color("8a6f4a",strip_alpha))
-			var bw: float = Keywords.draw_badges(self,strip.position+Vector2(10,22.5),fkws,14,240.0,strip_alpha)
-			var fdata: Dictionary = B.CARDS[strip_kind]
-			var f_notes: Array[String] = []
-			if fdata.type == "spell" and not fdata.get("rolling",false):
-				var sh := B.spell_shape(fdata)
-				f_notes.append("%d×%d %s" % [sh.x,sh.y,B.spell_shape_tag(sh)])
-			var f_ups: Dictionary = model.card_upgrades[me].get(strip_kind,{}) if me < model.card_upgrades.size() else {}
-			if not f_ups.is_empty():
-				var Up = preload("res://card_upgrades.gd")
-				f_notes.append("+%d（%s）" % [Up.level(f_ups),Up.text(f_ups)])
-			f_notes.append(Keywords.desc_of(fkws[0]) if not fkws.is_empty() else fdata.role)
-			draw_string(font,strip.position+Vector2(16+bw,23.0)," · ".join(f_notes),HORIZONTAL_ALIGNMENT_LEFT,strip.size.x-26.0-bw,15,Color(INK,strip_alpha))
-	if spectating:
-		for i: int in range(SPEEDS.size()):
-			var sp_hover: bool = SPEED_RECTS[i].has_point(mouse)
-			panel(SPEED_RECTS[i],Color("c9a96a") if speed == SPEEDS[i] else (Color("f4e6c2") if sp_hover else Color("e8d5ab")))
-			draw_string(font,SPEED_RECTS[i].position+Vector2(0,25),"×%d" % SPEEDS[i],HORIZONTAL_ALIGNMENT_CENTER,SPEED_RECTS[i].size.x,18,INK)
-	if dragging and selected >= 0 and card_at(mouse) < 0 and model.cell_at(mouse).x < 0:
-		draw_card_art(model.kind_at(me,selected),Rect2(mouse-Vector2(40,36),Vector2(80,72)),me,Color(1,1,1,0.7))
-	if single_lane: return
-	if spectating: label_at(Vector2(1220,758),"雙方領主",20)
-	else: draw_skill_button()
-	for lord: Dictionary in model.lords:
-		var y: float = 800+lord.team*40
-		var color: Color = RED if lord.team == 0 else BLUE
-		label_at(Vector2(1220,y),"%s · %s" % ["紅" if lord.team == 0 else "藍",Ceremony.side_name(self,lord.team)],16,color)
-		bar(Rect2(1220,y+8,170,6),lord.hp,lord.max_hp,color)
-		label_at(Vector2(1400,y+14),"%d / %d" % [maxi(0,int(lord.hp)),int(lord.max_hp)],14)
-		skill_mark(lord.team,Vector2(1500,y+6))
-	if not spectating: draw_cursor_hint(mouse)
+	preload("res://battle_hud.gd").draw(self,single_lane,hide_bottom)
 
-# Our lord's skill: Q or click. Lit when it can be cast; otherwise the bottom edge shows the
-# cooldown (grey) or the charge meter filling (gold).
 func draw_skill_button() -> void:
-	var lord_kind: String = model.lords[me].lord
-	var info: Dictionary = B.lord_data(lord_kind)
-	var has_sk: bool = B.has_skill(lord_kind)
-	var skill_need: int = roundi(model.skill_need(me))
-	var ready: bool = model.skill_error(me).is_empty()
-	var sk_rect := SKILL_RECT
-	if skill_shake > 0.0:
-		sk_rect.position.x += sin(skill_shake*55.0)*5.0*clampf(skill_shake/0.45,0.0,1.0)
-	var sk_hover := sk_rect.has_point(get_global_mouse_position())
-	var fill_col := (Color("fbf1d8") if (ready and sk_hover) else Color("f2e3c0")) if ready else Color("d8cbb0")
-	var edge_col := RED if ready or skill_shake > 0.0 else Color("5c5c5c")
-	panel(sk_rect,fill_col,edge_col)
-	# Charge-first skills (2026-11-19): the panel fills with gold as the meter charges; while it
-	# cools down, a grey wash drains away instead.
-	if has_sk and not ready:
-		var inner := sk_rect.grow(-3)
-		if model.skill_cd[me] > 0.0:
-			var cool_share := clampf(model.skill_cd[me]/maxf(0.01,B.skill_cooldown(lord_kind)),0.0,1.0)
-			draw_rect(Rect2(inner.position,Vector2(inner.size.x*cool_share,inner.size.y)),Color(0.25,0.25,0.27,0.22))
-		else:
-			var charge_share := clampf(model.skill_charge[me]/maxf(1.0,model.skill_need(me)),0.0,1.0)
-			var filled := Rect2(inner.position,Vector2(inner.size.x*charge_share,inner.size.y))
-			draw_rect(filled,Color(0.93,0.70,0.22,0.30))
-			if charge_share > 0.01: draw_line(Vector2(filled.end.x,inner.position.y),Vector2(filled.end.x,inner.end.y),Color(0.98,0.80,0.30,0.9),2.0)
-	if ready: draw_rect(sk_rect.grow(2),RED,false,3)
-	var Ornament = preload("res://interface_ornament.gd")
-	Ornament.corner_seal(self,Rect2(sk_rect.position+Vector2(8,14),Vector2(24,24)),"Q",RED if ready else Color("5e5e5e"),14,ready)
-	label_at(sk_rect.position+Vector2(40,32),"領主技能：%s" % info.skill,17,RED if ready else Color("383838"))
-	if has_sk:
-		var badge_pos := sk_rect.position + Vector2(sk_rect.size.x - 24.0, 26.0)
-		Ornament.cost_medallion(self, badge_pos, 14.5, str(skill_need), not ready)
-		var meter_text := "充能"
-		if not ready and model.skill_cd[me] > 0.0: meter_text = "冷卻 %ds" % ceili(model.skill_cd[me])
-		elif not ready: meter_text = "%d ／" % int(model.skill_charge[me])
-		label_at(sk_rect.position+Vector2(sk_rect.size.x-48.0-font.get_string_size(meter_text,HORIZONTAL_ALIGNMENT_LEFT,-1,13).x,32.0),meter_text,13,Color("4f4f4f") if not ready else Color("5c442c"))
-	# Keep the skill label legible in every state; cooldown occupies only the bottom edge.
-	if ready:
-		var glow := 0.5+0.5*sin(Time.get_ticks_msec()/260.0)
-		draw_rect(sk_rect.grow(4+glow*2),Color(0.95,0.75,0.25,0.25+0.35*glow),false,3)
-	elif not has_sk or model.lords[me].hp <= 0: draw_rect(sk_rect.grow(-2),Color("757575"),false,2)
-	if polish.skill_ready_flash > 0.0:
-		var rp: float = 1.0 - clampf(float(polish.skill_ready_flash) / 0.75, 0.0, 1.0)
-		var ra := sin(rp * PI)
-		draw_rect(sk_rect.grow(3.0 + rp * 12.0), Color(0.98, 0.80, 0.25, ra * 0.80), false, 3.0)
-	if skill_flash_left > 0.0:
-		var fp := 1.0 - clampf(skill_flash_left / 1.15, 0.0, 1.0)
-		var fa := sin(fp * PI)
-		draw_rect(sk_rect.grow(2.0 + fp * 14.0), Color(1.0, 0.85, 0.30, fa * 0.78), false, 3.5)
-		draw_rect(sk_rect, Color(1.0, 0.90, 0.45, fa * 0.30))
-		draw_string(font, Vector2(sk_rect.position.x, sk_rect.position.y - 8.0 - fp * 10.0), "★ 領主大招發動！", HORIZONTAL_ALIGNMENT_CENTER, sk_rect.size.x, 16, Color(0.95, 0.72, 0.12, fa))
+	preload("res://battle_hud.gd").skill_button(self)
 
 # A lord row's skill state as a small mark, no words: a glowing gem when it can be cast, a dial
 # filling up while it cools, a gold dial filling while it charges, an empty ring when the lord is down.
@@ -2268,7 +2173,7 @@ func cursor_status_hint(mouse: Vector2) -> Dictionary:
 				return {"text": "冷卻中 %.1f秒" % cd, "color": Color("7d4f1c")}
 			elif model.ink[me] < hcost:
 				return {"text": "金幣不足（還差 %d）" % ceili(hcost - model.ink[me]), "color": RED}
-	if SKILL_RECT.has_point(mouse) and B.has_skill(model.lords[me].lord):
+	if SKILL_RECT.has_point(mouse) and B.has_skill(model.lords[me].lord) and (model.lord_active[me] or model.lords[me].hp > 0): # no hint over an empty lord plate
 		if model.skill_cd[me] > 0.00001:
 			return {"text": "技能冷卻 %.1f秒" % model.skill_cd[me], "color": Color("7d4f1c")}
 		if not model.skill_charged(me):
@@ -2864,7 +2769,8 @@ func draw_deck() -> void:
 		var r := deck_slot_rect(i+1)
 		if i < shown.size():
 			var hv: float = polish.hover_val("deck_slot_%d_%s" % [i, shown[i]], r.has_point(mouse), is_processing())
-			r.position.y -= 4.0 * hv
+			r.position.y -= 8.0 * hv
+			r = r.grow(3.0 * hv)
 			if hv > 0.01: polish.draw_card_hover_glow(self, r, hv)
 			draw_card(shown[i],r)
 		else:
@@ -2878,9 +2784,14 @@ func draw_deck() -> void:
 	for i: int in range(tabs.size()):
 		var r := tab_rect(i)
 		var on: bool = tabs[i] == deck_tab
-		var thover := not on and r.has_point(mouse)
-		draw_rect(r,RED if on else (Color("f4e6c4") if thover else Color("e6d3a8")))
-		draw_rect(r,Color("6a5236"),false,1.5)
+		var thv: float = polish.hover_val("deck_tab_%d" % i,not on and r.has_point(mouse),is_processing())
+		var lift := -3.0 if on else -2.0*thv
+		var tab_pts := PackedVector2Array([r.position+Vector2(7,lift),Vector2(r.end.x,r.position.y+lift),Vector2(r.end.x-7,r.end.y),Vector2(r.position.x,r.end.y)])
+		draw_colored_polygon(tab_pts,RED if on else Color("e6d3a8").lerp(Color("f6ead0"),thv))
+		var tab_rim := tab_pts.duplicate()
+		tab_rim.append(tab_pts[0])
+		draw_polyline(tab_rim,Color("d2ad58") if on else Color("6a5236"),1.6 if on else 1.2,true)
+		if on: draw_line(Vector2(r.position.x+10,r.end.y-3),Vector2(r.end.x-10,r.end.y-3),Color("d2ad58"),2.0,true)
 		draw_string(font,Vector2(r.position.x,r.position.y+28),"%s（%d）" % [TAB_NAMES[tabs[i]],tab_count(tabs[i])],HORIZONTAL_ALIGNMENT_CENTER,r.size.x,18,Color("fbf1dc") if on else INK)
 	# Collection.
 	var items := page_items()
@@ -2889,7 +2800,8 @@ func draw_deck() -> void:
 	for i: int in range(items.size()):
 		var r := pool_rect(i)
 		var hv: float = polish.hover_val("deck_pool_%s_%s" % [deck_tab, items[i]], r.has_point(mouse), is_processing())
-		r.position.y -= 4.0 * hv
+		r.position.y -= 8.0 * hv
+		r = r.grow(3.0 * hv)
 		if deck_tab == "lord":
 			if hv > 0.01 and items[i] != player_lord: polish.draw_card_hover_glow(self, r, hv)
 			draw_lord_card(items[i],r,items[i] == player_lord)
@@ -2910,6 +2822,7 @@ func draw_deck() -> void:
 	if note.is_empty() and not DeckStore.valid(player_deck,player_lord): note = "還差 %d 張才能%s" % [8-player_deck.size(),"出征" if adventure_deck_mode else "開戰"]
 	if not note.is_empty(): draw_string(font,Vector2(360,855),note,HORIZONTAL_ALIGNMENT_CENTER,880,20,RED)
 	elif watch_edit >= 0: draw_string(font,Vector2(360,855),"只改這場觀戰，不影響你的牌組",HORIZONTAL_ALIGNMENT_CENTER,880,18,muted)
+	elif adventure_deck_mode: draw_string(font,Vector2(360,855),adventure.deck_tip(),HORIZONTAL_ALIGNMENT_CENTER,880,18,Color("3c6e2e"))
 
 # Random spectate deck (per-lord optimal ratios live in DeckStore).
 static func random_deck(rng: RandomNumberGenerator, lord: String = "") -> Array:

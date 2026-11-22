@@ -5,7 +5,9 @@ const Keywords = preload("res://card_keywords.gd")
 const CardSort = preload("res://card_sort.gd")
 const Style = preload("res://command_style.gd")
 const Ornament = preload("res://interface_ornament.gd")
-const INFO_RECT := Rect2(1418,28,148,48) # top-right corner: the top centre is kept for the clock
+const INFO_RECT := Rect2(692,24,56,56) # wax seal left of the dial (battle_hud.gd)
+var shown_selected := "" # the entry whose art last popped in
+var selected_at := -10.0
 const LEFT_PANEL := Rect2(56,52,804,738)
 const RIGHT_PANEL := Rect2(886,52,658,798)
 var game
@@ -184,7 +186,8 @@ func draw_catalog() -> void:
 			var kind: String = list[i]
 			var r := catalog_rect(i%12)
 			var hv: float = game.polish.hover_val("codex_card_%s" % kind, r.has_point(mouse), game.is_processing())
-			r.position.y -= 4.0 * hv
+			r.position.y -= 8.0 * hv
+			r = r.grow(3.0 * hv)
 			if kind == selected:
 				game.panel(r.grow(4),Color("b8c594"),Color("52633c"))
 			elif hv > 0.01:
@@ -206,6 +209,15 @@ func draw_catalog() -> void:
 		var art_frame := Rect2(926,134,578,206)
 		game.panel(art_frame, Color("f4ebd4").lerp(f_tint, 0.30), Color("8c6e43"))
 		var art_box := Rect2(1038,140,354,194)
+		# A newly picked entry pops in, then the art floats gently (2026-11-21).
+		if selected != shown_selected:
+			shown_selected = selected
+			selected_at = game.clock
+		var pop_t := clampf((game.clock-selected_at)/0.35,0.0,1.0) if game.is_processing() else 1.0
+		var pc := pop_t-1.0
+		var swell := lerpf(0.82,1.0,1.0+2.70158*pc*pc*pc+1.70158*pc*pc)
+		var bob := sin(game.clock*1.6)*3.0 if game.is_processing() and game.fx_enabled else 0.0
+		art_box = Rect2(art_box.get_center()+Vector2(0,bob)-art_box.size*0.5*swell,art_box.size*swell)
 		if is_lord: game.draw_fitted(game.art(selected),art_box)
 		else: game.draw_card_art(selected,art_box)
 		var sum_rect := Rect2(926,350,578,40)
@@ -284,7 +296,8 @@ func draw_battle_info() -> void:
 	if game.rogue.in_battle and not game.rogue.run.is_empty():
 		mode_line = "肉鴿 第 %d / %d 場 · AI %s" % [game.rogue.battle_floor_number(),game.rogue.Catalog.FLOORS,["簡單","普通","困難"][game.model.difficulty]]
 	elif game.adventure.index >= 0:
-		mode_line = "征服 · %s（%s）" % [game.adventure.STAGES[game.adventure.index].name,["簡單","普通","困難"][game.model.difficulty]]
+		var st: Dictionary = game.adventure.STAGES[game.adventure.index]
+		mode_line = "遠征 %s · %s（%s）" % [st.get("code",""), st.name, ["簡單","普通","困難"][game.model.difficulty]]
 	game.label_at(Vector2(310,107),mode_line,24)
 	game.label_at(Vector2(1120,107),"閱讀中暫停 · 點卡牌查看趣聞",19)
 	for team: int in range(2):
