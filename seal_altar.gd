@@ -104,8 +104,8 @@ static func release(m, b: Dictionary) -> void:
 static func update(m, dt: float) -> void:
 	if not m.has_plague_bishop: return
 	for u: Dictionary in m.units:
-		if u.hp <= 0 or u.kind != "plague_bishop" or u.get("spawn_delay",0.0) > 0: continue
-		var d: Dictionary = B.CARDS.plague_bishop
+		if u.hp <= 0 or not B.CARDS[u.kind].has("rot_period") or u.get("spawn_delay",0.0) > 0: continue
+		var d: Dictionary = B.CARDS[u.kind]
 		u.rot_clock = u.get("rot_clock",0.0)+dt
 		while u.rot_clock >= d.rot_period:
 			u.rot_clock -= d.rot_period
@@ -128,8 +128,8 @@ static func describe(kind: String) -> Array[String]:
 		var bishop: Dictionary = B.CARDS[d.summon]
 		lines.append("不會出現在起手牌；每方只能有一座，場上有祭壇時這張牌不冷卻。任何一路每死 1 名部隊（敵我皆算）得 %s 魂。" % B.number(d.soul_per_death))
 		lines.append("%s 魂時封印依序碎裂，每破一道使半徑 %s 內敵兵恐懼 %s 秒；集滿 %s 魂祭壇碎裂，召喚%s與 %d 名%s。祭壇被拆則靈魂散去。" % ["／".join(d.seals.map(func(x) -> String: return str(x))),B.number(d.radius),B.number(d.seal_fear),str(d.seals[-1]),bishop.name,int(d.escort[1]),B.CARDS[d.escort[0]].name])
-	elif kind == "plague_bishop":
-		var p: Dictionary = B.CARDS.plague_bishop
+	elif B.CARDS.get(kind,{}).has("rot_period"):
+		var p: Dictionary = B.CARDS[kind]
 		lines.append("出場時半徑 %s 內敵兵恐懼 %s 秒；鐘聲隨行。" % [B.number(p.radius),B.number(p.roar_fear)])
 		lines.append("所經之處土地腐敗：每 %s 秒在腳下留下半徑 %s、持續 %s 秒的毒霧。" % [B.number(p.rot_period),B.number(p.rot_radius),B.number(p.rot_duration)])
 	return lines

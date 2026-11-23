@@ -77,7 +77,7 @@ const SCRIPTS := {
 		"loss":"先種田、派農民耕田，錢滾起來再出兵。",
 	},
 	"w1_4":{
-		"setup":{"enemy_income":0.6,"lord":false,"enemy_ai":false,"ward_until":4,"our_ward":true,"enemy_farms":0},
+		"setup":{"enemy_income":0.6,"enemy_ink":0.0,"lord":false,"enemy_ai":false,"ward_until":4,"our_ward":true,"enemy_farms":0},
 		"waves":[
 			{"after":2,"delay":5.0,"kind":"bandit","lane":2,"every":24.0},
 		],
@@ -102,40 +102,40 @@ const SCRIPTS := {
 	"w1_6":{
 		"setup":{"enemy_income":0.6,"lord":false,"enemy_ai":false,"ink":40.0,"ward_until":4,"enemy_farms":0},
 		"waves":[
-			{"after":0,"delay":16.0,"kind":"bandit","lane":-1,"every":12.0},
-			{"after":0,"delay":52.0,"kind":"bandit","lane":1},
-			{"after":0,"delay":52.0,"kind":"bandit","lane":3},
+			{"after":0,"delay":16.0,"kind":"mob","lane":-1,"every":12.0},
+			{"after":0,"delay":52.0,"kind":"militia","lane":1},
+			{"after":0,"delay":52.0,"kind":"militia","lane":3},
 		],
 		"steps":[
-			{"text":"強盜要分三路進攻了，守住 1 分 30 秒（上方倒數）。記住：部隊只會往前走，漏過去的敵兵不會回頭追！","hint":"clock","done":"time:7"},
+			{"text":"暴民要分三路進攻了，守住 1 分 30 秒（上方倒數）。記住：部隊只會往前走，漏過去的敵兵不會回頭追！","hint":"clock","done":"time:7"},
 			{"text":"在城牆前蓋一座箭樓：它會射擊周圍兩格內的敵人，敵兵繞不過去。","hint":"card:tower+own_cells","done":"play:tower"},
 			{"text":"稻草人會把上下三路的敵兵都吸到它這一路，正好進箭樓的射程。蓋在中路、箭樓前面。","hint":"card:scarecrow+front_cells","done":"play:scarecrow"},
-			{"text":"撐住！這一課強盜的木柵有結界，只有守滿倒數才算贏。","hint":"clock","done":"win"},
+			{"text":"撐住！這一課暴民的木柵有結界，只有守滿倒數才算贏。","hint":"clock","done":"win"},
 		],
 		"loss":"箭樓蓋在城牆前，稻草人擺在它前面擋。",
 	},
 	"w1_7":{
 		"setup":{"enemy_income":0.7,"lord":false,"enemy_ai":false,"ink":30.0,"ward_until":3},
 		"waves":[
-			{"after":1,"delay":2.0,"kind":"bandit","lane":1},
-			{"after":1,"delay":2.0,"kind":"bandit","lane":2},
-			{"after":1,"delay":2.0,"kind":"bandit","lane":3},
-			{"after":2,"delay":6.0,"kind":"bandit","lane":-1,"every":10.0},
+			{"after":1,"delay":2.0,"kind":"militia","lane":1},
+			{"after":1,"delay":2.0,"kind":"militia","lane":2},
+			{"after":1,"delay":2.0,"kind":"militia","lane":3},
+			{"after":2,"delay":6.0,"kind":"militia","lane":-1,"every":16.0},
 		],
 		"steps":[
 			{"text":"法術不必放在自己的領地，整片戰場哪裡都能丟。","hint":"","done":"time:5"},
-			{"text":"先用小考學會的火罐，燒掉營地裡那座搶來的糧倉。","hint":"card:fire+building:granary","done":"enemy_down:granary"},
-			{"text":"三路強盜並排擠過來了！箭雨是 2×3 格，丟在中路就能一次蓋住三路。","hint":"card:rain+enemy_units","done":"kills:6"},
-			{"text":"糧倉燒了，強盜撐不久。乘勝追擊，打破木柵！","hint":"enemy_wall","done":"win"},
+			{"text":"先用小考學會的火罐，燒掉莊裡那座囤糧的糧倉。","hint":"card:fire+building:granary","done":"enemy_down:granary"},
+			{"text":"三路鄉兵並排擠過來了！箭雨是 2×3 格，丟在中路就能一次蓋住三路。","hint":"card:rain+enemy_units","done":"kills:6"},
+			{"text":"糧倉燒了，莊園撐不久。乘勝追擊，打破木柵！","hint":"enemy_wall","done":"win"},
 		],
 		"loss":"箭雨清人群，火罐燒建築。",
 	},
 	"w1_8":{
 		"setup":{"enemy_income":0.8,"lord":true,"enemy_ai":false,"enemy_gate":600.0,"ward_until":4},
 		"waves":[
-			{"after":1,"delay":4.0,"kind":"bandit","lane":1},
-			{"after":1,"delay":12.0,"kind":"bandit","lane":3},
-			{"after":2,"delay":6.0,"kind":"bandit","lane":-1,"every":15.0},
+			{"after":1,"delay":4.0,"kind":"militia","lane":1},
+			{"after":1,"delay":12.0,"kind":"militia","lane":3},
+			{"after":2,"delay":6.0,"kind":"militia","lane":-1,"every":15.0},
 		],
 		"steps":[
 			{"text":"現在有三路！每一路都有一段城牆（上方血條），任何一段被打破，敵兵就能從那裡走進來。","hint":"walls","done":"time:7"},
@@ -150,7 +150,7 @@ const SCRIPTS := {
 		"setup":{"enemy_income":0.9,"lord":true,"enemy_ai":false,"skill_charge":0.5,"ward_until":3},
 		"waves":[
 			{"after":0,"delay":2.0,"kind":"ram","lane":2},
-			{"after":1,"delay":5.0,"kind":"bandit","lane":-1,"every":16.0},
+			{"after":1,"delay":5.0,"kind":"militia","lane":-1,"every":16.0},
 			{"after":1,"delay":14.0,"kind":"ram","lane":1,"every":34.0},
 		],
 		"steps":[
@@ -164,12 +164,12 @@ const SCRIPTS := {
 	"w1_10":{
 		"setup":{"compact":true,"phase_notes":true},
 		"steps":[
-			{"text":"畢業考：五路全開，對手會出牌、也有領主。用你親手挑的 8 張牌打贏他！","hint":"","done":"time:8"},
-			{"text":"上方日晷是一天：3:00 正午金幣 ×2、4:30 黃昏 ×2.5；6:00 入夜 ×3，雙方城牆開始自己崩塌。","hint":"sundial","done":"time:12"},
-			{"text":"撐到 9:00 天亮還沒分勝負，就比領地大小——往前蓋建築、推領地也是一種贏法。","hint":"sundial","done":"time:10"},
-			{"text":"五路要輪流照顧：看上方城牆血條，哪一路告急就補哪一路。","hint":"walls","done":"time:10"},
+			{"text":"畢業考特殊規則：本關沒有金幣與農田，改由下方傳送帶免費送牌，最多存 8 張！","hint":"","done":"time:8"},
+			{"text":"直接點擊傳送帶上的卡牌（或按 1–8），免費部署到五路戰場，同時替領主大招充能。","hint":"","done":"time:10"},
+			{"text":"上方日晷是一天：3:00 正午、4:30 黃昏，6:00 入夜後雙方城牆開始崩塌；天亮比領地大小。","hint":"sundial","done":"time:10"},
+			{"text":"傳送帶一有空位就會持續送牌：五路輪流顧好，哪一路告急就補兵或放雨熄火。","hint":"walls","done":"time:10"},
 		],
-		"loss":"先種田耕田撐經濟，再挑一兩路集中推進。",
+		"loss":"傳送帶免費出牌，別囤到滿格 8 張——持續往優勢路推進、替領主充能開大。",
 	},
 }
 

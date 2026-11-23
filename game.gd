@@ -4,6 +4,7 @@ const Frontier = preload("res://frontier_cards.gd")
 const L = preload("res://layout.gd")
 const DeckStore = preload("res://deck_store.gd")
 const Battle = preload("res://battle.gd")
+const Conveyor = preload("res://conveyor.gd")
 const Arcane = preload("res://arcane_mechanics.gd")
 const ART = preload("res://manuscript_art.gd")
 const Keywords = preload("res://card_keywords.gd")
@@ -142,6 +143,7 @@ var sound: Node
 var sound_enabled := true
 # Music and presentation state (2026-11-12). None of it is read by the rules.
 const Music = preload("res://music_player.gd")
+const MusicMood = preload("res://music_mood.gd")
 var music: Node
 var music_volume := 0.7 # 0..1, settings
 var sfx_volume := 0.8
@@ -153,7 +155,7 @@ var result_age := 0.0 # seconds since the match ended (the result panel and its 
 var result_seen: RefCounted # the model whose ending has been announced
 var intro_left := 0.0 # seconds left of the "who fights whom" banner at the start of a battle
 const INTRO_TIME := 2.4
-const VERSION := "0.4.0"
+const VERSION := "0.5.0"
 var hover_slot := -1
 var dragging := false
 var press_pos := Vector2.ZERO
@@ -417,6 +419,8 @@ func enter_battle(message: String) -> void:
 	cursor_hint_left = 0.0
 	speed = 1
 	position = Vector2.ZERO
+	if model != null and model.is_conveyor(me):
+		message = "傳送帶免費送牌 · 點卡或按 1–8 選牌再點戰場 · 右鍵取消"
 	notice = message
 	screen = "battle"
 	effects.clear()
@@ -549,7 +553,7 @@ func consume_events() -> void:
 		if e.kind == "spell":
 			hop = 0
 			sacrifice_team = e.team if e.get("card","") == "sacrifice" else -1
-		if e.kind == "breach": say(("我方第 %d 路城牆被攻破！敵兵走進來就輸了" % (e.lane+1)) if e.team != me else ("攻破%s第 %d 路城牆！派兵走進去就贏" % [Ceremony.side_name(self,1-me),e.lane+1]),e.team != me)
+		if e.kind == "breach": say(("我方第 %d 路城牆被攻破！敵兵走進來就輸了 · 領主技能立刻充能 50%%" % (e.lane+1)) if e.team != me else ("攻破%s第 %d 路城牆！派兵走進去就贏" % [Ceremony.side_name(self,1-me),e.lane+1]),e.team != me)
 		if e.kind == "skill": say("%s%s發動「%s」" % ["紅方" if e.team == 0 else "藍方",B.lord_name(e.lord),B.lord_data(e.lord).get("skill","技能")])
 		if e.kind == "ramp": say("金幣產出與卡牌冷卻加快 ×%.1f" % e.multiplier)
 		if e.kind == "nightfall" and e.get("first",false): say("入夜：金幣 ×%s，雙方城牆開始朽壞" % B.number(B.NIGHT_GOLD))
@@ -617,12 +621,16 @@ func present(dt: float) -> void:
 		music.stop_sting()
 		music.duck = 1.0
 		music.want("menu")
+		music.set_tension(0.0)
+		music.set_season("")
 	elif model.ended: music.want("")
 	else:
 		music.duck = 0.4 if model.paused else 1.0
 		var phase: int = model.day_phase()
+		music.set_season(String(model.season))
+		music.set_tension(MusicMood.tension(model,me))
 		if phase == 3: music.want("night")
-		else: music.want("battle",phase)
+		else: music.want("battle",phase,MusicMood.theme(model,me))
 
 func _process(dt: float) -> void:
 	var real_dt := dt
@@ -633,6 +641,12 @@ func _process(dt: float) -> void:
 		return
 	if model != null and model.paused: dt = 0
 	if screen == "battle" and model != null:
+		if model.is_conveyor(me):
+			var belt_count: int = Conveyor.count(model)
+			if selected >= belt_count:
+				selected = -1
+				dragging = false
+			if hover_slot >= belt_count: hover_slot = -1
 		polish.observe_battle(self,real_dt,dt)
 	shake_left = maxf(0,shake_left-dt)
 	purse_alarm = maxf(0,purse_alarm-dt)
@@ -656,11 +670,13 @@ func _process(dt: float) -> void:
 
 # Hand area: the permanent farmland slot, the four rotating cards, then the next-card preview.
 func card_rect(slot: int) -> Rect2:
+	if model != null and model.is_conveyor(me): return Conveyor.card_rect(model, slot)
 	if slot == Battle.FARM_SLOT: return Rect2(418,730,124,158)
 	return Rect2(560+slot*134,730,124,158)
 
 func card_at(pos: Vector2) -> int:
 	if adventure.is_opening() and adventure.opening.active: return -1
+	if model != null and model.is_conveyor(me): return Conveyor.card_at(model, pos)
 	for i: int in [0,1,2,3,Battle.FARM_SLOT]:
 		if card_rect(i).has_point(pos): return i
 	return -1
@@ -775,12 +791,16 @@ func _unhandled_input(event: InputEvent) -> void:
 		library.show_battle_info()
 		return
 	if event is InputEventKey and event.pressed and not event.echo:
-		if event.keycode >= KEY_1 and event.keycode <= KEY_4:
+		if model.is_conveyor(me) and not spectating:
+			if event.keycode >= KEY_1 and event.keycode <= KEY_8:
+				var index: int = event.keycode-KEY_1
+				if index < Conveyor.count(model): selected = -1 if selected == index else index
+		elif event.keycode >= KEY_1 and event.keycode <= KEY_4:
 			var index: int = event.keycode-KEY_1
 			if spectating: set_speed(SPEEDS[index])
 			else: selected = -1 if selected == index else index
 		if event.keycode == KEY_Q and not spectating: try_skill()
-		if event.keycode == KEY_F and not spectating: selected = -1 if selected == Battle.FARM_SLOT else Battle.FARM_SLOT
+		if event.keycode == KEY_F and not spectating and not model.is_conveyor(me): selected = -1 if selected == Battle.FARM_SLOT else Battle.FARM_SLOT
 		if spectating and event.keycode in [KEY_EQUAL,KEY_KP_ADD,KEY_PLUS]: set_speed(SPEEDS[mini(SPEEDS.find(speed)+1,SPEEDS.size()-1)])
 		if spectating and event.keycode in [KEY_MINUS,KEY_KP_SUBTRACT]: set_speed(SPEEDS[maxi(SPEEDS.find(speed)-1,0)])
 		if event.keycode == KEY_ESCAPE:
@@ -994,6 +1014,9 @@ func draw_fitted_facing(texture: Texture2D, box: Rect2, face: float, shade: Colo
 	tf()
 
 func actor_rect(kind: String) -> Rect2:
+	if B.CARDS.get(kind,{}).get("giant",false):
+		var g_box: Rect2 = Rect2(-150,-138,300,200) if kind in ["giant_dire_hydra","giant_thorn_dragon"] else Rect2(-128,-144,256,208)
+		return fitted_rect(art(kind).get_size(),g_box,true)
 	if kind == "pouch_beast": return fitted_rect(art(kind).get_size(),Rect2(-68,-75,136,108),true)
 	if kind == "arcane_golem": return fitted_rect(art(kind).get_size(),Rect2(-83,-126,166,143),true)
 	if B.CARDS.get(kind,{}).get("series","") == "magic" and B.CARDS[kind].type == "unit": return fitted_rect(art(kind).get_size(),Rect2(-65,-95,130,112),true)
@@ -1134,8 +1157,9 @@ func draw_card(kind: String, rect: Rect2, slot: int = -1) -> void:
 	var scale_k := clampf(s.x/124.0, 0.76, 1.30)
 	var Ornament = preload("res://interface_ornament.gd")
 	var Style = preload("res://command_style.gd")
-	var short: bool = screen == "battle" and model.ink[me] < data.cost
-	var cooling: bool = slot >= 0 and screen == "battle" and model.slot_cd(me,slot) > 0
+	var conv: bool = screen == "battle" and model != null and model.is_conveyor(me)
+	var short: bool = not conv and screen == "battle" and model.ink[me] < data.cost
+	var cooling: bool = not conv and slot >= 0 and screen == "battle" and model.slot_cd(me,slot) > 0
 	var blocked: bool = short or cooling
 	var sel: bool = selected == slot and slot >= 0
 	# Soft vellum drop shadow grounds the card on stone or parchment.
@@ -1172,13 +1196,14 @@ func draw_card(kind: String, rect: Rect2, slot: int = -1) -> void:
 		Ornament.ribbon_tag(self,tag,B.FACTIONS[faction],Style.tag_color(kind),maxi(10,roundi(11.0*scale_k)))
 	# Ink cost medallion, top right.
 	var badge := rect.position+Vector2(s.x-18.5*scale_k,18.5*scale_k)
-	var cost_txt := "-" if data.get("summon_only",false) else preload("res://gold_monster.gd").cost_text(kind,data)
+	var cost_txt := "免" if conv else ("-" if data.get("summon_only",false) else preload("res://gold_monster.gd").cost_text(kind,data))
 	Ornament.cost_medallion(self,badge,14.8*scale_k,cost_txt,blocked)
 	if slot >= 0:
-		var key := "F" if slot == Battle.FARM_SLOT else str(slot+1)
-		var seal_col := Color("5e5e5e") if blocked else (Style.tag_color(kind).darkened(0.08) if slot == Battle.FARM_SLOT else Color("6b4c33"))
+		var is_farm_slot: bool = not conv and slot == Battle.FARM_SLOT
+		var key := "F" if is_farm_slot else str(slot+1)
+		var seal_col := Color("5e5e5e") if blocked else (Style.tag_color(kind).darkened(0.08) if is_farm_slot else Color("6b4c33"))
 		var key_rect := Rect2(rect.position+Vector2(6.5*scale_k,6.5*scale_k),Vector2(22*scale_k,22*scale_k))
-		Ornament.corner_seal(self,key_rect,key,seal_col,maxi(11,roundi(13.5*scale_k)),slot == Battle.FARM_SLOT and not blocked)
+		Ornament.corner_seal(self,key_rect,key,seal_col,maxi(11,roundi(13.5*scale_k)),is_farm_slot and not blocked)
 
 # A gray stage curtain over r: two halves that part from the middle as `closed` goes 1 -> 0.
 func curtain(r: Rect2, closed: float) -> void:
@@ -1400,16 +1425,17 @@ func draw_battle() -> void:
 				ink_line(corners[edge],corners[(edge+1)%4],row*37+col*11+side,color,1.7)
 	if selected >= 0:
 		var sel_kind: String = model.kind_at(me,selected)
-		var is_spell: bool = B.CARDS.get(sel_kind,{}).get("type","") == "spell"
-		if not is_spell or B.CARDS[sel_kind].get("rolling",false):
-			for row: int in range(L.GRID_ROWS):
-				for col: int in range(9):
-					var cell := Vector2i(col,row)
-					if model.can_play(me,selected,L.cell_center(cell)):
-						var r := Rect2(L.GRID_ORIGIN+Vector2(cell)*L.CELL_SIZE,L.CELL_SIZE).grow(-5)
-						var glow := 0.0 if place_flash <= 0 else 0.5+0.5*sin(place_flash*18)
-						draw_rect(r,Color(1.0,0.93,0.55,0.22+0.30*glow))
-						draw_rect(r,Color(0.85,0.65,0.15,0.7+0.3*glow),false,2+3*glow)
+		if B.CARDS.has(sel_kind):
+			var is_spell: bool = B.CARDS[sel_kind].get("type","") == "spell"
+			if not is_spell or B.CARDS[sel_kind].get("rolling",false):
+				for row: int in range(L.GRID_ROWS):
+					for col: int in range(9):
+						var cell := Vector2i(col,row)
+						if model.can_play(me,selected,L.cell_center(cell)):
+							var r := Rect2(L.GRID_ORIGIN+Vector2(cell)*L.CELL_SIZE,L.CELL_SIZE).grow(-5)
+							var glow := 0.0 if place_flash <= 0 else 0.5+0.5*sin(place_flash*18)
+							draw_rect(r,Color(1.0,0.93,0.55,0.22+0.30*glow))
+							draw_rect(r,Color(0.85,0.65,0.15,0.7+0.3*glow),false,2+3*glow)
 	for lane: int in range(L.GRID_ROWS+1):
 		if not lane in model.active_lanes and not lane-1 in model.active_lanes: continue
 		var y := grid.position.y+lane*L.CELL_SIZE.y
@@ -1696,17 +1722,23 @@ func draw_unit(u: Dictionary) -> void:
 	if u.get("flying",false): bounce = -20+sin(model.actor_time(u)*10+u.phase)*5
 	if u_spawn < 1.0:
 		bounce -= (1.0 - polish.ease_out(u_spawn)) * 14.0
+	var is_giant: bool = u.get("giant",false)
+	var base_y: float = 48.0 if is_giant else 16.0
 	var rect_top: float = actor_rect(u.kind).position.y
-	var ring_r: float = 24.0+(B.actor_radius(u)-B.UNIT_BODY_RADIUS)*0.75
-	var hp_y: float = minf(-68.0,rect_top-6.0)
+	var ring_r: float = 92.0 if is_giant else 24.0+(B.actor_radius(u)-B.UNIT_BODY_RADIUS)*0.75
+	var hp_y: float = minf(-112.0 if is_giant else -68.0,rect_top-6.0)
 	var top: float = rect_top+bounce
 	var is_cursed: bool = u.get("cursed",false) or u.get("cursed_until",0.0) > model.elapsed
 	if is_cursed: top = minf(top,-78)
 	if u.hp < u.max_hp: top = minf(top,hp_y-1.0)
 	# No push-down for tall troops (producer 2026-11-18): they stay in their lane; the top frame may cover them.
 	if u.get("stealthed",false):
-		draw_arc(pos+Vector2(0,16),ring_r+3.0,0,PI,16,Color("a8b5c7"),2)
-	team_base(pos+Vector2(0,16),ring_r,RED if u.team == 0 else BLUE)
+		draw_arc(pos+Vector2(0,base_y),ring_r+3.0,0,PI,16,Color("a8b5c7"),2)
+	team_base(pos+Vector2(0,base_y),ring_r,RED if u.team == 0 else BLUE)
+	if is_giant:
+		tf(pos+Vector2(0,base_y),0,Vector2(1,0.38))
+		draw_arc(Vector2.ZERO,ring_r+6.0,0,TAU,36,Color(0.95,0.78,0.25,0.65),2.5)
+		tf()
 	var tint := Color(1.6,1.6,1.6) if fx_enabled and u.flash > 0 else Color.WHITE
 	if u_spawn < 1.0:
 		tint.a *= clampf(u_spawn * 2.2, 0.0, 1.0)
@@ -1721,7 +1753,7 @@ func draw_unit(u: Dictionary) -> void:
 	if model.LordExpansion.active(model,u):
 		draw_arc(pos+Vector2(0,-30),ring_r+1.0,0,TAU,24,Color(0.65,0.08,0.18,0.7),2)
 		var left: float = (model.vampire_until[u.team]-model.elapsed)/B.LORDS.vampire.blood_duration
-		draw_arc(pos+Vector2(0,16),ring_r+1.0,-PI/2,-PI/2+TAU*left,24,Color("bd3d66"),2)
+		draw_arc(pos+Vector2(0,base_y),ring_r+1.0,-PI/2,-PI/2+TAU*left,24,Color("bd3d66"),2)
 	if is_cursed:
 		var halo_pos := pos-Vector2(0,50)
 		draw_arc(halo_pos,12,0,TAU,20,Color("926c9d"),2,true)
@@ -1736,7 +1768,7 @@ func draw_unit(u: Dictionary) -> void:
 		draw_line(pos-Vector2(dir*12,22),pos-Vector2(dir*26,22),trail_c,1.5)
 		var chev := pos+Vector2(0,top-6)
 		draw_polyline(PackedVector2Array([chev-Vector2(dir*5,4),chev+Vector2(dir*3,0),chev-Vector2(dir*5,-4)]),trail_c,2.0)
-		draw_arc(pos+Vector2(0,16),18+2*sin(model.elapsed*10),0,TAU,16,Color(1.0,0.85,0.3,0.35),1.5)
+		draw_arc(pos+Vector2(0,base_y),18+2*sin(model.elapsed*10),0,TAU,16,Color(1.0,0.85,0.3,0.35),1.5)
 	if u.get("stun_left",0.0) > 0:
 		var stun_pos := pos-Vector2(0,48)
 		draw_polyline(PackedVector2Array([stun_pos+Vector2(-5,-7),stun_pos+Vector2(5,-7),stun_pos+Vector2(-5,7),stun_pos+Vector2(5,7),stun_pos+Vector2(-5,-7)]),Color("d8b9f3"),2)
@@ -1744,11 +1776,11 @@ func draw_unit(u: Dictionary) -> void:
 			var a: float = model.elapsed*6.0+i*TAU/3.0
 			draw_circle(stun_pos+Vector2(cos(a)*10,sin(a)*4),2.5,Color("f6d354"))
 	if u.get("slow_left",0.0) > 0:
-		draw_arc(pos+Vector2(0,16),ring_r-4.0,0,TAU,16,Color("64b5f6",0.6),1.5)
+		draw_arc(pos+Vector2(0,base_y),ring_r-4.0,0,TAU,16,Color("64b5f6",0.6),1.5)
 	if u.get("root_left",0.0) > 0:
-		draw_arc(pos+Vector2(0,16),ring_r-2.0,0,TAU,16,Color("3d2c3e",0.85),2.5)
+		draw_arc(pos+Vector2(0,base_y),ring_r-2.0,0,TAU,16,Color("3d2c3e",0.85),2.5)
 		for i: int in range(4):
-			var rp := pos+Vector2(0,16)+Vector2.from_angle(i*PI*0.5+PI*0.25)*(ring_r-2.0)
+			var rp := pos+Vector2(0,base_y)+Vector2.from_angle(i*PI*0.5+PI*0.25)*(ring_r-2.0)
 			draw_line(rp,rp+Vector2(0,6),Color("3d2c3e",0.85),2.0)
 	if (B.CARDS[u.kind].get("charge",false) and not u.get("charged",false) and not u.get("expansion_charged",false)) or u.get("granted_charge",false):
 		var c_dir: float = u.face
@@ -1759,21 +1791,22 @@ func draw_unit(u: Dictionary) -> void:
 		draw_polyline(PackedVector2Array([spear-Vector2(c_dir*6,5),spear+Vector2(c_dir*3,0),spear-Vector2(c_dir*6,-5)]),c_col,2.4)
 	var total_poison: int = int(u.get("hex_stacks",0))+int(u.get("poison_stacks",0))
 	if total_poison > 0:
-		draw_arc(pos+Vector2(0,16),ring_r-4.0,0,TAU,16,Color("115224",0.88),2.4)
+		draw_arc(pos+Vector2(0,base_y),ring_r-4.0,0,TAU,16,Color("115224",0.88),2.4)
 		for i: int in range(mini(3+int(total_poison/3),6)):
 			var ha: float = model.elapsed*4.0+i*TAU/float(mini(3+int(total_poison/3),6))
 			draw_circle(pos+Vector2(cos(ha)*11,-18-fmod(model.elapsed*16+i*6,14)),2.6,Color("1b6e32",0.9))
 		field_text(pos+Vector2(-8,-50),("毒×%d" % total_poison) if total_poison > 1 else "毒",HORIZONTAL_ALIGNMENT_LEFT,-1,13,Color("115224"))
 	if u.get("armor",0.0) > 0 or u.get("armor_until",0.0) > model.elapsed:
-		draw_arc(pos+Vector2(0,16),ring_r-3.0,0,PI,16,Color("c4a75f",0.85),2.5)
+		draw_arc(pos+Vector2(0,base_y),ring_r-3.0,0,PI,16,Color("c4a75f",0.85),2.5)
 	if u.get("shroud_until",0.0) > model.elapsed:
 		draw_circle(pos+Vector2(0,-20),ring_r,Color("5e4b73",0.14))
 		draw_arc(pos+Vector2(0,-20),ring_r,0,TAU,24,Color("9f86c0",0.5),1.8)
 	if u.get("borrowed_until",-1.0) >= 0:
-		draw_arc(pos+Vector2(0,16),ring_r-8.0,0,TAU,16,Color("b9a3d6",0.55),1.5)
+		draw_arc(pos+Vector2(0,base_y),ring_r-8.0,0,TAU,16,Color("b9a3d6",0.55),1.5)
 	if u.hp < u.max_hp:
-		var bar_w: float = maxf(48.0,ring_r*1.8)
-		bar(Rect2(pos+Vector2(-bar_w*0.5,hp_y),Vector2(bar_w,5)),u.hp,u.max_hp,RED if u.team == 0 else BLUE)
+		var bar_w: float = 148.0 if is_giant else maxf(48.0,ring_r*1.8)
+		var bar_h: float = 8.0 if is_giant else 5.0
+		bar(Rect2(pos+Vector2(-bar_w*0.5,hp_y),Vector2(bar_w,bar_h)),u.hp,u.max_hp,RED if u.team == 0 else BLUE)
 
 # Each lane renders a seamlessly tileable fortified stone curtain-wall section (or matching breach).
 func draw_wall_section(team: int, lane: int, broken: bool) -> void:
@@ -1810,6 +1843,7 @@ func draw_preview() -> void:
 	if selected < 0: return
 	var pos := field_mouse()
 	var kind: String = model.kind_at(me,selected)
+	if not B.CARDS.has(kind): return
 	var data: Dictionary = B.CARDS[kind]
 	var color := Color(0.2,0.7,0.3,0.35) if model.can_play(me,selected,pos) else Color(0.8,0.1,0.1,0.35)
 	if data.type == "spell":
@@ -1842,8 +1876,24 @@ func draw_preview() -> void:
 	if cell.x < 0: return
 	var Grid = preload("res://grid_rules.gd")
 	if data.type == "building":
+		var legal_b: bool = model.can_play(me,selected,pos)
+		var trad := int(data.get("territory_radius",1))
+		if trad > 1:
+			var expand_cells: Array = []
+			for dy: int in range(-trad,trad+1):
+				for dx: int in range(-trad,trad+1):
+					var ec := cell+Vector2i(dx,dy)
+					if ec.x >= 0 and ec.x < L.GRID_COLUMNS and ec.y >= 0 and ec.y < L.GRID_ROWS and ec.y in model.active_lanes and model.territory_owner(ec) == -1:
+						expand_cells.append(ec)
+			Grid.draw_cells(self,expand_cells,Color(0.22,0.72,0.42,0.22) if legal_b else Color(0.8,0.1,0.1,0.18),Color(0.28,0.85,0.48,0.85) if legal_b else Color(0.92,0.22,0.18,0.75))
+			var wr: float = float(data.get("radius",0.0))
+			if wr > 0.0:
+				var wpos := L.cell_center(cell)
+				for ai: int in range(48):
+					if ai % 2 == 0: draw_arc(wpos,wr,ai*TAU/48,(ai+1)*TAU/48,4,Color(1.0,0.86,0.40,0.45),2.0,true)
 		draw_card_art(kind,Rect2(L.cell_center(cell)-Vector2(45,40),Vector2(90,80)),0,Color(1,1,1,0.5))
 		Grid.draw_reach(self,kind,cell,me) # cells it will shoot at
+		Grid.draw_heal_building_reach(self,kind,cell)
 	if data.type == "unit" and Grid.footprint(kind) != Vector2i(1,1):
 		var fits: bool = model.can_play(me,selected,pos)
 		Grid.draw_cells(self,Grid.footprint_cells(kind,cell,me,model.active_lanes),Color(0.2,0.7,0.3,0.22) if fits else Color(0.8,0.1,0.1,0.22),Color(0.28,0.85,0.42,0.9) if fits else Color(0.92,0.22,0.18,0.9))
@@ -1897,7 +1947,8 @@ func draw_link(from: Vector2, to: Vector2, color: Color, progress: float) -> voi
 func draw_relations() -> void:
 	# Catapult aiming trajectory line
 	for cat: Dictionary in model.units:
-		if cat.hp <= 0 or cat.kind != "catapult" or cat.spawn_delay > 0: continue
+		var cd: Dictionary = B.CARDS.get(cat.kind,{})
+		if cat.hp <= 0 or not (cd.has("min_range") and cd.has("flight_time")) or cat.spawn_delay > 0: continue
 		var target: Dictionary = model.catapult_target(cat)
 		if not target.is_empty():
 			dashed(cat.pos,target.pos,Color(0.85,0.50,0.20,0.45))
@@ -1913,15 +1964,15 @@ func draw_relations() -> void:
 				if u.hp > 0 and u.team != b.team and is_same(model.taunting_scarecrow(u),b): dashed(b.pos,u.draw if u.has("draw") else u.pos,Color("b34a3a",0.5))
 
 # The reaper's vertical slash: a curved blade stroke over the three lanes it hits.
-func draw_slash(x: float, lane: int, progress: float, team: int) -> void:
-	var top: float = L.GRID_ORIGIN.y+maxi(0,lane-1)*L.CELL_SIZE.y+8
-	var bottom: float = L.GRID_ORIGIN.y+mini(5,lane+2)*L.CELL_SIZE.y-8
+func draw_slash(x: float, lane: int, progress: float, team: int, giant: bool = false) -> void:
+	var top: float = L.GRID_ORIGIN.y+(clampi(lane,0,L.GRID_ROWS-1) if giant else maxi(0,lane-1))*L.CELL_SIZE.y+8
+	var bottom: float = L.GRID_ORIGIN.y+mini(L.GRID_ROWS,lane+2)*L.CELL_SIZE.y-8
 	var points := PackedVector2Array()
 	for i: int in range(17):
 		var t := i/16.0
 		points.append(Vector2(x+sin(t*PI)*18.0*(1.0 if team == 0 else -1.0),lerpf(top,bottom,t)))
-	draw_polyline(points,Color(0.85,0.85,0.95,0.35*(1-progress)),10.0,true)
-	draw_polyline(points,Color(0.25,0.18,0.30,0.9*(1-progress)),3.0,true)
+	draw_polyline(points,Color(0.85,0.85,0.95,0.35*(1-progress)),14.0 if giant else 10.0,true)
+	draw_polyline(points,Color(0.25,0.18,0.30,0.9*(1-progress)),4.0 if giant else 3.0,true)
 
 func dashed(a: Vector2, b: Vector2, color: Color) -> void:
 	var length := a.distance_to(b)
@@ -2006,7 +2057,7 @@ func draw_effects() -> void:
 			"link":
 				if e.style == "lightning": FactionVisuals.lightning(self,e,progress)
 				else: draw_link(e.pos,e.to,LINK_COLORS.get(e.style,INK),progress)
-			"slash": draw_slash(e.pos.x,e.lane,progress,e.team)
+			"slash": draw_slash(e.pos.x,e.lane,progress,e.team,bool(e.get("giant",false)))
 			"ink": pass # drawn in draw_hud_effects() so coins fly cleanly into the HUD purse
 			"hit": FxPolish.hit_spark(self,e,progress)
 			"wall_chip": FxPolish.wall_chip(self,e,progress)
@@ -2102,7 +2153,7 @@ func skill_mark(team: int, at: Vector2) -> void:
 	var color: Color = RED if team == 0 else BLUE
 	match state:
 		"可發動":
-			var glow := 0.5+0.5*sin(Time.get_ticks_msec()/260.0)
+			var glow := 0.5+0.5*sin(clock*1000.0/260.0)
 			draw_circle(at,10+glow*2,Color(0.95,0.75,0.25,0.35))
 			draw_circle(at,7,color.lightened(0.25))
 			draw_arc(at,7,0,TAU,16,Color("e8c25a"),2,true)
@@ -2167,17 +2218,19 @@ func cursor_status_hint(mouse: Vector2) -> Dictionary:
 	if hover_slot >= 0 and card_at(mouse) == hover_slot:
 		var hkind: String = model.kind_at(me,hover_slot)
 		if B.CARDS.has(hkind):
-			var cd: float = model.slot_cd(me,hover_slot)
-			var hcost: float = float(B.CARDS[hkind].cost)
-			if cd > 0.00001:
-				return {"text": "冷卻中 %.1f秒" % cd, "color": Color("7d4f1c")}
-			elif model.ink[me] < hcost:
-				return {"text": "金幣不足（還差 %d）" % ceili(hcost - model.ink[me]), "color": RED}
+			if not model.is_conveyor(me):
+				var cd: float = model.slot_cd(me,hover_slot)
+				var hcost: float = float(B.CARDS[hkind].cost)
+				if cd > 0.00001:
+					return {"text": "冷卻中 %.1f秒" % cd, "color": Color("7d4f1c")}
+				elif model.ink[me] < hcost:
+					return {"text": "金幣不足（還差 %d）" % ceili(hcost - model.ink[me]), "color": RED}
 	if SKILL_RECT.has_point(mouse) and B.has_skill(model.lords[me].lord) and (model.lord_active[me] or model.lords[me].hp > 0): # no hint over an empty lord plate
 		if model.skill_cd[me] > 0.00001:
 			return {"text": "技能冷卻 %.1f秒" % model.skill_cd[me], "color": Color("7d4f1c")}
 		if not model.skill_charged(me):
-			return {"text": "充能 %d / %d（花費或溢出金幣時充能）" % [int(model.skill_charge[me]), roundi(model.skill_need(me))], "color": Color("7d4f1c")}
+			var charge_how := "打出傳送帶卡牌依原價充能" if model.is_conveyor(me) else "花費或溢出金幣時充能"
+			return {"text": "充能 %d / %d（%s）" % [int(model.skill_charge[me]), roundi(model.skill_need(me)), charge_how], "color": Color("7d4f1c")}
 	if cursor_hint_left > 0.0 and not cursor_hint_text.is_empty():
 		return {"text": cursor_hint_text, "color": cursor_hint_color, "timed": true}
 	return {}

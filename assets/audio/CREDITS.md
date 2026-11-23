@@ -14,3 +14,7 @@ Kenney, RPG Audio (2014), Creative Commons CC0 1.0.
 - handleCoins：豐收與治療提示。
 
 僅使用原始手工／物件擬音，未使用電子音。
+
+# 合成音效
+
+tools/make_music.py 以程式合成（CC0）：bell、ui_tick、ui_tock、heal_chime、musket（火繩槍射擊，2026-11-22）。

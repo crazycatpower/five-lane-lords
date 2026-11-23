@@ -1,6 +1,7 @@
 extends RefCounted
 const B = preload("res://balance.gd")
 const L = preload("res://layout.gd")
+const Giant = preload("res://giant_unit.gd")
 
 static func crystal_period(b: Dictionary) -> float:
 	var d: Dictionary = B.CARDS.crystal
@@ -99,7 +100,8 @@ static func update_traps(m) -> void:
 			for u: Dictionary in affected:
 				if u.get("phased",false): continue
 				var old: Vector2 = u.pos
-				u.pos = L.cell_center(Vector2i(0 if u.team == 0 else L.GRID_COLUMNS-1,u.lane))
+				var start_c := L.cell_center(Vector2i(0 if u.team == 0 else L.GRID_COLUMNS-1,u.lane))
+				u.pos = Vector2(start_c.x,Giant.center_y(u)) if Giant.is_giant(u) else start_c
 				u.work_id = -1
 				u.work_left = 0.0
 				u.stun_left = d.get("stun_duration",10.0)
@@ -162,7 +164,7 @@ static func shoot_piercing_arrow(m, u: Dictionary, target: Dictionary = {}) -> v
 	var d: Dictionary = B.CARDS[u.kind]
 	var direction := 1.0 if u.team == 0 else -1.0
 	if not target.is_empty() and not is_equal_approx(target.pos.x,u.pos.x): direction = signf(target.pos.x-u.pos.x)
-	var reach: float = B.actor_radius(u)+u.get("range",d.range)*d.pierce_range_multiplier
+	var reach: float = B.actor_radius(u)+u.get("range",d.range)*(1.0+float(u.get("range_pct",0.0)))*d.pierce_range_multiplier
 	m.projectiles.append({"source":u,"piercing":true,"hit_ids":[],"travelled":0.0,"primary_hit":false,"pos":u.pos+Vector2(0,-30),"start":u.pos+Vector2(0,-30),"origin":u.pos,"end":u.pos+Vector2(direction*reach,-30),"direction":direction,"range":reach,"lane":u.lane,"target":target,"remaining":B.ARROW_TIME,"amount":u.get("damage",d.damage),"team":u.team,"kind":u.kind})
 
 static func advance_piercing_arrow(m, a: Dictionary) -> void:
@@ -172,7 +174,7 @@ static func advance_piercing_arrow(m, a: Dictionary) -> void:
 	for target: Dictionary in m.units:
 		var r: float = B.actor_radius(target)
 		var distance: float = (target.pos.x-a.origin.x)*a.direction
-		if target.team != a.team and target.hp > 0 and target.lane == a.lane and distance+r >= previous and distance-r <= reached and not target.id in a.hit_ids:
+		if target.team != a.team and target.hp > 0 and Giant.occupies_lane(target,a.lane) and distance+r >= previous and distance-r <= reached and not target.id in a.hit_ids:
 			a.hit_ids.append(target.id)
 			m.damage(target,a.amount,a.team,a.kind,a.get("source",{}))
 			reveal(m, target)

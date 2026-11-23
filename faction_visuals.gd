@@ -30,12 +30,12 @@ static func event(g, e: Dictionary, progress: float) -> bool:
 	if e.kind == "support_pulse":
 		var style: String = e.get("style","")
 		var color: Color = {"heal":Color("5ce675"),"repair":Color("c4a75f"),"shield":Color("7ac7e0"),"armor":Color("aaa7a0"),"haste":Color("e2b23a"),"range":Color("a497df"),"cleanse":Color("dbd5ac")}.get(style,Color("b9a3d6"))
-		var radius: float = minf(e.get("radius",60.0),85.0)*(0.2+progress*0.8)
-		var points := PackedVector2Array()
-		for i: int in range(33):
-			var angle := i*TAU/32
-			points.append(e.pos+Vector2(cos(angle)*radius,sin(angle)*radius*0.38))
-		g.draw_polyline(points,Color(color,(1.0-progress)*0.65),2,true)
+		var max_r: float = float(e.get("radius",60.0))+float(e.get("source_radius",0.0))
+		var wave_r: float = max_r*(0.25+progress*0.75)
+		var alpha := 1.0-progress
+		g.draw_circle(e.pos,max_r,Color(color,alpha*0.07))
+		g.draw_arc(e.pos,max_r,0.0,TAU,48,Color(color,alpha*0.50),1.8,true)
+		g.draw_arc(e.pos,wave_r,0.0,TAU,48,Color(color,alpha*0.85),2.6,true)
 		var top: Vector2 = e.pos+Vector2(0,-30-progress*16)
 		if style in ["armor","shield"]:
 			g.draw_polyline(PackedVector2Array([top+Vector2(-6,-5),top+Vector2(6,-5),top+Vector2(5,3),top+Vector2(0,8),top+Vector2(-5,3),top+Vector2(-6,-5)]),Color(color,1-progress),2,true)

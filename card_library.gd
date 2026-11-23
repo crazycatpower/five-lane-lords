@@ -5,6 +5,7 @@ const Keywords = preload("res://card_keywords.gd")
 const CardSort = preload("res://card_sort.gd")
 const Style = preload("res://command_style.gd")
 const Ornament = preload("res://interface_ornament.gd")
+const Conveyor = preload("res://conveyor.gd")
 const INFO_RECT := Rect2(692,24,56,56) # wax seal left of the dial (battle_hud.gd)
 var shown_selected := "" # the entry whose art last popped in
 var selected_at := -10.0
@@ -239,6 +240,8 @@ func draw_catalog() -> void:
 			var meta_c := "%s · %s" % [grp_name, String(cdata.get("role",""))]
 			if cdata.get("summon_only", false):
 				meta_c += "（召喚限定）"
+			elif cdata.get("boss_only", false):
+				meta_c += "（季節 BOSS 專屬）"
 			game.label_at(Vector2(sum_rect.position.x+78, sum_rect.position.y+26), meta_c, 15, game.INK)
 			var cost_txt := "消耗全部金幣" if cdata.get("pay_all", false) else "金幣 %d" % int(cdata.cost)
 			var right_c := "%s · 冷卻 %s 秒" % [cost_txt, B.number(cdata.cooldown)]
@@ -260,11 +263,11 @@ func show_battle_info(entering: bool = true) -> void:
 	game.title_button(Rect2(90,804,220,48),"返回對戰",close_battle_info)
 	game.title_button(Rect2(1270,804,230,48),"完整圖鑑",func(): open("","battle_info"))
 	for team: int in range(2):
-		var kinds: Array = [game.model.home_cards[team]]+game.model.decks[team].duplicate()
+		var kinds: Array = battle_info_kinds(team)
 		for i: int in range(kinds.size()):
 			var kind: String = kinds[i]
 			if kind.is_empty(): continue
-			var hit = game.button(deck_rect(team,i),"",func(): open(kind,"battle_info"))
+			var hit = game.button(deck_rect(team,i,kinds.size()),"",func(): open(kind,"battle_info"))
 			hit.modulate.a = 0.01
 			hit.tooltip_text = game.card_description(kind)+"\n\n（點擊開啟完整圖鑑）"
 		var raw_lord: String = game.model.lords[team].lord
@@ -281,11 +284,23 @@ func close_battle_info() -> void:
 	game.model.paused = was_paused
 	game.queue_redraw()
 
-static func deck_rect(team: int, index: int) -> Rect2:
-	return Rect2(248+index*139,215+team*285,122,174)
+func battle_info_kinds(team: int) -> Array:
+	if game.model.is_conveyor(team): return Conveyor.unique_pool(game.model.conveyor)
+	return [game.model.home_cards[team]]+game.model.decks[team].duplicate()
+
+static func deck_rect(team: int, index: int, total: int = 9) -> Rect2:
+	if total <= 9: return Rect2(248+index*139,215+team*285,122,174)
+	var card_w := minf(114.0, floorf(1240.0 / float(total)))
+	var card_h := card_w * (174.0 / 122.0)
+	var step := floorf((1268.0 - card_w) / maxf(1.0, float(total - 1)))
+	return Rect2(248.0 + index * step, 215.0 + team * 285.0, card_w, card_h)
 
 func composition(team: int) -> String:
 	var counts := {"unit":0,"building":0,"spell":0}
+	if game.model.is_conveyor(team):
+		var pool := Conveyor.unique_pool(game.model.conveyor)
+		for kind: String in pool: counts[B.CARDS[kind].type] += 1
+		return "傳送帶補給池（共 %d 種）：部隊 %d · 建築 %d · 法術 %d" % [pool.size(),counts.unit,counts.building,counts.spell]
 	for kind: String in game.model.decks[team]: counts[B.CARDS[kind].type] += 1
 	return "八張輪轉牌：部隊 %d · 建築 %d · 法術 %d" % [counts.unit,counts.building,counts.spell]
 
@@ -294,7 +309,7 @@ func draw_battle_info() -> void:
 	game.label_at(Vector2(90,111),"戰局資料",38)
 	var mode_line: String = "難度："+["簡單","普通","困難"][game.model.difficulty]
 	if game.rogue.in_battle and not game.rogue.run.is_empty():
-		mode_line = "肉鴿 第 %d / %d 場 · AI %s" % [game.rogue.battle_floor_number(),game.rogue.Catalog.FLOORS,["簡單","普通","困難"][game.model.difficulty]]
+		mode_line = "肉鴿 %s · AI %s" % [game.rogue.season_label().get_slice(" · ",0),["簡單","普通","困難"][game.model.difficulty]]
 	elif game.adventure.index >= 0:
 		var st: Dictionary = game.adventure.STAGES[game.adventure.index]
 		mode_line = "遠征 %s · %s（%s）" % [st.get("code",""), st.name, ["簡單","普通","困難"][game.model.difficulty]]
@@ -320,8 +335,12 @@ func draw_battle_info() -> void:
 			var adv_note: String = ("守將特性："+B.minion_text(lord)) if B.is_minion(lord) else ("守將技能："+B.skill_text(lord))
 			game.label_at(Vector2(248,y+28),adv_note,16,Color("5a4632"))
 		game.draw_fitted(game.Ceremony.side_portrait(game,team),Rect2(95,y+40,132,170))
-		var kinds: Array = [game.model.home_cards[team]]+game.model.decks[team].duplicate()
+		var kinds: Array = battle_info_kinds(team)
 		for i: int in range(kinds.size()):
-			if not kinds[i].is_empty(): game.draw_card(kinds[i],deck_rect(team,i)) # a lord without farms has no home card
-		game.label_at(Vector2(275,y+241),"常駐牌",16)
-	game.label_at(Vector2(95,750),"牌組構成依本局實際配置顯示；輪轉順序會隨出牌改變。",19)
+			if not kinds[i].is_empty(): game.draw_card(kinds[i],deck_rect(team,i,kinds.size())) # a lord without farms has no home card
+		if game.model.is_conveyor(team):
+			game.label_at(Vector2(248,y+241),"補給池內卡牌免費由傳送帶隨機送出（同時最多存 8 張）",16)
+		elif not game.model.home_cards[team].is_empty():
+			game.label_at(Vector2(275,y+241),"常駐牌",16)
+	var info_footer := "傳送帶關卡不花金幣，由補給匣免費送出補給池內卡牌。" if game.model.is_conveyor(0) else "牌組構成依本局實際配置顯示；輪轉順序會隨出牌改變。"
+	game.label_at(Vector2(95,750),info_footer,19)

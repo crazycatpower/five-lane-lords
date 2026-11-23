@@ -5,6 +5,7 @@ extends RefCounted
 # lifesteal, last_stand, spell_resist, ally_death_spawn, root / temporary summons from spells.
 const B = preload("res://balance.gd")
 const L = preload("res://layout.gd")
+const Giant = preload("res://giant_unit.gd")
 
 const SPELLS := ["borrowed_bones","grave_exchange","mourning_shroud","sealed_coffin"]
 
@@ -242,6 +243,7 @@ static func on_death(m, dead: Dictionary) -> void:
 		u.hp = minf(u.max_hp,u.hp+sd.scavenger_heal)
 		var ti: int = B.TIERS.damage.find(u.get("damage",sd.damage))
 		if ti > 0: u.damage = B.TIERS.damage[maxi(B.tier_index("A"),ti-1)]
+		elif ti < 0: u.damage = minf(roundf(B.tier_value("damage","A")*float(u.get("damage_mult",1.0))),roundf(float(u.get("damage",sd.damage))*1.35))
 		m.link(dead.pos,u.pos,u.team,"devour")
 
 # Per tick: advance hex DoT ticks, then remove expired borrowed bones (no death effects).
@@ -321,7 +323,7 @@ static func support(m, actor: Dictionary, d: Dictionary) -> bool:
 					if foe.hp > 0 and foe.team != actor.team and B.edge_distance(actor,foe) <= d.radius:
 						foe.slow_left = maxf(foe.get("slow_left",0.0),1.5)
 			if pulsed and m.record_events:
-				m.event("support_pulse",actor.pos,actor.team,{"style":"cleanse","radius":d.radius})
+				m.event("support_pulse",actor.pos,actor.team,{"style":"cleanse","radius":d.radius,"source_radius":B.actor_radius(actor)})
 			return true
 	return false
 
@@ -367,6 +369,7 @@ static func cast(m, s: Dictionary) -> bool:
 	return true
 
 static func shift_unit_lane(m, u: Dictionary, to_lane: int, team: int) -> void:
+	if Giant.is_giant(u): return
 	var clamped: int = clampi(to_lane,0,L.GRID_ROWS-1)
 	if clamped == u.lane: return
 	var old_pos: Vector2 = u.pos
@@ -389,6 +392,11 @@ static func cast_effects(m, s: Dictionary, d: Dictionary, lane: int, rect: Rect2
 				best = u
 		if not best.is_empty():
 			var clone: Dictionary = m.spawn_unit(s.team,best.lane,best.kind,best.pos+Vector2(-12*dir,10))
+			if Giant.is_giant(best):
+				clone.lanes = Giant.lanes(best).duplicate()
+				clone.lane = int(clone.lanes[0])
+				clone.pos = Vector2(best.pos.x-12.0*dir,Giant.center_y(clone))
+				clone.dy = 0.0
 			clone.hp = best.hp
 			clone.max_hp = best.max_hp
 			clone.borrowed_until = m.elapsed+d.duration
@@ -418,6 +426,7 @@ static func cast_effects(m, s: Dictionary, d: Dictionary, lane: int, rect: Rect2
 				u.hp = maxf(1.0,u.hp*(1.0-d.hp_cost_share))
 				var di: int = B.TIERS.damage.find(u.get("damage",B.CARDS[u.kind].damage))
 				if di > 0: u.damage = B.TIERS.damage[maxi(B.tier_index("S"),di-1)]
+				elif di < 0: u.damage = minf(roundf(B.tier_value("damage","S")*float(u.get("damage_mult",1.0))),roundf(float(u.get("damage",B.CARDS[u.kind].damage))*1.35))
 				u.expansion_haste_until = maxf(u.get("expansion_haste_until",0.0),m.elapsed+6.0)
 				u.berserk_lifesteal_until = maxf(u.get("berserk_lifesteal_until",0.0),m.elapsed+6.0)
 			if d.has("rally_haste_sec"):
@@ -437,10 +446,19 @@ static func cast_effects(m, s: Dictionary, d: Dictionary, lane: int, rect: Rect2
 					var nhp: float = B.TIERS.hp[maxi(B.tier_index("SS"),hi-1)]
 					u.hp += nhp-u.max_hp
 					u.max_hp = nhp
+				elif hi < 0:
+					var cap_hp: float = roundf(B.tier_value("hp","SS")*(1.0+float(u.get("hp_pct",0.0))))
+					var nhp2: float = minf(cap_hp,roundf(u.max_hp*1.35))
+					if nhp2 > u.max_hp:
+						u.hp += nhp2-u.max_hp
+						u.max_hp = nhp2
+					else:
+						u.hp = minf(u.max_hp,u.hp+350.0)
 				else:
 					u.hp = minf(u.max_hp,u.hp+350.0)
 				var udi: int = B.TIERS.damage.find(u.get("damage",B.CARDS[u.kind].damage))
 				if udi > 0: u.damage = B.TIERS.damage[maxi(B.tier_index("S"),udi-1)]
+				elif udi < 0: u.damage = minf(roundf(B.tier_value("damage","S")*float(u.get("damage_mult",1.0))),roundf(float(u.get("damage",B.CARDS[u.kind].damage))*1.35))
 		else:
 			if d.get("lane_split_gather",false) and u.lane == lane:
 				var to_lane: int = lane+1 if lane == 0 else (lane-1 if lane == L.GRID_ROWS-1 else (lane-1 if u.pos.y < s.pos.y-1.0 else (lane+1 if u.pos.y > s.pos.y+1.0 else -1)))
@@ -604,7 +622,7 @@ static func tick_buildings_and_zones(m, dt: float) -> void:
 				var pstun: float = float(d.get("pulse_stun",0.0))
 				var targets: Array = []
 				for u: Dictionary in m.units:
-					if u.hp > 0 and u.team != b.team and u.get("spawn_delay",0.0) <= 0 and u.lane == b.cell.y:
+					if u.hp > 0 and u.team != b.team and u.get("spawn_delay",0.0) <= 0 and Giant.occupies_lane(u,b.cell.y):
 						var dist: float = maxf(0.0,absf(u.pos.x-b.pos.x)-B.actor_radius(b)-B.actor_radius(u))
 						if dist <= d.range: targets.append(u)
 				if not targets.is_empty():
@@ -620,11 +638,16 @@ static func tick_buildings_and_zones(m, dt: float) -> void:
 			b.cauldron_clock = b.get("cauldron_clock",0.0)+b_dt
 			if b.cauldron_clock >= d.period:
 				b.cauldron_clock -= d.period
+				var pulsed := false
 				for u: Dictionary in m.units:
 					if u.hp > 0 and u.team == b.team and B.edge_distance(b,u) <= d.radius:
+						pulsed = true
+						var prev_hp: float = u.hp
 						u.hp = minf(u.max_hp,u.hp+float(d.get("support_amount",36.0)))
 						u.crit_mult = d.crit_mult
+						if prev_hp < u.max_hp and m.record_events: m.event("heal",u.pos,b.team)
 						m.link(b.pos,u.pos,b.team,"devour")
+				if pulsed and m.record_events: m.event("support_pulse",b.pos,b.team,{"style":"heal","radius":float(d.radius),"source_radius":B.actor_radius(b)})
 		elif d.get("support","") == "tithe":
 			var drain: float = float(d.tithe_dps)*b_dt
 			var drained := 0.0
@@ -660,13 +683,16 @@ static func tick_buildings_and_zones(m, dt: float) -> void:
 				b.tithe_blood = maxf(0.0,blood)
 		elif d.get("well_heal_full",false):
 			var served: Dictionary = b.get("well_served",{})
+			var pulsed := false
 			for u: Dictionary in m.units:
 				if u.hp > 0 and u.team == b.team and u.get("spawn_delay",0.0) <= 0 and not served.has(u.id) and B.edge_distance(b,u) <= d.radius:
 					served[u.id] = true
+					pulsed = true
 					u.hp = u.max_hp
 					u.expansion_haste_until = maxf(u.get("expansion_haste_until",0.0),m.elapsed+d.duration)
 					m.event("heal",u.pos,u.team)
 					m.link(b.pos,u.pos,b.team,"heal")
+			if pulsed and m.record_events: m.event("support_pulse",b.pos,b.team,{"style":"heal","radius":float(d.radius),"source_radius":B.actor_radius(b)})
 			b.well_served = served
 		elif d.has("damage") and d.has("range") and d.has("interval"):
 			b.cd = b.get("cd",0.0)-b_dt
@@ -842,7 +868,7 @@ static func placement_score(c: Dictionary, s: Dictionary, pr: Dictionary, covere
 	var is_supp_u: bool = d.type == "unit" and (d.has("support") or d.has("reveal_radius") or d.has("dot_damage"))
 	if not is_cond_b and not is_supp_u and c.kind != "orrery_walker": return -INF
 	var forward := 1.0 if s.team == 0 else -1.0
-	var radius: float = d.get("radius",d.get("reveal_radius",150.0))
+	var radius: float = float(d.get("range",150.0)) if (d.get("support","") == "heal" and d.get("type","") == "unit") else float(d.get("radius",d.get("reveal_radius",150.0)))
 	var allies := 0.0
 	var foes := 0.0
 	var danger := 0.0

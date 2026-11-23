@@ -3,6 +3,7 @@ extends RefCounted
 ## Never modifies battle rules, actor HP/positions, or simulation RNG.
 const B = preload("res://balance.gd")
 const L = preload("res://layout.gd")
+const Conveyor = preload("res://conveyor.gd")
 
 const VEIL_SCREEN_TIME := 0.32
 const VEIL_SUB_TIME := 0.18
@@ -241,13 +242,14 @@ func observe_battle(g, real_dt: float, sim_dt: float) -> void:
 		if hover_strip_alpha <= 0.001:
 			hover_strip_kind = ""
 
-	var hand_slots := [0, 1, 2, 3, g.Battle.FARM_SLOT]
+	var conv: bool = m.is_conveyor(g.me)
+	var hand_slots: Array = range(Conveyor.count(m)) if conv else [0, 1, 2, 3, g.Battle.FARM_SLOT]
 	for slot: int in hand_slots:
 		var target_lift := -16.0 if g.selected == slot else (-8.0 if g.hover_slot == slot else 0.0)
 		var cur_lift := float(slot_lift.get(slot, 0.0))
 		slot_lift[slot] = lerpf(cur_lift, target_lift, 1.0 - exp(-real_dt * 18.0))
 		var kind: String = m.kind_at(g.me, slot)
-		if slot != g.Battle.FARM_SLOT:
+		if not conv and slot != g.Battle.FARM_SLOT:
 			if slot_last_kind.has(slot) and slot_last_kind[slot] != kind and not m.paused:
 				slot_entry[slot] = 0.26
 				slot_was_blocked.erase(slot)
@@ -257,7 +259,7 @@ func observe_battle(g, real_dt: float, sim_dt: float) -> void:
 
 		if not g.spectating and not m.paused and not m.ended and g.intro_left <= 0.0 and B.CARDS.has(kind):
 			var cost_val := float(B.CARDS[kind].cost)
-			var blocked: bool = m.ink[g.me] < cost_val or m.slot_cd(g.me, slot) > 0.0
+			var blocked: bool = false if conv else (m.ink[g.me] < cost_val or m.slot_cd(g.me, slot) > 0.0)
 			if slot_was_blocked.has(slot):
 				if bool(slot_was_blocked[slot]) and not blocked:
 					slot_ready_flash[slot] = 0.45

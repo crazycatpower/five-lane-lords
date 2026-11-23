@@ -60,7 +60,7 @@ func load_progress() -> void:
 		if not (saved_best is int or saved_best is float): continue
 		var r = parsed.get("run",{})
 		if not r is Dictionary or (not r.is_empty() and not valid_run(r)): continue
-		best = clampi(int(saved_best),0,Catalog.FLOORS)
+		best = maxi(0,int(saved_best))
 		clears = maxi(0,int(parsed.get("clears",0)))
 		max_contract = clampi(int(parsed.get("max_contract",0)),0,Catalog.CONTRACTS.size()-1)
 		if parsed.get("cleared_lords") is Array:
@@ -81,6 +81,11 @@ func load_progress() -> void:
 			run.board_notice = str(run.get("board_notice",""))
 			run.last_relic = str(run.get("last_relic",""))
 			run.from_event = bool(run.get("from_event",false))
+			run.season = int(run.season)
+			run.season_wins = int(run.get("season_wins",0))
+			run.wins = int(run.get("wins",0))
+			run.cards_cleared = maxi(0,int(run.get("cards_cleared",0)))
+			run.boss_out = bool(run.get("boss_out",false))
 			if not run.get("gates") is Array or run.gates.size() != 5: run.gates = [B.GATE_HP,B.GATE_HP,B.GATE_HP,B.GATE_HP,B.GATE_HP]
 			run.gates = run.gates.map(func(hp) -> float: return clampf(float(hp),0.0,B.GATE_HP))
 			run.lord_hp = clampf(float(run.get("lord_hp",lord_max_hp())),1.0,lord_max_hp())
@@ -113,19 +118,15 @@ func valid_run(r: Dictionary) -> bool:
 		if not (value is int or value is float): return false
 		if not is_finite(float(value)) or float(value) != floor(float(value)): return false
 	if r.floor < 0 or r.floor >= Catalog.FLOORS or r.seed < 0: return false
-	if not r.get("foes") is Array or r.foes.size() != Catalog.FLOORS: return false
-	for i: int in range(Catalog.FLOORS):
-		var enemy = r.foes[i]
-		if not enemy is String: return false
-		if i == Catalog.FLOORS-1:
-			if not Catalog.BOSSES.has(enemy): return false
-		elif not Catalog.MINIONS.has(enemy) or Catalog.MINIONS[enemy].tier != Catalog.FLOOR_TIER[i] or r.foes.count(enemy) > 1: return false
+	if not r.get("foes") is Array or r.foes.size() != Catalog.FLOORS or not Catalog.BOSSES.has(str(r.foes[Catalog.FLOORS-1])): return false
+	# 四季版（2026-11-23）：舊的八層進度不能延續
+	var season = r.get("season")
+	if not (season is int or season is float) or int(season) < 0 or int(season) > Catalog.SEASONS.size(): return false
+	if (int(season) == Catalog.SEASONS.size()) != (int(r.floor) == Catalog.FLOORS-1): return false
+	if not r.get("pile") is Array or r.pile.any(func(k) -> bool: return not (k is String and (Catalog.SEASON_PILE.has(k) or k == "sboss"))): return false
+	if not r.get("sbosses") is Array or r.sbosses.size() != Catalog.SEASONS.size() or r.sbosses.any(func(k) -> bool: return not Catalog.SEASON_BOSSES.has(str(k))): return false
+	if not r.get("fought",[]) is Array: return false
 	if not r.get("phase","") in ["map","event","camp","shrine","reward","replace","shop","won","lost"]: return false
-	if r.has("elites"):
-		if not r.elites is Array or r.elites.size() != Catalog.FLOOR_TIER.size(): return false
-		for i: int in range(r.elites.size()):
-			var e = r.elites[i]
-			if not e is String or not Catalog.MINIONS.has(e) or Catalog.MINIONS[e].tier != Catalog.elite_tier(i) or r.elites.count(e) > 1: return false
 	if r.get("elite",false) and int(r.get("floor",0)) >= Catalog.FLOORS-1: return false
 	var gold = r.get("gold",0)
 	if not (gold is int or gold is float) or gold < 0: return false
@@ -137,7 +138,7 @@ func valid_run(r: Dictionary) -> bool:
 		if not B.CARDS.has(k) or not ups[k] is Dictionary or Upgrades.level(ups[k]) > Upgrades.MAX_LEVEL: return false
 	if r.phase == "won" and int(r.floor) != Catalog.FLOORS-1: return false
 	if r.phase in ["reward","replace"]:
-		if (r.floor < 1 and not r.get("from_event",false)) or not r.get("offer") is Array or r.offer.size() != Catalog.OFFER_SIZE: return false
+		if (int(r.get("wins",0)) < 1 and not r.get("from_event",false)) or not r.get("offer") is Array or r.offer.size() != Catalog.OFFER_SIZE: return false
 		var pool: Array = Catalog.card_pool(r.lord)
 		for k in r.offer:
 			if not k is String or not k in pool or r.offer.count(k) != 1: return false
@@ -182,14 +183,46 @@ func begin(lord: String, seed_value: int = -1, contract_level: int = -1) -> void
 		"offer":[],"offer_ups":{},"offer_rerolls":0,"pick":"","gold":0,"upgrades":{},"relics":[],"shop":[],
 		"elite":false,"last_elite":false,"rerolls":0,"contract":c_lv,"draws":0,"march_steps":2,
 		"selected_node":0,"board_notice":"命運四選牌陣：點選任一遭遇推進，觸發後僅該格替補新牌（久置或特殊事件將引發牌陣變異）。",
-		"last_relic":"","from_event":false,
+		"last_relic":"","from_event":false,"cards_cleared":0,
 		"gates":[B.GATE_HP,B.GATE_HP,B.GATE_HP,B.GATE_HP,B.GATE_HP],
 		"lord_hp":float(B.lord_data(lord).hp)
 	}
 	run.elites = Catalog.elite_schedule(seed_value,run.foes)
-	run.board = Catalog.initial_board(run)
-	sync_selected_combat()
+	start_season(0)
 	save_progress()
+
+# 四季：一季一疊 10 張牌庫（戰鬥 4、精英 2、隨機支援 3、季節 BOSS 1），牌陣從牌庫補旗。
+func start_season(season: int) -> void:
+	run.season = season
+	run.season_wins = 0
+	run.boss_out = false
+	if not run.has("sbosses"): run.sbosses = Catalog.season_boss_schedule(int(run.seed))
+	if not run.has("fought"): run.fought = []
+	if not run.has("wins"): run.wins = 0
+	if not run.has("cards_cleared"): run.cards_cleared = 0
+	if season >= Catalog.SEASONS.size():
+		run.floor = Catalog.FLOORS-1
+		run.pile = []
+		run.board = Catalog.boss_board(run)
+		run.selected_node = 0
+		run.board_notice = "四季已盡，魔王現身！牌陣已轉換為【魔王決戰】與三項終戰補給。"
+	else:
+		run.floor = Catalog.season_floor(season,0)
+		run.pile = Catalog.season_pile(int(run.seed),season)
+		run.board = Catalog.initial_board(run)
+		run.selected_node = 0
+		run.board_notice = "%s季開始：牌庫 %d 張（戰鬥 %d、精英 %d、隨機支援 %d、BOSS 1）。BOSS 壓在牌庫最後，翻出時其餘旗幟一起變成 BOSS。" % [Catalog.SEASON_NAMES[season],Catalog.SEASON_SIZE,int(Catalog.SEASON_FIXED.battle),int(Catalog.SEASON_FIXED.elite),Catalog.SEASON_RANDOM_COUNT]
+		Catalog.boss_takes_board(run)
+	sync_selected_combat()
+
+func is_season_boss() -> bool:
+	return not run.is_empty() and active_slot().get("kind","") == "sboss"
+
+func season_label() -> String:
+	if run.is_empty(): return ""
+	var s := int(run.get("season",0))
+	if s >= Catalog.SEASONS.size(): return "魔王決戰"
+	return "%s季 · 第 %d 戰 · 牌庫剩 %d" % [Catalog.SEASON_NAMES[s],int(run.get("season_wins",0))+1,run.get("pile",[]).size()]
 
 # ---- 4-slot encounter board management ----------------------------------------------------------
 
@@ -201,7 +234,7 @@ func active_slot() -> Dictionary:
 func sync_selected_combat() -> void:
 	if run.is_empty() or not run.get("board") is Array or run.board.size() != 4: return
 	var slot := active_slot()
-	if is_boss():
+	if is_boss() or slot.get("kind","") == "sboss":
 		run.elite = false
 	elif slot.get("kind","") == "elite":
 		run.elite = true
@@ -218,6 +251,7 @@ func foe() -> String:
 	if run.is_empty(): return "lion"
 	if is_boss(): return run.foes[Catalog.FLOORS-1]
 	var slot := active_slot()
+	if slot.get("kind","") == "sboss": return str(slot.foe)
 	if slot.get("kind","") in ["battle","elite"] and not slot.get("foe","").is_empty():
 		if (slot.kind == "elite") == bool(run.get("elite",false)):
 			return slot.foe
@@ -245,8 +279,13 @@ func set_elite(on: bool) -> void:
 	save_progress()
 
 # Replaces ONLY the triggered slot `idx`, while aging/mutating the other 3 slots on the board.
+func enemy_lord_card_bonus() -> float:
+	if run.is_empty(): return 0.0
+	return float(int(run.get("cards_cleared",0)))*Catalog.ENEMY_LORD_STEP_PCT
+
 func consume_board_slot(after_battle: bool, mutation: String = "") -> void:
 	if run.is_empty() or not run.get("board") is Array or run.board.size() != 4: return
+	run.cards_cleared = int(run.get("cards_cleared",0))+1
 	var idx := clampi(int(run.get("selected_node",0)),0,3)
 	if is_boss() and after_battle:
 		run.board = Catalog.boss_board(run)
@@ -259,38 +298,38 @@ func consume_board_slot(after_battle: bool, mutation: String = "") -> void:
 		for i: int in range(4):
 			if run.board[i].get("kind","") == "battle" and not is_boss():
 				run.board[i] = Catalog.make_slot("elite",run,i+10)
-				run.board[i].bounty = int(run.board[i].get("bounty",0))+50
+				run.board[i].bounty = int(run.board[i].get("bounty",0))+100
 			elif run.board[i].get("kind","") == "elite":
-				run.board[i].bounty = int(run.board[i].get("bounty",0))+50
-		run.board_notice = "烽火強襲！場上所有一般戰鬥已升階為【精英討伐】並附帶 +50 懸賞金。"
+				run.board[i].bounty = int(run.board[i].get("bounty",0))+100
+		run.board_notice = "烽火強襲！場上所有一般戰鬥已升階為【精英討伐】並附帶 +100 懸賞金。"
 	elif mutation == "reroll_plus":
 		for i: int in range(4):
 			run.board[i] = Catalog.draw_replacement_slot(run,i)
-			if run.board[i].get("kind","") in ["battle","elite","boss"]:
-				run.board[i].bounty = int(run.board[i].get("bounty",0))+45
-		run.board_notice = "斥候改道！四格遭遇已全部重洗，所有戰鬥選項附帶 +45 懸賞金。"
+			if run.board[i].get("kind","") in ["battle","elite","boss","sboss"]:
+				run.board[i].bounty = int(run.board[i].get("bounty",0))+90
+		run.board_notice = "斥候改道！四格遭遇已全部重洗，所有戰鬥選項附帶 +90 懸賞金。"
 	elif mutation == "board_bounty":
 		run.board[idx] = Catalog.draw_replacement_slot(run,idx)
 		for i: int in range(4):
-			if i != idx and run.board[i].get("kind","") in ["battle","elite","boss"]:
-				run.board[i].bounty = int(run.board[i].get("bounty",0))+60
-		run.board_notice = "懸賞令張貼完畢！第 %d 格已替補新選項，其餘戰鬥全數附加 +60 懸賞金。" % (idx+1)
+			if i != idx and run.board[i].get("kind","") in ["battle","elite","boss","sboss"]:
+				run.board[i].bounty = int(run.board[i].get("bounty",0))+120
+		run.board_notice = "懸賞令張貼完畢！第 %d 格已替補新選項，其餘戰鬥全數附加 +120 懸賞金。" % (idx+1)
 	elif mutation == "board_blessing":
 		run.board[idx] = Catalog.make_slot("camp",run,idx)
 		for i: int in range(4):
 			if i != idx:
 				if run.board[i].get("kind","") == "event":
 					run.board[i] = Catalog.make_slot("shrine",run,i)
-				elif run.board[i].get("kind","") in ["battle","elite","boss"]:
-					run.board[i].bounty = int(run.board[i].get("bounty",0))+40
-		run.board_notice = "泥金禁書改寫命途！場上已湧現營火與秘寶古祠，戰鬥懸賞 +40 金。"
+				elif run.board[i].get("kind","") in ["battle","elite","boss","sboss"]:
+					run.board[i].bounty = int(run.board[i].get("bounty",0))+80
+		run.board_notice = "泥金禁書改寫命途！場上已湧現營火與秘寶古祠，戰鬥懸賞 +80 金。"
 	elif mutation == "transmute_bounty":
 		run.board[idx] = Catalog.draw_replacement_slot(run,idx)
 		for i: int in range(4):
-			if i != idx and not run.board[i].get("kind","") in ["battle","elite","boss"]:
+			if i != idx and not run.board[i].get("kind","") in ["battle","elite","boss","sboss"]:
 				run.board[i] = Catalog.make_slot("battle",run,i+60)
-				run.board[i].bounty = 75
-		run.board_notice = "點石成金！其餘非戰鬥格已全部化為附帶 +75 懸賞金的遭遇戰。"
+				run.board[i].bounty = 150
+		run.board_notice = "點石成金！其餘非戰鬥格已全部化為附帶 +150 懸賞金的遭遇戰。"
 	elif mutation == "sanctuary_board":
 		for i: int in range(4):
 			run.board[i] = Catalog.draw_replacement_slot(run,i)
@@ -300,9 +339,9 @@ func consume_board_slot(after_battle: bool, mutation: String = "") -> void:
 	elif mutation == "double_bounty":
 		run.board[idx] = Catalog.draw_replacement_slot(run,idx)
 		for i: int in range(4):
-			if run.board[i].get("kind","") in ["battle","elite","boss"]:
-				run.board[i].bounty = maxi(60,int(run.board[i].get("bounty",0))*2)
-		run.board_notice = "軍令狀生效！場上所有戰鬥遭遇的懸賞金已翻倍（最低 +60 金）。"
+			if run.board[i].get("kind","") in ["battle","elite","boss","sboss"]:
+				run.board[i].bounty = maxi(120,int(run.board[i].get("bounty",0))*2)
+		run.board_notice = "軍令狀生效！場上所有戰鬥遭遇的懸賞金已翻倍（最低 +120 金）。"
 	else:
 		var notes: Array[String] = ["第 %d 格已替補新遭遇" % (idx+1)]
 		var escalated := 0
@@ -311,8 +350,8 @@ func consume_board_slot(after_battle: bool, mutation: String = "") -> void:
 			if i == idx: continue
 			var s: Dictionary = run.board[i]
 			s.age = int(s.get("age",0))+1
-			if s.get("kind","") in ["battle","elite","boss"]:
-				s.bounty = int(s.get("bounty",0))+(35 if after_battle else 20)
+			if s.get("kind","") in ["battle","elite","boss","sboss"]:
+				s.bounty = int(s.get("bounty",0))+(70 if after_battle else 40)
 				if after_battle and not is_boss():
 					if s.kind == "battle" and s.age >= 2:
 						var old_bounty: int = s.bounty
@@ -326,25 +365,28 @@ func consume_board_slot(after_battle: bool, mutation: String = "") -> void:
 						run.board[i] = Catalog.make_slot("battle",run,i+30)
 						run.board[i].bounty = keep_bounty
 						run.board[i].age = keep_age
+					elif s.kind == "elite" and Catalog.MINIONS.get(s.get("foe",""),{}).get("tier",1) < Catalog.elite_tier(run.floor):
+						var keep_bounty: int = s.bounty
+						var keep_age: int = s.age
+						run.board[i] = Catalog.make_slot("elite",run,i+35)
+						run.board[i].bounty = keep_bounty
+						run.board[i].age = keep_age
 			elif not after_battle and int(run.get("march_steps",2)) <= 0:
 				var target_k := "boss" if is_boss() else "battle"
 				run.board[i] = Catalog.make_slot(target_k,run,i+40)
-				run.board[i].bounty = 40
+				run.board[i].bounty = 80
 				forced_combat += 1
 		run.board[idx] = Catalog.draw_replacement_slot(run,idx)
-		if after_battle and not is_boss():
-			# Ensure the scheduled floor foe and elite are represented on the board for deterministic access
-			var has_normal: bool = run.board.any(func(d: Dictionary) -> bool: return d.get("kind","") == "battle")
-			if not has_normal:
-				run.board[idx] = Catalog.make_slot("battle",run,idx)
 		if escalated > 0: notes.append("%d 處久置敵軍升階為精英" % escalated)
 		if forced_combat > 0: notes.append("前鋒逼近，%d 處支援格轉為懸賞戰" % forced_combat)
 		else: notes.append("其餘三格保留（戰鬥懸賞增加）")
 		run.board_notice = " · ".join(notes)+"。"
+	if Catalog.boss_takes_board(run):
+		run.board_notice = "季節 BOSS【%s】現身！牌陣上的旗幟全部化為 BOSS。" % Catalog.SEASON_BOSSES[run.sbosses[int(run.season)]].name
 	# Select a combat slot by default if available
-	if not run.board[idx].get("kind","") in ["battle","elite","boss"]:
+	if not run.board[idx].get("kind","") in ["battle","elite","boss","sboss"]:
 		for i: int in range(4):
-			if run.board[i].get("kind","") in ["battle","elite","boss"]:
+			if run.board[i].get("kind","") in ["battle","elite","boss","sboss"]:
 				run.selected_node = i
 				break
 	sync_selected_combat()
@@ -357,11 +399,15 @@ func board_reroll_error() -> String:
 func reroll_board() -> void:
 	if not board_reroll_error().is_empty(): return
 	run.gold -= Catalog.BOARD_REROLL_PRICE
+	if not is_boss() and not bool(run.get("boss_out",false)): # the old flags go back under the season's pile
+		for old: Dictionary in run.board:
+			if Catalog.SEASON_PILE.has(str(old.get("kind",""))): run.pile.append(str(old.kind))
 	for i: int in range(4):
 		run.board[i] = Catalog.draw_replacement_slot(run,i)
-		if run.board[i].get("kind","") in ["battle","elite","boss"]:
-			run.board[i].bounty = 25
-	run.board_notice = "斥候探路完成！四個遭遇選項已全部換新，戰鬥附帶 +25 懸賞金。"
+		if run.board[i].get("kind","") in ["battle","elite","boss","sboss"]:
+			run.board[i].bounty = 50
+	run.board_notice = "斥候探路完成！四個遭遇選項已全部換新，戰鬥附帶 +50 懸賞金。"
+	if Catalog.boss_takes_board(run): run.board_notice = "斥候撞見了季節 BOSS！牌陣上的旗幟全部化為 BOSS。"
 	sync_selected_combat()
 	save_progress()
 
@@ -369,7 +415,7 @@ func trigger_node(game = null) -> void:
 	if run.is_empty() or run.phase != "map": return
 	var slot := active_slot()
 	var k: String = slot.get("kind","battle")
-	if k in ["battle","elite","boss"]:
+	if k in ["battle","elite","boss","sboss"]:
 		sync_selected_combat()
 		if game != null: start_battle(game)
 	elif k == "event":
@@ -393,6 +439,13 @@ func trigger_node(game = null) -> void:
 func has_targeted_upgrade() -> bool:
 	return not run.is_empty() and bool(Catalog.side_mods(run.get("lord",""),run.get("relics",[])).get("targeted_upgrade",false))
 
+func upgrade_discount() -> float:
+	if run.is_empty(): return 0.0
+	return clampf(float(Catalog.side_mods(run.get("lord",""),run.get("relics",[])).get("upgrade_discount",0.0)),0.0,0.5)
+
+func upgrade_price(ups: Dictionary) -> int:
+	return maxi(15,roundi(float(Upgrades.price(ups))*(1.0-upgrade_discount())))
+
 func targeted_relic_name() -> String:
 	for r: Variant in run.get("relics",[]):
 		var k := str(r)
@@ -405,12 +458,12 @@ func roll_upgrade_stat(kind: String, opts: Array, ups: Dictionary, salt: int = 0
 	rng.seed = int(run.get("seed",1))*7+int(run.get("floor",0))*131+int(run.get("draws",0))*23+Upgrades.level(ups)*17+hash(kind)+salt
 	return opts[rng.randi_range(0,opts.size()-1)]
 
-func apply_card_upgrade(kind: String, preferred_stat: String = "", salt: int = 0) -> String:
+func apply_card_upgrade(kind: String, preferred_stat: String = "", salt: int = 0, force_targeted: bool = false) -> String:
 	var ups: Dictionary = run.upgrades.get(kind,{}).duplicate()
 	var opts: Array = Upgrades.options(kind,ups)
 	if opts.is_empty(): return ""
 	var stat := ""
-	if has_targeted_upgrade():
+	if force_targeted or has_targeted_upgrade():
 		var pick_st := preferred_stat if not preferred_stat.is_empty() else str(shop_stats.get(kind,""))
 		stat = pick_st if pick_st in opts else opts[0]
 	else:
@@ -459,10 +512,10 @@ func camp_action(choice: int) -> void:
 	run.march_steps = maxi(0,int(run.get("march_steps",2))-1)
 	if choice == 0: # 休整築牆
 		mend_by_share(0.45,0.50)
-	elif choice == 1: # 名匠鍛造（預設隨機屬性 +1；持指定遺物可自選）
+	elif choice == 1: # 名匠鍛造（自選卡牌與屬性 +1）
 		var idx := clampi(camp_card_index,0,run.deck.size()-1)
 		var kind: String = run.deck[idx]
-		if apply_card_upgrade(kind,camp_stat,11).is_empty():
+		if apply_card_upgrade(kind,camp_stat,11,true).is_empty():
 			upgrade_random_cards(1)
 	elif choice == 2: # 軍資徵集
 		run.gold += 120
@@ -476,10 +529,10 @@ func shrine_action(choice: int) -> void:
 	run.march_steps = maxi(0,int(run.get("march_steps",2))-1)
 	if choice == 0: # 開啟聖物匣
 		grant_free_relic(600)
-	elif choice == 1: # 精煉主力（預設隨機屬性 +1；持指定遺物可自選）
+	elif choice == 1: # 精煉主力（自選卡牌與屬性 +1）
 		var idx := clampi(camp_card_index,0,run.deck.size()-1)
 		var kind: String = run.deck[idx]
-		if apply_card_upgrade(kind,camp_stat,29).is_empty():
+		if apply_card_upgrade(kind,camp_stat,29,true).is_empty():
 			upgrade_random_cards(1)
 		run.gold += 70
 	elif choice == 2: # 鮮血奉獻
@@ -527,6 +580,7 @@ func event_action(choice_index: int) -> void:
 	var open_draft := false
 	match eff:
 		"upgrade_2": upgrade_random_cards(2)
+		"upgrade_3": upgrade_random_cards(3)
 		"gold_and_up":
 			run.gold += 110
 			upgrade_random_cards(1)
@@ -563,16 +617,22 @@ func event_action(choice_index: int) -> void:
 		"caravan_relic": grant_free_relic(400)
 		"upgrade_2_free": upgrade_random_cards(2)
 		"focus_up_2":
+			var focus_k := ""
+			var focus_score := -1
 			for k: String in run.deck:
 				if Upgrades.can_upgrade(k,run.upgrades.get(k,{})):
-					for _n: int in range(2):
-						var u: Dictionary = run.upgrades.get(k,{}).duplicate()
-						var o: Array = Upgrades.options(k,u)
-						if not o.is_empty():
-							var st := roll_upgrade_stat(k,o,u,41+_n)
-							u[st] = int(u.get(st,0))+1
-							run.upgrades[k] = u
-					break
+					var sc: int = (100 if B.CARDS[k].type == "unit" else 0)+int(B.CARDS[k].cost)
+					if sc > focus_score:
+						focus_score = sc
+						focus_k = k
+			if not focus_k.is_empty():
+				for _n: int in range(2):
+					var u: Dictionary = run.upgrades.get(focus_k,{}).duplicate()
+					var o: Array = Upgrades.options(focus_k,u)
+					if not o.is_empty():
+						var st := roll_upgrade_stat(focus_k,o,u,41+_n)
+						u[st] = int(u.get(st,0))+1
+						run.upgrades[focus_k] = u
 		"board_blessing":
 			run.gold += 80
 			mutation = "board_blessing"
@@ -652,8 +712,8 @@ func event_action(choice_index: int) -> void:
 				notice = "骰子出賣了你：領主在混戰中負傷，損耗 35% 生命。"
 		"gamble_gold":
 			if event_roll(2) < 0.5:
-				run.gold += 130
-				notice = "小賭得手，贏回 130 金幣。"
+				run.gold += 180
+				notice = "小賭得手，贏回 180 金幣。"
 			else:
 				notice = "莊家笑納了你的 30 金。"
 		"walk_away": run.gold += 60
@@ -698,17 +758,17 @@ func event_action(choice_index: int) -> void:
 
 # ---- economy, wounds & rewards ------------------------------------------------------------------
 
-func win_gold(floor_index: int, elite: bool) -> int:
-	var base: float = Catalog.gold_for(floor_index)*(Catalog.ELITE_GOLD_MULT if elite else 1.0)
-	var c_mult: float = Catalog.CONTRACTS[clampi(int(run.get("contract",0)),0,Catalog.CONTRACTS.size()-1)].gold_mult if not run.is_empty() else 1.0
-	var r_bonus: float = 1.0+float(Catalog.side_mods(run.lord,run.relics).get("gold_bonus",0.0)) if not run.is_empty() else 1.0
-	return roundi(base*c_mult*r_bonus)
+func win_gold(floor_index: int, elite: bool, season_boss: bool = false) -> int:
+	var base: float = Catalog.gold_for(floor_index)*(Catalog.ELITE_GOLD_MULT if elite else 1.0)*Catalog.SEASON_GOLD_SHARE*(Catalog.SEASON_BOSS_GOLD_MULT if season_boss else 1.0)
+	var c_bonus: float = float(Catalog.CONTRACTS[clampi(int(run.get("contract",0)),0,Catalog.CONTRACTS.size()-1)].gold_mult)-1.0 if not run.is_empty() else 0.0
+	var r_bonus: float = float(Catalog.side_mods(run.lord,run.relics).get("gold_bonus",0.0)) if not run.is_empty() else 0.0
+	return roundi(base*maxf(0.1,1.0+c_bonus+r_bonus))
 
 func lord_max_hp() -> float:
 	var base := float(B.lord_data(run.get("lord","lion")).hp)
 	if run.is_empty() or not run.has("lord"): return base
-	var boost := int(Catalog.side_mods(run.lord,run.get("relics",[])).get("lord_boost",0))
-	return Upgrades.shifted("hp",base,boost) if boost > 0 else base
+	var pct := float(Catalog.side_mods(run.lord,run.get("relics",[])).get("lord_pct",0.0))
+	return roundf(base*maxf(0.1,1.0+pct)) if pct != 0.0 else base
 
 func record_wounds(m) -> void:
 	if run.is_empty(): return
@@ -717,12 +777,23 @@ func record_wounds(m) -> void:
 	run.gates = walls.slice(0,5) # the run keeps five walls; a six-lane field's extra wall is left behind
 	var lord: Dictionary = m.lords[0] if not m.lords.is_empty() else {}
 	run.lord_hp = maxf(1.0,lord.hp) if not lord.is_empty() and lord.hp > 0 else lord_max_hp()*Catalog.FALLEN_LORD_SHARE
+	var gate_before := 0.0
+	for hp: float in run.gates: gate_before += hp
+	var lord_before := float(run.lord_hp)
+	# 勝戰整補：每戰勝利基礎修整城牆 +10%（破牆減半）、領主 +10%，並與遺物／被動 post_heal 百分比加算
 	var post: Dictionary = Catalog.side_mods(run.lord,run.relics).get("post_heal",{})
-	if not post.is_empty():
-		var g_heal := float(post.get("gate",0.0))
-		var l_heal := float(post.get("lord",0.0))
-		if g_heal > 0: run.gates = run.gates.map(func(hp: float) -> float: return minf(B.GATE_HP,hp+g_heal) if hp > 0 else minf(B.GATE_HP,g_heal*0.5))
-		if l_heal > 0: run.lord_hp = minf(lord_max_hp(),run.lord_hp+l_heal)
+	var g_pct := 0.10+float(post.get("gate",0.0))
+	var l_pct := 0.10+float(post.get("lord",0.0))
+	run.gates = run.gates.map(func(hp: float) -> float: return minf(B.GATE_HP,hp+B.GATE_HP*(g_pct if hp > 0.0 else g_pct*0.5)))
+	run.lord_hp = minf(lord_max_hp(),run.lord_hp+lord_max_hp()*l_pct)
+	var gate_after := 0.0
+	for hp: float in run.gates: gate_after += hp
+	var gate_healed := roundi(gate_after-gate_before)
+	var lord_healed := roundi(float(run.lord_hp)-lord_before)
+	var mend_parts: Array[String] = []
+	if gate_healed > 0: mend_parts.append("修牆+%d" % gate_healed)
+	if lord_healed > 0: mend_parts.append("療傷+%d" % lord_healed)
+	run["mend_note"] = (" · "+"／".join(mend_parts)) if not mend_parts.is_empty() else ""
 
 func gate_missing() -> float:
 	var missing := 0.0
@@ -768,38 +839,53 @@ func is_boss() -> bool:
 func settle(won: bool) -> void:
 	if run.is_empty() or run.phase != "map": return
 	if won:
-		best = maxi(best,run.floor+1)
+		run.wins = int(run.get("wins",0))+1
+		best = maxi(best,int(run.wins))
 		if is_boss():
+			run.cards_cleared = int(run.get("cards_cleared",0))+1
 			run.phase = "won"
 			clears += 1
 			max_contract = maxi(max_contract,int(run.get("contract",0)))
 			if not run.lord in cleared_lords: cleared_lords.append(run.lord)
-			outcome = "肉鴿通關！八場全勝（%s）" % Catalog.CONTRACTS[clampi(int(run.get("contract",0)),0,Catalog.CONTRACTS.size()-1)].name
+			outcome = "肉鴿通關！四季全勝、討伐魔王，共 %d 場（%s）" % [int(run.wins),Catalog.CONTRACTS[clampi(int(run.get("contract",0)),0,Catalog.CONTRACTS.size()-1)].name]
 		else:
 			var elite: bool = run.get("elite",false)
+			var season_boss := is_season_boss()
 			var bounty: int = int(active_slot().get("bounty",0))
-			var gold := win_gold(run.floor,elite)+bounty
+			var gold := win_gold(run.floor,elite,season_boss)+bounty
 			run.gold += gold
 			var prize_note := ""
 			run.last_relic = ""
-			if elite:
+			run.fought.append(foe())
+			if elite or season_boss:
 				var dropped := grant_free_relic(600)
 				if not dropped.is_empty():
 					prize_note = " · 奪得遺物【%s】" % Catalog.RELICS[dropped].name
-			run.offer = Catalog.offer(run.lord,run.seed,run.floor,run.deck)
-			run.floor += 1
-			run.last_elite = elite
+			run.offer = Catalog.offer(run.lord,run.seed+int(run.wins)*131,run.floor,run.deck)
+			var season_name: String = Catalog.SEASON_NAMES[clampi(int(run.season),0,Catalog.SEASONS.size()-1)]
+			var label := "%s季第 %d 戰%s" % [season_name,int(run.season_wins)+1,"精英" if elite else ""]
+			if season_boss: label = "%s季 BOSS【%s】討伐" % [season_name,Catalog.SEASON_BOSSES[run.sbosses[int(run.season)]].name]
+			run.last_elite = elite or season_boss
 			run.offer_rerolls = 0
 			roll_offer_ups(false)
-			run.march_steps = 2
 			run.from_event = false
 			run.elite = false
-			consume_board_slot(true)
+			if season_boss:
+				run.cards_cleared = int(run.get("cards_cleared",0))+1
+				start_season(int(run.season)+1)
+				run.march_steps = 3 if is_boss() else 2
+			else:
+				run.season_wins = int(run.season_wins)+1
+				run.floor = Catalog.season_floor(int(run.season),int(run.season_wins))
+				run.march_steps = 2
+				consume_board_slot(true)
 			run.phase = "reward"
-			outcome = "第 %d 場%s勝利！獲得 %d 金幣%s" % [run.floor,"精英" if elite else "",gold,prize_note]
+			var mend_note: String = str(run.get("mend_note",""))
+			run.erase("mend_note")
+			outcome = "%s勝利！獲得 %d 金幣%s%s" % [label,gold,prize_note,mend_note]
 	else:
 		run.phase = "lost"
-		outcome = "敗北：本輪止步第 %d 場" % (run.floor+1)
+		outcome = "敗北：本輪止步於%s（共勝 %d 場）" % [season_label().get_slice(" · ",0),int(run.get("wins",0))]
 	save_progress()
 
 func roll_offer_ups(from_event: bool = false) -> void:
@@ -816,7 +902,7 @@ func roll_offer_ups(from_event: bool = false) -> void:
 		var info := Upgrades.drop_chance_info(run.lord,k,fl,el,ct,rcount,bp,from_event,rr)
 		var rng := RandomNumberGenerator.new()
 		rng.seed = int(run.get("seed",1))*193+fl*1009+int(run.get("draws",0))*53+rr*71+hash(k)
-		var bonus := Upgrades.roll_drop_upgrades(k,float(info.chance),rng)
+		var bonus := Upgrades.roll_drop_upgrades(k,float(info.chance),rng,Upgrades.drop_min_level(fl,el))
 		if not bonus.is_empty():
 			oups[k] = bonus
 	run.offer_ups = oups
@@ -852,6 +938,7 @@ func replace(slot: int) -> void:
 func skip_reward() -> void:
 	if run.is_empty() or not run.phase in ["reward","replace"]: return
 	run.gold += Catalog.SKIP_REWARD_GOLD
+	mend_by_share(0.10,0.10)
 	finish_draft()
 
 func offer_reroll_error() -> String:
@@ -864,7 +951,7 @@ func reroll_offer() -> void:
 	run.gold -= Catalog.OFFER_REROLL_PRICE
 	run.draws = int(run.get("draws",0))+1
 	run.offer_rerolls = int(run.get("offer_rerolls",0))+1
-	run.offer = Catalog.offer(run.lord,run.seed+run.draws*311,run.floor,run.deck)
+	run.offer = Catalog.offer(run.lord,run.seed+run.draws*311+int(run.get("wins",0))*131,run.floor,run.deck)
 	roll_offer_ups(bool(run.get("from_event",false)))
 	save_progress()
 
@@ -872,7 +959,7 @@ func reroll_offer() -> void:
 
 func open_shop() -> void:
 	if run.is_empty() or not run.phase in ["map","reward","replace"]: return
-	if run.phase != "map" or run.shop.is_empty(): run.shop = Catalog.relic_offer(run.seed,run.floor,run.relics)
+	if run.phase != "map" or run.shop.is_empty(): run.shop = Catalog.relic_offer(run.seed+int(run.get("wins",0))*53,run.floor,run.relics)
 	run.phase = "shop"
 	save_progress()
 
@@ -886,12 +973,12 @@ func upgrade_error(kind: String) -> String:
 	var ups: Dictionary = run.upgrades.get(kind,{})
 	if Upgrades.level(ups) >= Upgrades.MAX_LEVEL: return "已達 +%d" % Upgrades.MAX_LEVEL
 	if Upgrades.options(kind,ups).is_empty(): return "沒有可強化的能力"
-	if run.gold < Upgrades.price(ups): return "金幣不足"
+	if run.gold < upgrade_price(ups): return "金幣不足"
 	return ""
 
 func upgrade(kind: String, chosen_stat: String = "") -> void:
 	if not upgrade_error(kind).is_empty(): return
-	var cost := Upgrades.price(run.upgrades.get(kind,{}))
+	var cost := upgrade_price(run.upgrades.get(kind,{}))
 	if apply_card_upgrade(kind,chosen_stat).is_empty(): return
 	run.gold -= cost
 	save_progress()
@@ -932,19 +1019,52 @@ func abandon() -> void:
 func battle_plan() -> Dictionary:
 	if run.is_empty() or is_boss(): return {}
 	var slot := active_slot()
-	var kind: String = "elite" if bool(run.get("elite",false)) else "battle"
-	return Catalog.Terrain.plan(foe(),kind,Catalog.mutator_data(slot))
+	var kind: String = "elite" if bool(run.get("elite",false)) or slot.get("kind","") == "sboss" else "battle"
+	return seasonal(Catalog.Terrain.plan(foe(),kind,Catalog.mutator_data(slot)))
+
+# 四季：每一場都換成當季的景色；季節規則照原本的空位給（夏天在肉鴿沒有夜晚，只有景色）
+func seasonal(plan: Dictionary) -> Dictionary:
+	var s := int(run.get("season",0))
+	if plan.is_empty() or s >= Catalog.SEASONS.size(): return plan
+	var now_season: String = Catalog.SEASONS[s]
+	var had_rule: bool = bool(plan.season_rule)
+	plan.rules = plan.rules.filter(func(rule: Array) -> bool: return not str(rule[0]).begins_with("季節："))
+	plan.season = now_season
+	plan.season_rule = (had_rule or plan.rules.size() < int(plan.budget)) and now_season != "summer"
+	if plan.season_rule: plan.rules.append(["季節：%s" % Season.label(now_season),Season.rule_text(now_season)])
+	return plan
 
 func battle_floor_number() -> int:
 	if run.is_empty(): return 1
-	return int(run.get("last_battle_floor",run.get("floor",0)))+1
+	return int(run.get("wins",0))+1
+
+# 敵方每張牌各自隨機強化：階數在本層範圍內（小怪逐層提高、精英 +1、魔王最高；最終契約再 +1），屬性也隨機；
+# 只看存檔種子、層數與對手，所以戰前簡報看到的就是開戰的。
+func enemy_upgrades(enemy: String, kind: String) -> Dictionary:
+	var c_data: Dictionary = Catalog.CONTRACTS[clampi(int(run.get("contract",0)),0,Catalog.CONTRACTS.size()-1)]
+	var bonus := 1 if c_data.get("enemy_toughen",false) else 0
+	var span: Array = Catalog.enemy_ups_range(int(run.get("floor",0)),"elite" if kind == "sboss" else kind)
+	if kind == "sboss": span = [int(span[0])+1,int(span[1])+1]
+	var brng := RandomNumberGenerator.new()
+	brng.seed = int(run.get("seed",1))*313+hash(enemy)+(0 if kind == "boss" else int(run.get("floor",0))*7+(3 if kind == "elite" else 0))
+	var cards: Array = []
+	var source_deck: Array = Catalog.season_boss_deck(run.sbosses[int(run.season)]) if (kind == "sboss" and run.has("sbosses") and int(run.get("season",0)) < Catalog.SEASONS.size()) else Catalog.foe_deck(enemy)
+	for ck: String in source_deck:
+		if not ck in cards: cards.append(ck)
+	cards.sort()
+	var ups := {}
+	for ck: String in cards:
+		var lv := brng.randi_range(int(span[0]),int(span[1]))+bonus
+		if lv > 0: ups[ck] = Upgrades.roll_fixed_upgrades(ck,lv,brng)
+	return ups
 
 func make_battle() -> Battle:
 	var enemy := foe()
 	run.last_battle_floor = run.floor
 	var ground: Dictionary = battle_plan() # 這個怪的戰場：路數、季節、地形與招牌機制（已依規則上限刪減）
 	L.pending_rows = int(ground.get("rows",5))
-	var m := Battle.new(run.seed+run.floor*7919,run.deck.duplicate(),Catalog.foe_deck(enemy),run.lord,enemy)
+	var foe_cards: Array = Catalog.season_boss_deck(run.sbosses[int(run.season)]) if is_season_boss() else Catalog.foe_deck(enemy)
+	var m := Battle.new(run.seed+run.floor*7919,run.deck.duplicate(),foe_cards,run.lord,enemy)
 	m.apply_domestic(0,B.home_card(run.lord),Catalog.side_mods(run.lord,run.relics))
 	m.card_upgrades[0] = run.upgrades.duplicate(true)
 	var carried: Array = run.get("gates",m.gates[0]).duplicate()
@@ -962,23 +1082,36 @@ func make_battle() -> Battle:
 	m.difficulty = clampi(Catalog.AI_LEVEL[run.floor]+int(c_data.get("ai_boost",0)),0,2)
 	var enemy_scale: float = Catalog.enemy_floor_scale(run.floor)
 	var enemy_mods: Dictionary = {}
-	if c_data.get("enemy_toughen",false) or boss:
-		enemy_mods["toughen"] = ["*"]
+	if c_data.get("enemy_toughen",false):
+		enemy_mods["toughen"] = {"*":0.35}
+	var lord_pct: float = enemy_lord_card_bonus()
 	if boss:
-		enemy_mods["haste"] = ["*"]
-		enemy_mods["skill_discount"] = 15.0
+		enemy_mods["skill_discount"] = 0.20
+		lord_pct += Catalog.BOSS_LORD_PCT
 		var b_lord: Dictionary = m.lords[1]
-		b_lord.max_hp = Upgrades.shifted("hp",b_lord.max_hp,Catalog.BOSS_LORD_BOOST,0)
-		b_lord.hp = b_lord.max_hp
-		b_lord.damage = Upgrades.shifted("damage",b_lord.damage,Catalog.BOSS_LORD_BOOST,0)
-		var boss_ups := {}
-		var boss_lv := Catalog.BOSS_CARD_UPGRADES + (1 if c_data.get("enemy_toughen",false) else 0)
-		var brng := RandomNumberGenerator.new()
-		brng.seed = int(run.get("seed",1))*313+hash(enemy)
-		for ck: String in m.decks[1]:
-			if not boss_ups.has(ck):
-				boss_ups[ck] = Upgrades.roll_fixed_upgrades(ck,boss_lv,brng)
-		m.card_upgrades[1] = boss_ups
+		if Catalog.BOSS_SHOTS.has(String(b_lord.lord)): # 魔王射擊：本人改成遠程，帶招牌彈
+			b_lord.shot = Catalog.BOSS_SHOTS[String(b_lord.lord)].duplicate()
+			b_lord.range = float(b_lord.shot.range)
+			b_lord.ranged = true
+	elif is_season_boss(): # 季節 BOSS：本人百分比強化、帶射擊，牌組中代表卡強化為 2×2 單體巨獸
+		var sb: Dictionary = Catalog.SEASON_BOSSES[run.sbosses[int(run.season)]]
+		lord_pct += Catalog.SEASON_BOSS_LORD_PCT
+		var s_lord: Dictionary = m.lords[1]
+		var sb_shot: Dictionary = Catalog.minion_shot(enemy)
+		s_lord.shot = sb_shot if not sb_shot.is_empty() else Catalog.SEASON_BOSS_SHOT.duplicate()
+		s_lord.range = float(s_lord.shot.range)
+		s_lord.ranged = true
+		s_lord.skill_override = sb.get("skill",{}).duplicate()
+		m.ink[1] = clampf(maxf(m.ink[1],Catalog.SEASON_BOSS_START_INK),0.0,B.MAX_INK)
+		m.difficulty = 2
+	else:
+		var m_shot: Dictionary = Catalog.minion_shot(enemy)
+		if not m_shot.is_empty(): # 小怪領主的帶屬性射擊
+			m.lords[1].shot = m_shot
+			m.lords[1].range = float(m_shot.range)
+	if lord_pct > 0.0:
+		enemy_mods["lord_pct"] = lord_pct
+	m.card_upgrades[1] = enemy_upgrades(enemy,"boss" if boss else ("sboss" if is_season_boss() else ("elite" if bool(run.get("elite",false)) else "battle")))
 	if enemy_scale > 1.0:
 		enemy_mods["gold_gain_mult"] = enemy_scale
 		enemy_mods["cd_speed_mult"] = enemy_scale
@@ -990,7 +1123,12 @@ func make_battle() -> Battle:
 		enemy_mods = Catalog.merge_mods(enemy_mods,elite_mod[2]) # 精英特性
 		m.ink[1] = minf(B.MAX_INK,m.ink[1]+float(elite_mod[3]))
 	if not enemy_mods.is_empty():
-		m.team_mods[1] = enemy_mods
+		var base_passive := {}
+		var lord_d: Dictionary = B.lord_data(enemy)
+		for pk: String in ["income_mult","farm_mult","cd_speed_mult","skill_haste","skill_charge_mult","gold_gain_mult","start_ink","skill_discount","lord_boost","lord_pct","thorns_gate","kill_bounty","gold_bonus","skill_echo_gold","kill_charge","skill_start_charge","gate_armor","post_heal","cycle_speed","swarm","toughen","haste"]:
+			if lord_d.has(pk): base_passive[pk] = lord_d[pk]
+		m.team_mods[1] = Catalog.merge_mods(base_passive,enemy_mods)
+	m.apply_lord_boost(1)
 	if not mut.is_empty():
 		m.apply_field_mutator(mut)
 	m.ai_enabled = [false,true]
@@ -998,7 +1136,34 @@ func make_battle() -> Battle:
 	if not ground.is_empty():
 		m.set_active_lanes(ground.lanes)
 		Season.apply(m,String(ground.season),bool(ground.season_rule))
-		m.apply_field_mutator(ground.mutator)
+		var g_mut: Dictionary = ground.mutator.duplicate(true)
+		if g_mut.has("enemy_buildings"):
+			var b_counts: Dictionary = {}
+			for b: Dictionary in m.buildings:
+				if int(b.team) == 1:
+					var bk: String = String(b.kind)
+					b_counts[bk] = int(b_counts.get(bk,0))+1
+			var kept_b: Array = []
+			for eb: Array in g_mut.enemy_buildings:
+				var ek: String = String(eb[2])
+				if int(b_counts.get(ek,0)) < 2:
+					kept_b.append(eb)
+					b_counts[ek] = int(b_counts.get(ek,0))+1
+			g_mut["enemy_buildings"] = kept_b
+		var budget: float = m.ink[1]
+		var used_budget := false
+		if g_mut.has("enemy_units"):
+			var kept_u: Array = []
+			for spec: Array in g_mut.enemy_units:
+				if not int(spec[1]) in m.active_lanes: continue
+				var u_cost: float = float(B.CARDS.get(String(spec[2]),{}).get("cost",0))
+				if u_cost <= budget:
+					kept_u.append(spec)
+					budget -= u_cost
+					used_budget = true
+			g_mut["enemy_units"] = kept_u
+		m.apply_field_mutator(g_mut)
+		if used_budget: m.ink[1] = maxf(0.0,budget)
 	return m
 
 func start_battle(game) -> void:
@@ -1009,12 +1174,14 @@ func start_battle(game) -> void:
 	outcome = ""
 	var c_name: String = Catalog.CONTRACTS[clampi(int(run.get("contract",0)),0,Catalog.CONTRACTS.size()-1)].name
 	var enemy_scale: float = Catalog.enemy_floor_scale(run.floor)
-	var scale_tag: String = (" · 敵軍金幣／冷卻 ×%.2f" % enemy_scale) if enemy_scale > 1.0 else ""
+	var scale_tag: String = (" · 敵軍金幣／冷卻 +%d%%" % roundi((enemy_scale-1.0)*100.0)) if enemy_scale > 1.0 else ""
+	var lord_bonus_pct := roundi(enemy_lord_card_bonus()*100.0)
+	if lord_bonus_pct > 0: scale_tag += " · 敵領主 +%d%%" % lord_bonus_pct
 	var mut := Catalog.mutator_data(active_slot())
 	var mut_tag: String = (" · 【%s】%s" % [mut.name,mut.desc]) if not mut.is_empty() else ""
 	var plan := battle_plan()
 	if not plan.is_empty(): mut_tag = " · 戰場：%s · 規則：%s" % [String(plan.name),"、".join(plan.rules.map(func(rule: Array) -> String: return String(rule[0])))]
-	game.enter_battle("肉鴿 第 %d / %d 場（%s）· 對手：%s%s%s" % [run.floor+1,Catalog.FLOORS,c_name,B.lord_name(foe()),scale_tag,mut_tag])
+	game.enter_battle("肉鴿 %s（%s）· 對手：%s%s%s" % [season_label().get_slice(" · ",0)+" · "+season_label().get_slice(" · ",1),c_name,foe_name(active_slot()),scale_tag,mut_tag])
 
 func update(game) -> void:
 	if not in_battle or not outcome.is_empty() or game.model.paused: return
@@ -1082,12 +1249,12 @@ func show(game) -> void:
 						show(game))
 				b.tooltip_text = slot_tooltip(run.board[i])
 			var sel := active_slot()
-			game.title_button(Rect2(1220,808,290,52),"出征：%s" % (B.lord_name(foe()) if sel.get("kind","") in ["battle","elite","boss"] else slot_title(sel)),func(): cut_banner(game),true)
+			game.title_button(Rect2(1220,808,290,52),"出征：%s" % (foe_name(active_slot()) if sel.get("kind","") in ["battle","elite","boss","sboss"] else slot_title(sel)),func(): cut_banner(game),true)
 			game.title_button(Rect2(1010,808,190,46),"我的牌組",func(): deck_open = true; show(game))
 			var rw_err := board_reroll_error()
 			var rw_btn: Button = game.title_button(Rect2(345,808,215,46),("斥候換陣（%d 金）" % Catalog.BOARD_REROLL_PRICE) if rw_err.is_empty() else rw_err,func(): reroll_board(); show(game))
 			rw_btn.disabled = not rw_err.is_empty()
-			rw_btn.tooltip_text = "花費 %d 金幣刷新全部 4 個遭遇選項，並為新戰鬥附加 +25 懸賞金" % Catalog.BOARD_REROLL_PRICE
+			rw_btn.tooltip_text = "花費 %d 金幣刷新全部 4 個遭遇選項，並為新戰鬥附加 +50 懸賞金" % Catalog.BOARD_REROLL_PRICE
 			game.title_button(Rect2(575,808,215,46),"軍需商店（%d 金）" % run.gold,func(): open_shop(); show(game))
 			game.title_button(Rect2(805,808,190,46),"確定放棄？" if confirm_abandon else "放棄這輪",func():
 				if confirm_abandon: abandon()
@@ -1102,22 +1269,22 @@ func show(game) -> void:
 				b.tooltip_text = desc(run.deck[i])
 			var target_kind: String = run.deck[clampi(camp_card_index,0,run.deck.size()-1)]
 			var opts: Array = Upgrades.options(target_kind,run.upgrades.get(target_kind,{}))
-			var targeted := has_targeted_upgrade()
-			if targeted:
-				for s_i: int in range(opts.size()):
-					var st: String = opts[s_i]
-					var sb: Button = game.title_button(Rect2(106+s_i*108,685,102,38),"鍛造"+Upgrades.NAMES.get(st,st),func(): camp_stat = st; show(game),camp_stat == st or (camp_stat.is_empty() and s_i == 0))
-					sb.add_theme_font_size_override("font_size",14)
+			for s_i: int in range(opts.size()):
+				var st: String = opts[s_i]
+				var sb: Button = game.title_button(Rect2(106+s_i*108,685,102,38),"鍛造"+Upgrades.NAMES.get(st,st),func(): camp_stat = st; show(game),camp_stat == st or (camp_stat.is_empty() and s_i == 0))
+				sb.add_theme_font_size_override("font_size",14)
 			var forge_name: String = B.CARDS[target_kind].name
-			var forge_st: String = Upgrades.NAMES.get(camp_stat if camp_stat in opts else (opts[0] if not opts.is_empty() else ""),"隨機")
+			var chosen_st: String = camp_stat if camp_stat in opts else (opts[0] if not opts.is_empty() else "")
+			var forge_st: String = Upgrades.NAMES.get(chosen_st,"隨機")
+			var forge_pct: int = roundi(Upgrades.step_pct(chosen_st)*100.0) if not chosen_st.is_empty() else 0
 			if is_camp_phase:
 				option_button(game,Rect2(830,330,630,90),"【休整築牆】城牆修復 45% 缺失血量 · 領主回復 50% 生命",func(): camp_action(0); show(game))
-				var camp_label := "【名匠鍛造】免費強化「%s」的【%s】+1 階" % [forge_name,forge_st] if (targeted and not opts.is_empty()) else "【名匠鍛造】免費隨機強化「%s」一項屬性 +1 階" % forge_name
+				var camp_label := "【名匠鍛造】免費強化「%s」的【%s】+%d%%" % [forge_name,forge_st,forge_pct] if not opts.is_empty() else "【名匠鍛造】「%s」已滿級，改為隨機強化 1 卡" % forge_name
 				option_button(game,Rect2(830,450,630,90),camp_label,func(): camp_action(1); show(game),true)
 				option_button(game,Rect2(830,570,630,90),"【軍資徵集】獲得 120 金幣，並隨機強化 1 張卡牌 +1",func(): camp_action(2); show(game))
 			else:
 				option_button(game,Rect2(830,330,630,90),"【開啟聖物匣】免費獲得 1 件未持有的遺物",func(): shrine_action(0); show(game),true)
-				var shrine_label := "【精煉主力】強化「%s」的【%s】+1 階，並獲得 70 金幣" % [forge_name,forge_st] if (targeted and not opts.is_empty()) else "【精煉主力】隨機強化「%s」一項屬性 +1 階，並獲得 70 金幣" % forge_name
+				var shrine_label := "【精煉主力】強化「%s」的【%s】+%d%%，並獲得 70 金幣" % [forge_name,forge_st,forge_pct] if not opts.is_empty() else "【精煉主力】「%s」已滿級，改隨機強化 1 卡並得 70 金" % forge_name
 				option_button(game,Rect2(830,450,630,90),shrine_label,func(): shrine_action(1); show(game))
 				option_button(game,Rect2(830,570,630,90),"【鮮血奉獻】領主損耗 25% 生命，換取 200 金幣與隨機 1 卡 +1",func(): shrine_action(2); show(game))
 		"event":
@@ -1141,9 +1308,9 @@ func show(game) -> void:
 				choice.mouse_entered.connect(func(): detail.text = desc(kind))
 				choice.focus_entered.connect(func(): detail.text = desc(kind))
 			var or_err := offer_reroll_error()
-			var or_btn: Button = game.title_button(Rect2(400,800,260,48),("換一批候選（%d 金）" % Catalog.OFFER_REROLL_PRICE) if or_err.is_empty() else or_err,func(): reroll_offer(); show(game))
+			var or_btn: Button = game.title_button(Rect2(360,800,260,48),("換一批候選（%d 金）" % Catalog.OFFER_REROLL_PRICE) if or_err.is_empty() else or_err,func(): reroll_offer(); show(game))
 			or_btn.disabled = not or_err.is_empty()
-			game.title_button(Rect2(680,800,280,48),"略過換卡（+%d 金）" % Catalog.SKIP_REWARD_GOLD,func(): skip_reward(); show(game))
+			game.title_button(Rect2(640,800,340,48),"略過換卡（+%d 金・修傷 10%%）" % Catalog.SKIP_REWARD_GOLD,func(): skip_reward(); show(game))
 		"replace":
 			for i: int in range(8):
 				var slot := i
@@ -1173,10 +1340,11 @@ func show(game) -> void:
 					cycle_btn.add_theme_font_size_override("font_size",14)
 					cycle_btn.tooltip_text = "點選切換要強化的屬性（可選：%s）" % "、".join(opts.map(func(s: String) -> String: return Upgrades.NAMES.get(s,s)))
 				var why := upgrade_error(kind)
+				var u_cost := upgrade_price(ups)
 				var label := ""
 				if not why.is_empty(): label = why
-				elif targeted: label = "強化%s %d金" % [Upgrades.NAMES.get(cur_stat,"") if not cur_stat.is_empty() else "",Upgrades.price(ups)]
-				else: label = "隨機強化 %d金" % Upgrades.price(ups)
+				elif targeted: label = "強化%s %d金" % [Upgrades.NAMES.get(cur_stat,"") if not cur_stat.is_empty() else "",u_cost]
+				else: label = "隨機強化 %d金" % u_cost
 				var chosen_for_btn := cur_stat if targeted else ""
 				var b: Button = game.title_button(Rect2(r.position+Vector2(8,r.size.y-44),Vector2(r.size.x-16,36)),label,func(): upgrade(kind,chosen_for_btn); show(game))
 				b.disabled = not why.is_empty()
@@ -1209,6 +1377,7 @@ func show(game) -> void:
 func slot_title(slot: Dictionary) -> String:
 	match slot.get("kind","battle"):
 		"boss": return "魔王決戰："+B.lord_name(slot.get("foe",foe()))
+		"sboss": return "季節 BOSS："+foe_name(slot)
 		"elite": return "精英討伐："+B.lord_name(slot.get("foe",foe()))
 		"battle": return "一般遭遇："+B.lord_name(slot.get("foe",foe()))
 		"camp": return "戰地營火"
@@ -1224,7 +1393,8 @@ func slot_subtitle(slot: Dictionary) -> String:
 	var mut := Catalog.mutator_data(slot)
 	var m_tag := (" · 【%s】" % String(mut.name)) if not mut.is_empty() else ""
 	match slot.get("kind","battle"):
-		"boss": return "第八層魔王決戰%s" % m_tag
+		"boss": return "四季之後的魔王決戰%s" % m_tag
+		"sboss": return "賞金 %d 金 · 掉遺物 · 打倒後進入下一季" % win_gold(run.floor,false,true)
 		"elite": return "賞金 %d 金%s · 掉遺物%s" % [win_gold(run.floor,true),b_tag,m_tag]
 		"battle":
 			var age_tag := " · 久置將升階" if int(slot.get("age",0)) >= 1 else ""
@@ -1236,7 +1406,7 @@ func slot_subtitle(slot: Dictionary) -> String:
 
 func slot_tooltip(slot: Dictionary) -> String:
 	var k: String = slot.get("kind","battle")
-	if k in ["battle","elite","boss"]:
+	if k in ["battle","elite","boss","sboss"]:
 		var f: String = slot.get("foe",foe())
 		var lines: Array = Board.battle_lines(self,slot).map(func(l: Array) -> String: return "・%s：%s" % [String(l[0]),String(l[1])])
 		return "%s\n%s\n%s" % [slot_title(slot),slot_subtitle(slot),"\n".join(lines)]
@@ -1245,8 +1415,14 @@ func slot_tooltip(slot: Dictionary) -> String:
 		var ev: Dictionary = Catalog.EVENTS.get(ev_id,Catalog.EVENTS.wandering_smith)
 		return "%s\n%s" % [ev.name,ev.story]
 	if k == "camp":
-		return "戰地營火\n1. 休整築牆：修復 45% 城牆缺失血量、領主回復 50% 生命\n2. 名匠鍛造：自選 1 張卡牌與屬性免費 +1 階\n3. 軍資徵集：獲得 120 金幣並隨機強化 1 張卡"
-	return "秘寶古祠\n1. 開啟聖物匣：免費獲得 1 件未持有的遺物\n2. 精煉主力：指定 1 張卡牌 +1 階並獲得 70 金幣\n3. 鮮血奉獻：損耗 25% 領主生命換取 200 金幣與隨機強化"
+		return "戰地營火\n1. 休整築牆：修復 45% 城牆缺失血量、領主回復 50% 生命\n2. 名匠鍛造：自選 1 張卡牌與屬性百分比強化\n3. 軍資徵集：獲得 120 金幣並隨機強化 1 張卡"
+	return "秘寶古祠\n1. 開啟聖物匣：免費獲得 1 件未持有的遺物\n2. 精煉主力：自選 1 張卡牌百分比強化並獲得 70 金幣\n3. 鮮血奉獻：損耗 25% 領主生命換取 200 金幣與隨機強化"
+
+# The name on a flag: a season boss carries its own title instead of the borrowed lord's.
+func foe_name(slot: Dictionary) -> String:
+	if slot.get("kind","") == "sboss" and Catalog.SEASON_BOSSES.has(str(slot.get("sboss",""))):
+		return Catalog.SEASON_BOSSES[slot.sboss].name
+	return B.lord_name(slot.get("foe",foe()))
 
 func role_text(lord: String) -> String:
 	return "領主被動：%s\n主動技能：%s\n常駐牌：%s（起手配隨機本陣營 8 張套牌）" % [B.passive_text(Catalog.passive(lord)),B.skill_text(lord),B.CARDS[B.home_card(lord)].name]
@@ -1339,7 +1515,7 @@ func deck_rect(i: int) -> Rect2:
 
 func paint(g) -> void:
 	g.label_at(Vector2(90,82),"肉鴿模式",42)
-	var rec := "八場連戰 · 最佳 %d / %d 場 · 累計通關 %d 次（最高契約 %d）" % [best,Catalog.FLOORS,clears,max_contract]
+	var rec := "春夏秋冬四季＋魔王 · 最佳連勝 %d 場 · 累計通關 %d 次（最高契約 %d）" % [best,clears,max_contract]
 	g.label_at(Vector2(285,84),rec,20)
 	if not save_notice.is_empty(): g.label_at(Vector2(90,115),save_notice,18,g.RED)
 	var current: String = run.get("phase",phase) if not run.is_empty() else phase
@@ -1457,8 +1633,10 @@ func paint_reward(g) -> void:
 		g.draw_string(g.font,Vector2(0,196),outcome,HORIZONTAL_ALIGNMENT_CENTER,1600,20,g.RED)
 	var chance_info := Upgrades.drop_chance_info(run.lord,"",int(run.get("floor",0)),bool(run.get("last_elite",false)),int(run.get("contract",0)),run.get("relics",[]).size(),has_targeted_upgrade(),bool(run.get("from_event",false)),int(run.get("offer_rerolls",0)))
 	var reason_txt := ("（" + " · ".join(chance_info.reasons) + "）") if not chance_info.reasons.is_empty() else "（基礎機率，高層數／精英／契約／遺物／重抽可提升）"
-	g.draw_string(g.font,Vector2(0,224),"選一張卡加入牌組（目前金幣 %d · 略過可領 +%d 金）" % [run.gold,Catalog.SKIP_REWARD_GOLD],HORIZONTAL_ALIGNMENT_CENTER,1600,22,g.INK)
-	g.draw_string(g.font,Vector2(0,248),"隨機預強化機率 約 %d%%（最高 +3）%s" % [roundi(float(chance_info.chance)*100.0),reason_txt],HORIZONTAL_ALIGNMENT_CENTER,1600,15,Color("6b4c33"))
+	g.draw_string(g.font,Vector2(0,224),"選一張卡加入牌組（目前金幣 %d · 略過可領 +%d 金並修傷 10%%）" % [run.gold,Catalog.SKIP_REWARD_GOLD],HORIZONTAL_ALIGNMENT_CENTER,1600,22,g.INK)
+	var floor_min := Upgrades.drop_min_level(int(run.get("floor",0)),bool(run.get("last_elite",false)))
+	var min_txt := ("保底 +%d · " % floor_min) if floor_min > 0 else ""
+	g.draw_string(g.font,Vector2(0,248),"%s隨機預強化機率 約 %d%%（連中可再往上，最高 +10）%s" % [min_txt,roundi(float(chance_info.chance)*100.0),reason_txt],HORIZONTAL_ALIGNMENT_CENTER,1600,15,Color("6b4c33"))
 	var Ornament = preload("res://interface_ornament.gd")
 	for i: int in range(run.offer.size()):
 		var kind: String = run.offer[i]
@@ -1508,7 +1686,7 @@ func paint_replace(g) -> void:
 		g.draw_string(g.font,r.position+Vector2(0,200),sub_txt,HORIZONTAL_ALIGNMENT_CENTER,r.size.x,14,g.RED if lv > 0 else Color("6f5a3e"))
 
 func paint_shop(g) -> void:
-	var up_hint := ("【%s】生效中：可點選切換要升階的屬性，最高 SS" % targeted_relic_name()) if has_targeted_upgrade() else ("隨機提升一項屬性，最高 SS · 持有「%s」遺物可改為自選" % Catalog.RELICS.artisan_blueprint.name)
+	var up_hint := ("【%s】生效中：可點選切換強化的屬性（百分比加算）" % targeted_relic_name()) if has_targeted_upgrade() else ("隨機百分比強化一項屬性（加算）· 持有「%s」遺物可改為自選" % Catalog.RELICS.artisan_blueprint.name)
 	g.label_at(Vector2(90,180),"軍需商店 · 金幣 %d · 卡牌強化（%s）" % [run.gold,up_hint],20,g.RED)
 	var kinds := shop_kinds()
 	for i: int in range(kinds.size()):
@@ -1541,7 +1719,7 @@ func paint_end(g) -> void:
 	var won: bool = run.phase == "won"
 	var c_name: String = Catalog.CONTRACTS[clampi(int(run.get("contract",0)),0,Catalog.CONTRACTS.size()-1)].name
 	g.draw_string(g.font,Vector2(0,370),"肉鴿通關！（%s）" % c_name if won else "本輪結束",HORIZONTAL_ALIGNMENT_CENTER,1600,52,g.RED if won else g.INK)
-	var text := ("%s與%s帶著這副牌打完了八場。" % [B.lord_name(run.lord),B.lord_name(run.domestic)]) if won else ("止步第 %d 場，敗給%s。" % [run.floor+1,B.lord_name(foe())])
+	var text := ("%s與%s帶著這副牌走過四季、打倒了魔王，共 %d 場。" % [B.lord_name(run.lord),B.lord_name(run.domestic),int(run.get("wins",0))]) if won else ("止步於%s，敗給%s。" % [season_label().get_slice(" · ",0),foe_name(active_slot())])
 	g.draw_string(g.font,Vector2(0,435),text,HORIZONTAL_ALIGNMENT_CENTER,1600,24,g.INK)
 	g.draw_string(g.font,Vector2(0,485),"最終牌組：" + "、".join(run.deck.map(func(k: String) -> String: return B.CARDS[k].name)),HORIZONTAL_ALIGNMENT_CENTER,1600,18,Color("6f5a3e"))
 	var relic_line := "持有遺物：" + ("、".join(run.relics.map(func(k: String) -> String: return Catalog.RELICS[k].name)) if not run.relics.is_empty() else "無")

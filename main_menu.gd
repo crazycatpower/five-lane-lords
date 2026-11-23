@@ -23,11 +23,11 @@ const FLAG_NOTES := {
 const DECK_HIT := Rect2(96,724,300,150)
 const CODEX_HIT := Rect2(440,724,300,150)
 const CODEX_CARDS := ["militia","hunter","farm","skeleton","ghoul","grave","reaper"]
-static var opened_ms := 0
+static var opened_at := 0.0 # g.clock when the entrance started (-1 = not yet): game time, so recordings play it at true speed
 static var buttons := {} # id -> Button
 
 static func build(g) -> void:
-	opened_ms = -1 # the entrance starts on the first painted frame, after any loading
+	opened_at = -1.0 # the entrance starts on the first painted frame, after any loading
 	buttons.clear()
 	g.adventure.load_progress()
 	var actions := {"net":g.show_net,"adventure":g.show_adventure,"rogue":g.show_rogue,"watch":g.show_watch}
@@ -64,8 +64,8 @@ static func live(g) -> bool:
 
 static func since(g) -> float:
 	if not live(g): return 99.0
-	if opened_ms < 0: opened_ms = Time.get_ticks_msec()
-	return (Time.get_ticks_msec()-opened_ms)/1000.0
+	if opened_at < 0.0: opened_at = g.clock
+	return g.clock-opened_at
 
 static func ease_out(t: float) -> float:
 	var c := clampf(t,0.0,1.0)

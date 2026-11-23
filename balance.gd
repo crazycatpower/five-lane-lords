@@ -119,7 +119,7 @@ const CARDS := {
 	"imp_bomb_runner":{"name":"小鬼炸彈兵","role":"自爆·拆建","faction":"beast","type":"unit","cost":8,"cooldown":10.0,"count":2,"hp":210.0,"damage":370.0,"area_damage":370.0,"radius":100.0,"blast":"square","interval":1.1,"range":0.0,"speed":90.0,"expansion":true,"suicide_blast":true},
 	"macebreaker":{"name":"釘錘破甲兵","role":"破甲·近戰","faction":"normal","type":"unit","footprint":[1,2],"cost":8,"cooldown":15.0,"count":2,"hp":350.0,"damage":70.0,"interval":1.1,"range":59.0,"speed":36.0,"expansion":true,"ignore_armor":true,"attack_style":"heavy"},
 	"beekeeper":{"name":"養蜂人","role":"蜂群·毒遲","faction":"normal","type":"unit","cost":5,"cooldown":10.0,"count":1,"hp":210.0,"damage":26.0,"interval":1.9,"range":295.0,"speed":36.0,"expansion":true,"projectile":true,"net_slow":2.0,"dot_damage":20.0,"dot_interval":1.0,"dot_ticks":2,"attack_style":"throw"},
-	"bellbearer":{"name":"送葬鐘使","role":"療傷·支援","faction":"dark","type":"unit","cost":2,"cooldown":15.0,"count":1,"hp":210.0,"damage":26.0,"interval":1.9,"range":236.0,"speed":36.0,"expansion":true,"projectile":true,"support":"heal","support_amount":26.0,"radius":100.0,"period":2.4,"attack_style":"cast"},
+	"bellbearer":{"name":"送葬鐘使","role":"療傷·支援","faction":"dark","type":"unit","cost":2,"cooldown":15.0,"count":1,"hp":210.0,"damage":26.0,"interval":1.9,"range":236.0,"speed":36.0,"expansion":true,"projectile":true,"support":"heal","support_amount":26.0,"period":2.4,"attack_style":"cast"},
 	"shroud_arbalist":{"name":"裹屍弩手","role":"重弩·遠程","faction":"dark","type":"unit","footprint":[2,1],"cost":9,"cooldown":15.0,"count":2,"hp":130.0,"damage":95.0,"interval":1.9,"range":354.0,"speed":36.0,"expansion":true,"projectile":true,"attack_style":"bow"},
 	"sigil_weaver":{"name":"符印織師","role":"護盾·支援","faction":"magic","type":"unit","cost":5,"cooldown":10.0,"count":1,"hp":210.0,"damage":36.0,"interval":1.4,"range":295.0,"speed":36.0,"expansion":true,"projectile":true,"support":"shield","support_amount":70.0,"duration":4.0,"radius":100.0,"period":3.0,"attack_style":"cast"},
 	"astrolabe_surveyor":{"name":"星盤測繪師","role":"偵察·遠程","faction":"magic","type":"unit","cost":4,"cooldown":10.0,"count":1,"hp":210.0,"damage":36.0,"interval":1.4,"range":295.0,"speed":36.0,"expansion":true,"projectile":true,"reveal_radius":210.0,"attack_style":"cast"},
@@ -177,16 +177,16 @@ const CARDS := {
 	"charge_horn":{"name":"衝鋒號令","role":"號角·衝鋒","faction":"normal","type":"spell","cost":3,"cooldown":5.0,"radius":100.0,"shape":[9,1],"duration":15.0},
 	"levy":{"name":"緊急徵召","role":"徵召·守土","faction":"normal","type":"spell","cost":8,"cooldown":5.0,"radius":100.0,"shape":[3,1]},
 	"net_hunter":{"name":"投網獵人","role":"投網·纏足","faction":"normal","type":"unit","projectile":true,"cost":6,"cooldown":5.0,"count":2,"hp":130.0,"damage":26.0,"interval":0.85,"range":236.0,"speed":36.0,"net_slow":3.0},
-	"watchtower":{"name":"瞭望塔","role":"偵查·增程","faction":"normal","type":"building","cost":3,"cooldown":5.0,"hp":560.0,"expires":-1.0,"radius":290.0},
+	"watchtower":{"name":"瞭望塔","role":"偵查·擴地","faction":"normal","type":"building","cost":3,"cooldown":5.0,"hp":560.0,"expires":-1.0,"radius":290.0,"territory_radius":2},
 	"sacrifice":{"name":"獻祭","role":"犧牲·充能","faction":"dark","series":"dark","type":"spell","cost":1,"cooldown":5.0,"radius":100.0,"shape":[2,2],"bite_cap":500.0,"gold_first":30.0,"gold_step":6.0,"charge_per_hp":0.2,"blast_share":0.5,"blast_min":90.0,"blast_max":600.0,"slow_duration":2.0},
 	"dread_howl":{"name":"恐懼嚎叫","role":"恐懼·破膽","faction":"dark","series":"dark","type":"spell","cost":2,"cooldown":5.0,"radius":150.0,"shape":[3,2],"duration":5.0,"terror_mult":1.5,"enemy_damage":55.0},
-	"mass_grave":{"name":"亂葬坑","role":"死亡·產兵","faction":"dark","series":"dark","type":"building","cost":8,"cooldown":30.0,"hp":350.0,"expires":-1.0,"period":40.0,"spawn_count":3,"death_advance":5.0},
+	"mass_grave":{"name":"亂葬坑","role":"死亡·產兵","faction":"dark","series":"dark","type":"building","cost":8,"cooldown":30.0,"hp":350.0,"expires":-1.0,"spawn_count":1},
 	"blood_tower":{"name":"鮮血塔","role":"儲血·治療","faction":"dark","series":"dark","type":"building","cost":3,"cooldown":30.0,"hp":350.0,"expires":-1.0,"blood_rate":5.0,"blood_per_death":50.0,"heal_rate":50.0,"restart_at":50.0,"blood_max":500.0},
 	# 封印祭壇 (2026-11-18): one per side, souls from every troop death, three seals; the last one
 	# releases 瘟疫主教 and his 送葬修士 (seal_altar.gd).
 	"seal_altar":{"name":"封印祭壇","role":"收魂·封印","faction":"dark","series":"dark","type":"building","cost":1,"cooldown":50.0,"hp":900.0,"expires":-1.0,"unique":true,"no_opening":true,"hold_cooldown":true,"radius":150.0,"soul_per_death":1.0,"seals":[20,40,60],"seal_fear":2.0,"summon":"plague_bishop","escort":["funeral_monk",4]},
 	"plague_bishop":{"name":"瘟疫主教","role":"鐘聲·腐土","faction":"dark","series":"dark","type":"unit","summon_only":true,"cost":1,"cooldown":0.0,"count":1,"hp":3000.0,"damage":130.0,"interval":1.4,"range":59.0,"speed":27.0,"body_radius":28.0,"attack_style":"heavy","expansion":true,"support":"slow","radius":150.0,"period":3.0,"duration":3.0,"roar_fear":2.0,"rot_period":2.0,"rot_radius":75.0,"rot_duration":8.0},
-	"funeral_monk":{"name":"送葬修士","role":"隨行·治療","faction":"dark","series":"dark","type":"unit","summon_only":true,"cost":1,"cooldown":0.0,"count":1,"hp":210.0,"damage":26.0,"interval":1.9,"range":236.0,"speed":27.0,"expansion":true,"projectile":true,"support":"heal","support_amount":26.0,"radius":100.0,"period":2.4,"attack_style":"cast"},
+	"funeral_monk":{"name":"送葬修士","role":"隨行·治療","faction":"dark","series":"dark","type":"unit","summon_only":true,"cost":1,"cooldown":0.0,"count":1,"hp":210.0,"damage":26.0,"interval":1.9,"range":236.0,"speed":27.0,"expansion":true,"projectile":true,"support":"heal","support_amount":26.0,"period":2.4,"attack_style":"cast"},
 	"manor_retainer":{"name":"莊園扈從","role":"領地·巡邏","faction":"normal","type":"unit","footprint":[1,2],"patrol":true,"cost":6,"cooldown":10.0,"count":2,"hp":560.0,"damage":70.0,"interval":1.1,"range":59.0,"speed":36.0},
 	"axe_thrower":{"name":"投斧手","role":"遠程·破甲","type":"unit","projectile":true,"ignore_armor":true,"cost":9,"cooldown":15.0,"count":1,"hp":350.0,"damage":180.0,"interval":1.9,"range":236.0,"speed":36.0},
 	"rolling_boulder":{"name":"巨石滾滾","role":"直線·敵我傷害","type":"spell","rolling":true,"cost":7,"cooldown":15.0,"radius":37.0,"damage":230.0,"building_damage":230.0,"gate_damage":230.0,"roll_speed":240.0},
@@ -245,7 +245,16 @@ const CARDS := {
 	"knight":{"name":"騎士","role":"主坦","faction":"normal","type":"unit","footprint":[1,2],"cost":18,"cooldown":25.0,"count":2,"hp":900.0,"damage":95.0,"interval":1.9,"range":59.0,"speed":27.0},
 	"guard":{"name":"聖堂護衛","role":"重裝軍團","faction":"normal","type":"unit","footprint":[2,2],"cost":26,"cooldown":30.0,"members":[["knight",2,0.0],["healer",2,50.0]],"art":["knight","healer"]},
 	"mill":{"name":"磨坊","role":"大型經濟","faction":"normal","type":"building","ai":["obstacle"],"cost":18,"cooldown":40.0,"hp":900.0,"expires":-1.0,"body_radius":24.0},
-	"ram":{"name":"攻城槌","faction":"normal","role":"終結·破門","type":"unit","footprint":[2,1],"hits":"buildings","ai":["hold"],"cost":17,"cooldown":60.0,"members":[["ram",1,0.0],["militia",4,40.0]],"art":["ram","militia"],"count":1,"hp":1500.0,"damage":360.0,"interval":2.4,"range":0.0,"speed":20.0,"body_radius":28.0,"mechanical":true}
+	"ram":{"name":"攻城槌","faction":"normal","role":"終結·破門","type":"unit","footprint":[2,1],"hits":"buildings","ai":["hold"],"cost":17,"cooldown":60.0,"members":[["ram",1,0.0],["militia",4,40.0]],"art":["ram","militia"],"count":1,"hp":1500.0,"damage":360.0,"interval":2.4,"range":0.0,"speed":20.0,"body_radius":28.0,"mechanical":true},
+	# 季節 BOSS 專屬 2×2 單體巨獸（2026-11-23）：8 位季節 BOSS 各自將牌組中 1 張代表卡強化為 6666 血 SSS 檔 2×2 巨獸。
+	"giant_arcane_golem":{"name":"巨型奧術魔像","role":"巨獸·共鳴","faction":"magic","series":"magic","type":"unit","boss_only":true,"giant":true,"footprint":[2,2],"art":"arcane_golem","construct":true,"cost":22,"cooldown":40.0,"count":1,"hp":6666.0,"damage":130.0,"interval":1.4,"range":59.0,"speed":27.0,"body_radius":90.0,"attack_style":"heavy","resonance":0.15,"resonance_max":0.45,"explosion_damage":370.0,"radius":150.0,"blast":"square"},
+	"giant_catapult":{"name":"巨型投石車","role":"巨獸·拋射","faction":"normal","type":"unit","boss_only":true,"giant":true,"footprint":[2,2],"art":"catapult","cost":24,"cooldown":50.0,"count":1,"hp":6666.0,"damage":230.0,"area_damage":230.0,"interval":2.4,"range":472.0,"min_range":236.0,"radius":150.0,"blast":"square","flight_time":0.8,"speed":20.0,"body_radius":90.0,"mechanical":true,"attack_style":"siege"},
+	"giant_thorn_dragon":{"name":"巨型骨刺龍","role":"巨獸·反傷","faction":"beast","series":"beast","type":"unit","boss_only":true,"giant":true,"footprint":[2,2],"art":"thorn_dragon","cost":24,"cooldown":50.0,"count":1,"hp":6666.0,"damage":180.0,"interval":1.9,"range":59.0,"speed":36.0,"body_radius":90.0,"attack_style":"heavy","thorns":130.0},
+	"giant_corpse_giant":{"name":"巨型腐屍巨人","role":"巨獸·屍爆","faction":"dark","series":"dark","type":"unit","boss_only":true,"giant":true,"footprint":[2,2],"art":"corpse_giant","cost":24,"cooldown":50.0,"count":1,"hp":6666.0,"damage":130.0,"interval":1.1,"range":59.0,"speed":27.0,"body_radius":90.0,"attack_style":"heavy","burst_step":0.2,"burst_count":6},
+	"giant_thorn_mother":{"name":"巨型荊棘母獸","role":"巨獸·光環","faction":"beast","series":"beast","type":"unit","boss_only":true,"giant":true,"footprint":[2,2],"art":"thorn_mother","cost":22,"cooldown":50.0,"count":1,"hp":6666.0,"damage":130.0,"interval":1.4,"range":59.0,"speed":36.0,"body_radius":90.0,"attack_style":"heavy","expansion":true,"thorns":130.0,"thorns_aura":70.0,"radius":210.0,"on_death_spawn":["pouch_beast",2]},
+	"giant_dire_hydra":{"name":"巨型三頭狂蜥","role":"巨獸·三連","faction":"beast","series":"beast","type":"unit","boss_only":true,"giant":true,"footprint":[2,2],"art":"dire_hydra","cost":28,"cooldown":50.0,"count":1,"hp":6666.0,"damage":95.0,"interval":2.4,"range":59.0,"speed":36.0,"body_radius":90.0,"attack_style":"heavy","expansion":true,"regen_amount":95.0,"period":2.4,"strikes":3},
+	"giant_knight":{"name":"巨型騎士","role":"巨獸·衝鋒","faction":"normal","type":"unit","boss_only":true,"giant":true,"footprint":[2,2],"art":"knight","cost":22,"cooldown":40.0,"count":1,"hp":6666.0,"damage":180.0,"interval":1.4,"range":59.0,"speed":36.0,"body_radius":90.0,"attack_style":"heavy","expansion":true,"armor":26.0,"charge":true},
+	"giant_plague_bishop":{"name":"巨型瘟疫主教","role":"巨獸·腐土","faction":"dark","series":"dark","type":"unit","boss_only":true,"giant":true,"footprint":[2,2],"art":"plague_bishop","cost":26,"cooldown":60.0,"count":1,"hp":6666.0,"damage":180.0,"interval":1.4,"range":59.0,"speed":27.0,"body_radius":90.0,"attack_style":"heavy","expansion":true,"support":"slow","radius":210.0,"period":3.0,"duration":3.0,"roar_fear":2.5,"rot_period":2.0,"rot_radius":100.0,"rot_duration":10.0}
 }
 
 # Behaviour fields a card may carry (read by battle.gd; a new card only needs the fields):
@@ -401,11 +410,13 @@ static func validate() -> Array[String]:
 		if c.has("dot_damage") and (tier("area_damage",c.dot_damage).is_empty() or c.get("dot_interval",0.0) <= 0.0 or int(c.get("dot_ticks",0)) < 1 or (c.has("area_damage") != c.has("radius"))): problems.append(kind+": invalid dot values")
 		if c.has("min_range") and (c.min_range < 0 or c.min_range >= c.get("range",0)): problems.append("%s: invalid minimum range" % kind)
 		if c.has("blast") and blast_offsets(String(c.blast)).size() <= 1 and String(c.blast) != "cell": problems.append("%s: unknown blast shape %s" % [kind,str(c.blast)])
-		if c.has("body_radius") and (c.body_radius <= 0.0 or c.body_radius > 60.0): problems.append("%s: invalid body_radius" % kind)
+		var max_r := 120.0 if c.get("giant",false) else 60.0
+		if c.has("body_radius") and (c.body_radius <= 0.0 or c.body_radius > max_r): problems.append("%s: invalid body_radius" % kind)
+		if c.get("giant",false) and (type != "unit" or int(c.get("count",0)) != 1 or c.get("footprint",[]) != [2,2]): problems.append("%s: giant unit needs type=unit, count=1, footprint=[2,2]" % kind)
 		# The description reads the fields above, so only build it once they are all present.
 		if problems.size() == before and card_description(kind).is_empty(): problems.append("%s: no description" % kind)
 	# Shared constants sit on the tier table too (moved here from the old smoke test, 2026-11-09).
-	for check: Array in [["HEAL_RADIUS","radius",HEAL_RADIUS],["LORD_RANGE","range",LORD_RANGE],["LORD_RANGED_RANGE_MED","range",LORD_RANGED_RANGE_MED],["LORD_RANGED_RANGE_FAR","range",LORD_RANGED_RANGE_FAR],["LORD_INTERVAL","interval",LORD_INTERVAL],["LORD_RANGED_INTERVAL","interval",LORD_RANGED_INTERVAL],["GATE_HP","hp",GATE_HP],["HEAL_AMOUNT","damage",HEAL_AMOUNT],["HEAL_INTERVAL","interval",HEAL_INTERVAL],["LION_KNIGHT_SPEED","speed",LION_KNIGHT_SPEED]]:
+	for check: Array in [["HEAL_RADIUS","range",HEAL_RADIUS],["LORD_RANGE","range",LORD_RANGE],["LORD_RANGED_RANGE_MED","range",LORD_RANGED_RANGE_MED],["LORD_RANGED_RANGE_FAR","range",LORD_RANGED_RANGE_FAR],["LORD_INTERVAL","interval",LORD_INTERVAL],["LORD_RANGED_INTERVAL","interval",LORD_RANGED_INTERVAL],["GATE_HP","hp",GATE_HP],["HEAL_AMOUNT","damage",HEAL_AMOUNT],["HEAL_INTERVAL","interval",HEAL_INTERVAL],["LION_KNIGHT_SPEED","speed",LION_KNIGHT_SPEED]]:
 		if tier(check[1],check[2]).is_empty(): problems.append("%s %s is not a %s tier value" % [check[0],str(check[2]),check[1]])
 	for kind: String in LORDS:
 		for key: String in LORD_NEEDS:
@@ -475,10 +486,12 @@ const LORDS := {
 # the deck screen, codex, watch mode and online play never offer them. Instead of a skill each
 # has one passive rule (all optional):
 #   no_farms        no home card and no starting farms        income_mult   base gold tick multiplier
-#   toughen [kinds] those troops one hp tier up (max SS)      haste [kinds] those troops one speed and
-#   swarm {kind:n}  each such card deploys n more troops                    attack tier up ("*" = all)
+#   toughen {k:pct} troop HP additive +% (array = +35%)     haste {k:pct} move/attack speed +% (+25%)
+#   swarm {kind:n}  each such card deploys n more troops
 #   start_buildings [[col,lane,kind]] placed at the start, columns counted from its own back edge
 # "card" names the card whose picture stands in for the lord's portrait.
+const TOUGHEN_PCT := 0.35
+const HASTE_PCT := 0.25
 const MINION_LORDS := {
 	"card_enemy_glutton_nest":{"name":"貪食巢穴","card":"glutton_nest","role":"吞噬型","hp":1500.0,"damage":95.0,"speed":36.0,"home_card":"glutton_nest","start_buildings":[[2,1,"glutton_nest"],[2,3,"glutton_nest"]]},
 	"card_enemy_mana_spring":{"name":"法力湧泉","card":"mana_spring","role":"水晶型","hp":560.0,"damage":50.0,"speed":50.0,"home_card":"crystal","cycle_speed":{"mana_spring":1.5}},
@@ -552,8 +565,8 @@ const MINION_LORDS := {
 	"dragon_lord":{"name":"骨刺龍王","card":"thorn_dragon","role":"魔物型","hp":1500.0,"damage":130.0,"speed":50.0,"home_card":"glutton_nest","toughen":["thorn_dragon"]},
 	"card_enemy_mule_cart":{"name":"騾馬貨車","card":"mule_cart","role":"運貨型","hp":900.0,"damage":70.0,"speed":36.0,"haste":["mule_cart"],"income_mult":1.25},
 	"card_enemy_hook_collector":{"name":"鉤鐮收債人","card":"hook_collector","role":"收債型","hp":560.0,"damage":70.0,"speed":50.0,"haste":["hook_collector"],"income_mult":1.2},
-	"card_enemy_twin_gambler":{"name":"雙刃賭徒","card":"twin_gambler","role":"賭命型","hp":900.0,"damage":95.0,"speed":65.0,"swarm":{"twin_gambler":1}},
-	"card_enemy_gold_monster":{"name":"金幣怪物","card":"gold_monster","role":"傾囊型","hp":900.0,"damage":70.0,"speed":50.0,"income_mult":1.35,"cycle_speed":{"gold_monster":1.5}},
+	"card_enemy_twin_gambler":{"name":"雙刃賭徒","card":"twin_gambler","role":"賭命型","hp":900.0,"damage":95.0,"speed":65.0,"haste":["twin_gambler"]},
+	"card_enemy_gold_monster":{"name":"金幣怪物","card":"gold_monster","role":"傾囊型","hp":900.0,"damage":70.0,"speed":50.0,"income_mult":1.2,"cycle_speed":{"gold_monster":1.5}},
 	"card_enemy_spell_tide_magus":{"name":"咒潮大法師","card":"spell_tide_magus","role":"咒潮型","hp":900.0,"damage":70.0,"speed":50.0,"home_card":"crystal","cycle_speed":{"*":1.25}},
 	"card_enemy_thorn_mother":{"name":"荊棘巢母","card":"thorn_mother","role":"荊棘型","hp":1500.0,"damage":95.0,"speed":36.0,"home_card":"glutton_nest","toughen":["thorn_mother","pouch_beast"]},
 	"card_enemy_gatebreaker":{"name":"破門錘手","card":"gatebreaker","role":"破門型","hp":900.0,"damage":50.0,"speed":50.0,"toughen":["gatebreaker"]},
@@ -631,7 +644,7 @@ const MINION_LORDS := {
 	"card_enemy_blood_cauldron":{"name":"沸血魔鍋","card":"blood_cauldron","role":"暴擊型","hp":1500.0,"damage":70.0,"speed":36.0,"home_card":"glutton_nest","start_buildings":[[1,2,"blood_cauldron"]]},
 	"card_enemy_hive_nest":{"name":"飛魔巢穴","card":"hive_nest","role":"空軍型","hp":1500.0,"damage":95.0,"speed":36.0,"home_card":"glutton_nest","start_buildings":[[1,1,"hive_nest"],[1,3,"hive_nest"]]},
 	"card_enemy_leech_vine":{"name":"吸血蔓藤","card":"leech_vine","role":"吸血型","hp":560.0,"damage":50.0,"speed":36.0,"home_card":"glutton_nest","start_buildings":[[2,2,"leech_vine"]]},
-	"card_enemy_imp_burrow":{"name":"小鬼地洞","card":"imp_burrow","role":"偷金型","hp":1500.0,"damage":95.0,"speed":36.0,"home_card":"glutton_nest","start_buildings":[[1,1,"imp_burrow"],[1,3,"imp_burrow"]]},
+	"card_enemy_imp_burrow":{"name":"小鬼地洞","card":"imp_burrow","role":"偷金型","hp":1500.0,"damage":95.0,"speed":36.0,"home_card":"glutton_nest","start_buildings":[[1,2,"imp_burrow"]]},
 	"card_enemy_berserk_blood":{"name":"狂血激發","card":"berserk_blood","role":"狂暴型","hp":900.0,"damage":95.0,"speed":65.0,"home_card":"glutton_nest","cycle_speed":{"berserk_blood":1.5}},
 	"card_enemy_corrosive_bile":{"name":"腐蝕酸雨","card":"corrosive_bile","role":"破防型","hp":900.0,"damage":95.0,"speed":50.0,"home_card":"glutton_nest","cycle_speed":{"corrosive_bile":1.5}},
 	"card_enemy_pack_ambush":{"name":"獸群突襲","card":"pack_ambush","role":"撲擊型","hp":900.0,"damage":70.0,"speed":65.0,"home_card":"glutton_nest","cycle_speed":{"pack_ambush":1.5}},
@@ -701,8 +714,11 @@ static func minion_skill(lord: String) -> Dictionary:
 				"summon_count":1,
 				"skill_gold":16
 			}
-		var summon_count := 2 if int(c.cost) <= 8 else 1
-		var cost := 25.0 if int(c.cost) <= 8 else (30.0 if int(c.cost) <= 14 else 35.0)
+		var eff_cost: int = int(c.cost)
+		if c.get("summon_only",false):
+			eff_cost = 15 if float(c.get("hp",0.0)) >= 1500.0 else (10 if float(c.get("hp",0.0)) >= 900.0 else eff_cost)
+		var summon_count := 2 if eff_cost <= 8 else 1
+		var cost := 25.0 if eff_cost <= 8 else (30.0 if eff_cost <= 14 else 35.0)
 		return {
 			"skill":"親衛：%s" % c.name,
 			"skill_cost":cost,
@@ -762,28 +778,44 @@ static func minion_text(lord: String) -> String:
 static func passive_text(d: Dictionary) -> String:
 	var parts: Array[String] = []
 	if d.has("start_ink"): parts.append("開局金幣 +%d" % int(d.start_ink))
-	if d.has("farm_mult"): parts.append("農田產出 ×%s" % number(d.farm_mult))
+	if d.has("farm_mult"): parts.append("農田產出 %+d%%" % roundi((float(d.farm_mult)-1.0)*100.0))
 	if d.get("no_farms",false): parts.append("不帶農田")
-	if d.has("income_mult"): parts.append("自然增長金幣 ×%s" % number(d.income_mult))
+	if d.has("income_mult"): parts.append("自然增長金幣 %+d%%" % roundi((float(d.income_mult)-1.0)*100.0))
+	if d.has("cd_speed_mult"): parts.append("出牌冷卻速度 %+d%%" % roundi((float(d.cd_speed_mult)-1.0)*100.0))
+	if d.has("gold_gain_mult"): parts.append("全部收入 %+d%%" % roundi((float(d.gold_gain_mult)-1.0)*100.0))
 	if d.has("home_card"): parts.append("常駐牌改為%s" % CARDS[d.home_card].name)
-	for kind: String in d.get("cycle_speed",{}): parts.append("%s手牌冷卻速度 ×%s" % ["全部卡牌" if kind == "*" else CARDS[kind].name,number(d.cycle_speed[kind])])
-	for kind: String in d.get("toughen",[]): parts.append(("全軍" if kind == "*" else CARDS[kind].name)+"生命升一檔")
-	for kind: String in d.get("haste",[]): parts.append(("全軍" if kind == "*" else CARDS[kind].name)+"移速與攻速升一檔")
+	for kind: String in d.get("cycle_speed",{}): parts.append("%s手牌冷卻速度 %+d%%" % ["全部卡牌" if kind == "*" else CARDS[kind].name,roundi((float(d.cycle_speed[kind])-1.0)*100.0)])
+	var t_mod = d.get("toughen",{})
+	if t_mod is Dictionary:
+		for kind: String in t_mod: parts.append("%s生命 +%d%%" % ["全軍" if kind == "*" else CARDS[kind].name,roundi(float(t_mod[kind])*100.0)])
+	elif t_mod is Array:
+		for kind: String in t_mod: parts.append("%s生命 +%d%%" % ["全軍" if kind == "*" else CARDS[kind].name,roundi(TOUGHEN_PCT*100.0)])
+	var h_mod = d.get("haste",{})
+	if h_mod is Dictionary:
+		for kind: String in h_mod: parts.append("%s移速與攻速 +%d%%" % ["全軍" if kind == "*" else CARDS[kind].name,roundi(float(h_mod[kind])*100.0)])
+	elif h_mod is Array:
+		for kind: String in h_mod: parts.append("%s移速與攻速 +%d%%" % ["全軍" if kind == "*" else CARDS[kind].name,roundi(HASTE_PCT*100.0)])
 	for kind: String in d.get("swarm",{}): parts.append("%s每張多 %d 名" % ["部隊卡" if kind == "*" else CARDS[kind].name,int(d.swarm[kind])])
 	if d.has("start_buildings"):
 		var names := {}
 		for b: Array in d.start_buildings: names[CARDS[b[2]].name] = true
 		parts.append("開局已蓋好"+"、".join(names.keys()))
-	if d.has("skill_discount"): parts.append("領主技能充能 -%d" % int(d.skill_discount*SKILL_CHARGE_MULT))
-	if d.has("skill_haste"): parts.append("領主技能冷卻 ×%s" % number(d.skill_haste))
+	if d.has("skill_discount"): parts.append("領主技能所需充能 -%d%%" % roundi(float(d.skill_discount)*100.0))
+	if d.has("skill_haste"): parts.append("領主技能冷卻速度 %+d%%" % roundi((float(d.skill_haste)-1.0)*100.0))
+	if d.has("lord_pct"): parts.append("上場領主生命與傷害 +%d%%" % roundi(float(d.lord_pct)*100.0))
 	if d.has("lord_boost"): parts.append("上場領主生命與傷害升 %d 檔" % int(d.lord_boost))
 	if d.has("gate_armor"): parts.append("城牆減傷 %d%%" % roundi(d.gate_armor*100.0))
 	if d.has("thorns_gate"): parts.append("城牆反傷 %d" % int(d.thorns_gate))
 	if d.has("kill_bounty"): parts.append("擊殺敵兵賞金 +%s" % number(d.kill_bounty))
-	if d.has("post_heal"): parts.append("戰後每座城牆修 %d、領主治 %d" % [int(d.post_heal.get("gate",0)),int(d.post_heal.get("lord",0))])
+	if d.has("post_heal"):
+		var heal_parts: Array = []
+		if float(d.post_heal.get("gate",0.0)) > 0.0: heal_parts.append("每座城牆修 %d%%" % roundi(float(d.post_heal.gate)*100.0))
+		if float(d.post_heal.get("lord",0.0)) > 0.0: heal_parts.append("領主治 %d%%" % roundi(float(d.post_heal.lord)*100.0))
+		if not heal_parts.is_empty(): parts.append("戰後"+"、".join(heal_parts))
 	if d.has("gold_bonus"): parts.append("戰勝金幣 +%d%%" % roundi(d.gold_bonus*100.0))
 	if d.get("targeted_upgrade",false): parts.append("商店與營火／古祠強化改為自選屬性（不隨機）")
-	if d.has("skill_charge_mult"): parts.append("領主技能充能 ×%s" % number(d.skill_charge_mult))
+	if d.has("upgrade_discount"): parts.append("商店強化費用 -%d%%" % roundi(float(d.upgrade_discount)*100.0))
+	if d.has("skill_charge_mult"): parts.append("領主技能充能 %+d%%" % roundi((float(d.skill_charge_mult)-1.0)*100.0))
 	if d.has("skill_start_charge"): parts.append("開局技能已充能 %d%%" % roundi(d.skill_start_charge*100.0))
 	if d.has("skill_echo_gold"): parts.append("每次施放領主技能得 %d 金幣" % int(d.skill_echo_gold))
 	if d.has("kill_charge"): parts.append("每擊殺 1 名敵兵技能充能 +%d" % int(d.kill_charge))
@@ -819,8 +851,10 @@ static func skill_cost(kind: String) -> float:
 # plus SKILL_CHARGE_BASE; a "skill_discount" lowers the value first.
 const SKILL_CHARGE_MULT := 2.0
 const SKILL_CHARGE_BASE := 10.0
+const BREACH_SKILL_CHARGE := 0.5 # share of the meter a side gets at once when one of its walls falls (2026-11-23)
 static func skill_charge_need(kind: String, discount: float = 0.0) -> float:
-	return maxf(0.0,skill_cost(kind)-discount)*SKILL_CHARGE_MULT+SKILL_CHARGE_BASE
+	var base := skill_cost(kind)*SKILL_CHARGE_MULT+SKILL_CHARGE_BASE
+	return maxf(10.0,base*(1.0-clampf(discount,0.0,0.6)))
 
 # One-line skill text for the deck screen, battle panel and help.
 static func skill_text(kind: String) -> String:
@@ -844,7 +878,7 @@ const TIERS := {
 	"radius":[760.0,470.0,290.0,210.0,150.0,100.0,75.0,52.0,37.0,26.0], # S spans 5 x 5 cells
 	"area_damage":[2400.0,1200.0,600.0,370.0,230.0,140.0,90.0,55.0,35.0,20.0], # spells and explosions
 	"damage":[720.0,360.0,180.0,130.0,95.0,70.0,50.0,36.0,26.0,20.0], # producer 2026-11-05: G = 20, A-F between S and G as whole numbers
-	"hp":[6000.0,3000.0,1500.0,900.0,560.0,350.0,210.0,130.0,80.0,50.0],
+	"hp":[6666.0,3000.0,1500.0,900.0,560.0,350.0,210.0,130.0,80.0,50.0],
 	"range":[531.0,472.0,413.0,354.0,295.0,236.0,177.0,118.0,59.0,0.0], # cells x 118: 4.5 4 3.5 3 2.5 2 1.5 1 0.5 0 (2026-11-19: 0.5-cell steps across half the 9-cell field)
 	"speed":[360.0,240.0,160.0,120.0,90.0,65.0,50.0,36.0,27.0,20.0],
 	"interval":[0.18,0.27,0.4,0.5,0.65,0.85,1.1,1.4,1.9,2.4],
@@ -855,7 +889,7 @@ const TIERS := {
 const TIER_NOTES := {
 	"cooldown":["極速輪轉","高速輪轉","快攻補兵","快速補充","短冷卻","標準輪轉","中等冷卻","較長冷卻","長冷卻","慢速補充"],
 	"hp":[
-		"最終 BOSS：關卡魔王專用，整場戰役合力才打得倒",
+		"最終 BOSS／巨獸：關卡魔王與季節巨獸專用，整場戰役合力才打得倒",
 		"頂級城牆：要一整支軍隊圍攻才拆得掉",
 		"優質肉盾：重裝前排與重型器械",
 		"主坦・英雄：能單獨扛住一路",
@@ -953,7 +987,7 @@ static func tier_note(stat: String, value: float) -> String:
 
 const MILL_BONUS := 2.0
 const HARVEST_TIME := 15.0 # 豐收 doubles farms this long; no instant payout since 2026-10-30
-const HEAL_RADIUS := 100.0 # radius tier C
+const HEAL_RADIUS := 236.0 # range tier C (2 cells), matches 草藥婆 attack range
 const HEAL_AMOUNT := 50.0
 const HEAL_INTERVAL := 2.4
 # One charge rule for every charging troop (2026-11-20): the charge hit deals x CHARGE_MULT, knocks the
@@ -1004,8 +1038,14 @@ static func actor_grid_cell(a: Dictionary) -> Vector2i:
 # forward: +1 when the attacker is red (team 0), -1 when blue, so rows run away from the attacker.
 static func blast_hits(center: Vector2, shape: String, forward: int, target: Dictionary) -> bool:
 	var c := grid_cell_at(center)
+	var offs := blast_offsets(shape)
+	if target.get("giant",false):
+		var tcells: Array[Vector2i] = preload("res://giant_unit.gd").cells(target)
+		for o: Vector2i in offs:
+			if (c+Vector2i(o.x*forward,o.y)) in tcells: return true
+		return false
 	var t := actor_grid_cell(target)
-	for o: Vector2i in blast_offsets(shape):
+	for o: Vector2i in offs:
 		if c+Vector2i(o.x*forward,o.y) == t: return true
 	return false
 
@@ -1029,7 +1069,8 @@ static func troop_description(kind: String, count: int, cards: Dictionary, inclu
 
 static func card_description(kind: String, cards: Dictionary = CARDS) -> String:
 	var d: Dictionary = cards[kind]
-	var lines: Array[String] = ["召喚限定" if d.get("summon_only",false) else "%s 金幣 · 冷卻 %s 秒" % [number(d.cost),number(d.cooldown)]]
+	var head: String = "召喚限定" if d.get("summon_only",false) else (("季節 BOSS 專屬 · " if d.get("boss_only",false) else "") + "%s 金幣 · 冷卻 %s 秒" % [number(d.cost),number(d.cooldown)])
+	var lines: Array[String] = [head]
 	if d.type == "unit":
 		if d.has("members"):
 			for group: Array in d.members:
@@ -1068,10 +1109,10 @@ static func card_description(kind: String, cards: Dictionary = CARDS) -> String:
 		"charge_horn": lines.append("施放的那一路我方部隊移速與攻速各提高一檔（最高 S），持續 %s 秒；與戰鼓、其他號令等加速疊加。" % number(d.duration))
 		"levy": lines.append("我方領地內每有 1 名敵方地面部隊，就在它前方召喚 1 名民兵；這些民兵移速與攻速各提高一檔（可與其他加速疊加），離開我方領地即消失。領地內沒有敵人時不能施放。")
 		"net_hunter": lines.append("命中的地面敵人被網住 %s 秒，移速與攻速減半；重複命中只刷新時間。" % number(d.net_slow))
-		"watchtower": lines.append("範圍內進行偵查，潛行敵人現形並永久失去潛行；範圍內我方會射擊的部隊與箭樓射程提高一檔。本身不攻擊。")
+		"watchtower": lines.append("額外擴張領地至周圍 %d 格（%d×%d，一般建築為 3×3）；範圍內進行偵查，潛行敵人現形並永久失去潛行；範圍內我方會射擊的部隊與箭樓射程提高一檔。本身不攻擊。" % [int(d.get("territory_radius",1)),int(d.get("territory_radius",1))*2+1,int(d.get("territory_radius",1))*2+1])
 		"sacrifice": lines.append("對範圍內所有我方部隊造成等同目前生命的真實傷害（目前生命大於 %s 只造成 %s 傷害；正常觸發死亡效果）。依本次造成總傷害換金（貪食巢穴雙倍轉換率）：首枚 %s 血，其後每枚多 %s 血，不足不計；並且每扣 5 點生命換 1 點領主技能充能。同時引發血祭爆裂，對範圍內敵方部隊造成獻祭總傷害 %d%% 的傷害（最低 %s、最高 %s）並使其減速 %s 秒。範圍內沒有我方部隊時不能施放。" % [number(d.bite_cap),number(d.bite_cap),number(d.gold_first),number(d.gold_step),int(d.blast_share*100),number(d.blast_min),number(d.blast_max),number(d.slow_duration)])
 		"dread_howl": lines.append("對範圍內敵方部隊造成 %s 傷害，並使其轉身往自己城牆逃跑且減速 %s 秒（期間不攻擊、受傷害 ×%s 破膽，期間死亡將化為我方骷髏兵）；範圍內我方部隊移速與攻速升一檔 4 秒以利追擊。" % [number(d.enemy_damage),number(d.duration),number(d.terror_mult)])
-		"mass_grave": lines.append("每 %s 秒爬出 %d 隻骷髏兵；本路每名敵我部隊死亡，提前 %s 秒，超出的時間不保留。" % [number(d.period),int(d.spawn_count),number(d.death_advance)])
+		"mass_grave": lines.append("全場任意一路每有 1 名非骷髏敵我部隊死亡時，立刻爬出 %d 隻骷髏兵。" % int(d.spawn_count))
 		"blood_tower": lines.append("平時每秒存 %s 點血，本路每死 1 名部隊 +%s；以每秒 %s 點平均治療本路受傷友軍。存量歸零後要超過 %s 才重新輸出，上限 %s。" % [number(d.blood_rate),number(d.blood_per_death),number(d.heal_rate),number(d.restart_at),number(d.blood_max)])
 		"borrowed_bones": lines.append("在落點召喚 %d 隻骷髏兵，%s 秒後回到棺裡消失（不算死亡）；歸還時每隻在%s範圍骨爆，造成 %s 傷害。" % [int(d.summon_count),number(d.summon_life),blast_text(d.blast),number(d.return_blast)])
 		"grave_exchange": lines.append("拆掉範圍內我方建築（常駐牌除外），每座退還一半費用並冒出 %d 隻骷髏兵。範圍內沒有可拆建築時不能施放。" % int(d.skeletons))
@@ -1083,7 +1124,7 @@ static func card_description(kind: String, cards: Dictionary = CARDS) -> String:
 		"chimera": lines.append("由召喚法陣召喚的地面近戰部隊；不能直接加入牌組。")
 		"dark_wizard": lines.append("致命傷害時吞噬 3×3 格內最近的友方部隊，以其最大生命續命，可反覆觸發。領主、建築與未登場者除外。")
 		"blink_blade": lines.append("每次受傷向前閃現 %s 格，優先攻擊前方；不能越過城牆。" % number(d.blink_step))
-		"arcane_golem": lines.append("每座友方水晶減傷 %s%%，最多 %s%%；構裝單位，工匠可修補且免疫毒蝕。死亡時對%s內敵兵造成 %s 傷害。" % [number(d.resonance*100),number(d.resonance_max*100),blast_text(d.blast),number(d.explosion_damage)])
+		"arcane_golem", "giant_arcane_golem": lines.append("每座友方水晶減傷 %s%%，最多 %s%%；構裝單位，工匠可修補且免疫毒蝕。死亡時對%s內敵兵造成 %s 傷害。" % [number(d.resonance*100),number(d.resonance_max*100),blast_text(d.blast),number(d.explosion_damage)])
 		"arcane_archer": lines.append("光箭飛行 %s 秒，貫穿本路 %s（索敵距離的 %s 倍）的敵方部隊、建築與城牆；可對空，命中進行偵查（永久失去潛行）。" % [number(ARROW_TIME),cells_text(d.range*d.pierce_range_multiplier),number(d.pierce_range_multiplier)])
 		"chronomancer": lines.append("落點半徑 %s 造成 %s 傷害，敵兵暈眩 %s 秒；不縮短既有暈眩。" % [number(d.radius),number(d.area_damage),number(d.stun_on_hit)])
 		"phase_rider": lines.append("登場時潛行穿陣：潛行中只有法術打得到，不觸發陷阱；發動攻擊或被偵查時，永久失去潛行。")
@@ -1098,14 +1139,14 @@ static func card_description(kind: String, cards: Dictionary = CARDS) -> String:
 		"bearded_imp": lines.append("每次打中敵方建築或城牆，從敵方偷走 %s 金幣給我方；敵方沒錢時偷不到。" % number(d.steal_gold))
 		"hooknose_flyer": lines.append("飛行：近戰部隊與建築打不到它，遠程、箭樓與領主仍可攻擊。它會攻擊地面部隊。")
 		"long_dragon": lines.append("吐出火焰，沿本路往前燒 %s，途中每名敵方部隊與建築各受一次傷害。" % cells_text(d.range*d.pierce_range_multiplier))
-		"thorn_dragon": lines.append("每次被近戰部隊打中，攻擊者受到 %s 反傷；遠程、法術與領主不會被刺傷。" % number(d.thorns))
+		"thorn_dragon", "giant_thorn_dragon": lines.append("每次被近戰部隊打中，攻擊者受到 %s 反傷；遠程、法術與領主不會被刺傷。" % number(d.thorns))
 		"barricade": lines.append("沒有特殊效果。不攻擊、不產金、不反傷；依一般建築規則提供領地。")
 		"bandit": lines.append("登場時潛行：潛行中只有法術打得到（領主看得見、會去攔，但打不到）；發動攻擊後現形，脫戰持續移動 %s 秒後再次潛行（被偵查揭露則永久失去潛行）。" % number(CHARGE_RESET_TIME))
-		"corpse_giant": lines.append("生命每減少 %d%%（含死亡）就在原地爆出 %d 名骷髏兵；自身死亡仍會加速墓碑並觸發吞噬。" % [int(d.burst_step*100),int(d.burst_count)])
+		"corpse_giant", "giant_corpse_giant": lines.append("生命每減少 %d%%（含死亡）就在原地爆出 %d 名骷髏兵；自身死亡仍會加速墓碑並觸發吞噬。" % [int(d.burst_step*100),int(d.burst_count)])
 		"curse": lines.append("範圍內所有部隊（含我方）受到永久詛咒；死亡時在原地變成我方骷髏兵。")
-		"catapult": lines.append("攻擊本路 %s～%s 內最遠敵方部隊、建築或城牆；每 %s 秒拋射，%s 秒後落地，對落點%s內敵方部隊、建築與城牆造成 %s 範圍傷害。落點不追蹤移動。" % [cells_text(d.min_range),cells_text(d.range),number(d.interval),number(d.flight_time),blast_text(d.blast),number(d.area_damage)])
+		"catapult", "giant_catapult": lines.append("攻擊%s %s～%s 內最遠敵方部隊、建築或城牆；每 %s 秒拋射，%s 秒後落地，對落點%s內敵方部隊、建築與城牆造成 %s 範圍傷害。落點不追蹤移動。" % ["涵蓋兩路" if d.get("giant",false) else "本路",cells_text(d.min_range),cells_text(d.range),number(d.interval),number(d.flight_time),blast_text(d.blast),number(d.area_damage)])
 		"drummer": lines.append("登場時與之後每 10 秒擊鼓，全場友軍（不含自身）移速與攻速各升一檔，持續 3 秒，最高 S。多名戰鼓手的鼓聲重疊時各算一檔，可與其他加速疊加。")
-		"shieldguard": lines.append("每次受到傷害減少 %s，最低仍受 1 傷害。" % number(d.armor))
+		"shieldguard", "giant_knight": lines.append("每次受到傷害減少 %s，最低仍受 1 傷害。" % number(d.armor))
 		"grave": lines.append("每 %s 秒產出 %s 金幣；本路每名敵我部隊死亡，提前 %s 秒，超出的時間不保留。" % [number(d.period),number(d.income),number(d.death_advance)])
 		"ghoul": lines.append("半徑 %s 內每名敵我部隊死亡，回復 %s 生命，攻擊升一檔，最高 A 檔 %s。" % [number(d.radius),number(d.devour_heal),number(tier_value("damage",d.max_damage_tier))])
 		"necromancer": lines.append("進場時前排三路各帶 1 名骷髏兵（出場時不額外召喚）；之後每 %s 秒，在本路與相鄰兩路同一欄各召喚 %d 名骷髏兵。" % [number(d.summon_interval),d.summon_per_lane])
@@ -1120,7 +1161,9 @@ static func card_description(kind: String, cards: Dictionary = CARDS) -> String:
 		"harvest": lines.append("範圍內農田持續 %s 秒產出加倍（不會立刻產出）；與耕田、磨坊的加成相乘疊加。" % number(HARVEST_TIME))
 		"fire": lines.append("敵方部隊擊退 %s。" % number(FIRE_KNOCKBACK))
 		"ox": lines.append("建築與城牆傷害 ×%s。" % number(OX_BUILDING_BONUS))
-		"healer", "guard": lines.append("草藥婆每 %s 秒為半徑 %s 內友軍部隊回復 %s 生命，並減輕 1 層毒蝕。" % [number(HEAL_INTERVAL),number(HEAL_RADIUS),number(HEAL_AMOUNT)])
+		"healer", "guard":
+			var hr: float = float(cards["healer"].range)
+			lines.append("草藥婆每 %s 秒為 %s（半徑 %s）內友軍部隊回復 %s 生命，並減輕 1 層毒蝕。" % [number(HEAL_INTERVAL),cells_text(hr),number(hr),number(HEAL_AMOUNT)])
 		"ram": lines.append("攻城槌只打建築、城牆與敵方領主，民兵在前護送；破門後拆完殘垣再前進。")
 		"hunter", "spearbow", "archer": lines.append("箭矢飛行 %s 秒，命中才扣血。" % number(ARROW_TIME))
 	return "\n".join(lines)
@@ -1175,7 +1218,8 @@ static func expansion_description(d: Dictionary) -> Array[String]:
 		lines.append("持續從 %s 範圍內友軍每秒抽取 %s 生命（不會抽死），累積滿 %s 獲得 %s 金幣%s。" % [number(d.radius),number(d.tithe_dps),number(d.tithe_goal),number(d.tithe_gold),("，" + buff_s) if not buff_s.is_empty() else ""])
 	elif d.has("support"):
 		var effect: String = {"heal":"治療友軍","repair":"修復友方建築","shield":"友軍護盾","armor":"友軍護甲","haste":"友軍移速與攻速升一檔","range":"友軍遠程射程升一檔"}[d.support]
-		lines.append("每 %s 秒對 %s 範圍施加%s%s%s；同類加成不疊加。" % [number(d.period),number(d.radius),effect,(" %s 點" % number(d.support_amount)) if d.has("support_amount") else "",("，持續 %s 秒" % number(d.duration)) if d.has("duration") else ""])
+		var area_s: String = "%s（半徑 %s）" % [cells_text(float(d.range)),number(float(d.range))] if (d.support == "heal" and d.get("type","") == "unit") else number(float(d.radius))
+		lines.append("每 %s 秒對 %s 範圍施加%s%s%s；同類加成不疊加。" % [number(d.period),area_s,effect,(" %s 點" % number(d.support_amount)) if d.has("support_amount") else "",("，持續 %s 秒" % number(d.duration)) if d.has("duration") else ""])
 	if d.has("thorns"): lines.append("每次被近戰攻擊時反傷攻擊者 %s 點。" % number(d.thorns))
 	if d.get("patrol",false): lines.append("在本路己方領地巡邏守衛。")
 	if d.get("hits","") == "units": lines.append("不攻擊建築（城牆除外），只打部隊、領主與城牆。")

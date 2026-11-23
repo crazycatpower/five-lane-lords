@@ -256,7 +256,13 @@ static func apply_tiers(rating: Dictionary) -> void:
 static func reward_value(kind: String) -> float:
 	var d: Dictionary = B.CARDS[kind]
 	if d.type == "unit":
-		return (float(d.hp)*0.02+float(d.damage)/float(d.interval))*int(d.get("count",1))/maxf(1.0,d.cost)
+		var lead: Dictionary = B.CARDS[d.members[0][0]] if d.has("members") else d
+		var total_cnt := 0
+		if d.has("members"):
+			for g: Array in d.members: total_cnt += int(g[1])
+		else: total_cnt = int(d.get("count",1))
+		var dps := float(lead.get("area_damage",lead.get("damage",0.0)))/maxf(0.1,float(lead.get("interval",1.0)))
+		return (float(lead.hp)*0.02+dps)*float(total_cnt)/maxf(1.0,float(d.cost))
 	return 0.0
 
 static func run_report(count: int, seed_start: int) -> void:

@@ -8,6 +8,7 @@ extends RefCounted
 # Hooks: battle (tower, play_check, deploy), arcane_mechanics, expansion_more, game.draw_preview / hover.
 const B = preload("res://balance.gd")
 const L = preload("res://layout.gd")
+const Giant = preload("res://giant_unit.gd")
 
 # ---------------- building reach ----------------
 # Each damage building lists its shape in balance.gd as "reach" (producer 2026-11-18), in cells, "ahead"
@@ -62,7 +63,7 @@ static func offsets_set(kind: String, bonus: int = 0) -> Dictionary:
 	return set
 
 static func bonus(m, b: Dictionary) -> int:
-	return 1 if b.kind == "tower" and m != null and not b.is_empty() and b.has("pos") and m.Faction.watched(m,b) else 0
+	return 1 if not b.is_empty() and String(b.get("kind","")) == "tower" and m != null and b.has("pos") and m.Faction.watched(m,b) else 0
 
 static func covers(m, b: Dictionary, pos: Vector2) -> bool:
 	var cell := cell_of(pos)
@@ -79,8 +80,7 @@ static func pick(m, b: Dictionary, troops: Array) -> Dictionary:
 	var best := INF
 	for o: Dictionary in troops:
 		if o.hp <= 0 or o.get("stealthed",false) or o.get("phased",false) or o.get("spawn_delay",0.0) > 0: continue
-		var c := cell_of(o.pos)
-		if not area_set.has(Vector2i((c.x-b_cell.x)*fwd,c.y-b_cell.y)): continue
+		if not Giant.in_area_set(o,b_cell,fwd,area_set): continue
 		var d: float = b_pos.distance_to(o.pos)
 		if d < best-0.5 or (absf(d-best) <= 0.5 and int(o.get("serial",0)) > int(found.get("serial",0))):
 			best = d
@@ -105,8 +105,7 @@ static func nearest_in(m, b: Dictionary, candidates: Array) -> Dictionary:
 	var b_cell: Vector2i = b.cell
 	var b_pos: Vector2 = b.pos
 	for o: Dictionary in candidates:
-		var c := cell_of(o.pos)
-		if not area_set.has(Vector2i((c.x-b_cell.x)*fwd,c.y-b_cell.y)): continue
+		if not Giant.in_area_set(o,b_cell,fwd,area_set): continue
 		var d: float = b_pos.distance_to(o.pos)
 		if d < best-0.5 or (absf(d-best) <= 0.5 and int(o.get("serial",0)) > int(found.get("serial",0))):
 			best = d
@@ -250,6 +249,9 @@ static func spawn_preview(m, team: int, kind: String, cell: Vector2i) -> Array:
 	var forward := 1.0 if team == 0 else -1.0
 	var out: Array = []
 	var rear := func(col: int, lane: int) -> Vector2: return L.cell_center(Vector2i(col,lane))-Vector2(forward*(L.CELL_SIZE.x*0.5-12.0),0)
+	if card.get("giant",false):
+		var spec: Dictionary = Giant.deploy_spec(m,team,kind,cell)
+		return [[kind,1,spec.pos]]
 	if footprint(kind) != Vector2i(1,1):
 		for p: Dictionary in plan(kind,cell,team,groups,m.active_lanes): out.append([p.kind,p.count,rear.call(p.col,p.lane)])
 		return out
@@ -261,6 +263,8 @@ static func spawn_preview(m, team: int, kind: String, cell: Vector2i) -> Array:
 	return out
 
 static func footprint_text(kind: String) -> String:
+	if B.CARDS.get(kind,{}).get("giant",false):
+		return "佔 2×2 格單體巨獸（2 欄 × 2 路）；每一格都必須是我方領地才能放。橫跨相鄰兩路行軍，兩路敵軍、防禦塔與法術皆可命中，近戰橫掃兩路敵軍與建築，攻城時同時攻擊兩扇城門。"
 	var fm: String = B.CARDS.get(kind,{}).get("formation","")
 	match fm:
 		"t_front": return "佔 1+1×3 格（T字陣：後排中路 1 格＋前排三路 3 格，共 4 格）；每一格都必須是我方領地才能放。"
@@ -282,19 +286,60 @@ static func draw_cells(g, cells: Array, fill: Color, stroke: Color) -> void:
 		g.draw_rect(r,fill)
 		g.draw_rect(r.grow(-1.5),stroke,false,1.6)
 
+static func is_heal_unit_kind(kind: String) -> bool:
+	var d: Dictionary = B.CARDS.get(kind,{})
+	return kind == "healer" or (d.get("type","") == "unit" and d.get("support","") == "heal")
+
+static func is_heal_building_kind(kind: String) -> bool:
+	return kind in ["soul_well","blood_cauldron","sleepless_belfry","blood_tower"]
+
+static func draw_dashed_ring(g, center: Vector2, r: float, color: Color, fill_alpha: float = 0.08, width: float = 2.0) -> void:
+	g.draw_circle(center,r,Color(color,fill_alpha))
+	for ai: int in range(48):
+		if ai % 2 == 0: g.draw_arc(center,r,ai*TAU/48,(ai+1)*TAU/48,4,Color(color,0.78),width,true)
+
+static func draw_heal_building_reach(g, kind: String, cell: Vector2i, b: Dictionary = {}) -> void:
+	if kind == "blood_tower":
+		var lane_rect := Rect2(L.GRID_ORIGIN.x,L.GRID_ORIGIN.y+float(cell.y)*L.CELL_SIZE.y,L.GRID_SIZE.x,L.CELL_SIZE.y)
+		g.draw_rect(lane_rect,Color("5ce675",0.14))
+		g.draw_rect(lane_rect.grow(-1.5),Color("5ce675",0.75),false,2.2)
+	elif kind in ["soul_well","blood_cauldron","sleepless_belfry"]:
+		var center: Vector2 = b.pos if b.has("pos") else L.cell_center(cell)
+		var r: float = float(B.CARDS[kind].radius)+(B.actor_radius(b) if not b.is_empty() else B.kind_radius(kind))
+		var col := Color("dbd5ac") if kind == "sleepless_belfry" else Color("5ce675")
+		draw_dashed_ring(g,center,r,col,0.09,2.2)
+
 # Ghosts of the squads where they will actually stand, with their head count.
 static func draw_spawn_preview(g, kind: String, cell: Vector2i, team: int) -> void:
+	var Up = preload("res://card_upgrades.gd")
+	var r_pct: float = Up.stat_pct("range",int(g.model.card_upgrades[team].get(kind,{}).get("range",0)))
 	for s: Array in spawn_preview(g.model,team,kind,cell):
-		g.draw_actor(s[0],team,s[2],1.0 if team == 0 else -1.0,Color(1,1,1,0.55))
+		var sk := String(s[0])
+		if is_heal_unit_kind(sk):
+			var srad := B.kind_radius(sk)
+			var hrad: float = g.model.unit_heal_radius({"kind":sk,"team":team,"pos":s[2],"body_radius":srad,"range_pct":r_pct})+srad
+			draw_dashed_ring(g,s[2],hrad,Color("5ce675"),0.07,2.0)
+		g.draw_actor(sk,team,s[2],1.0 if team == 0 else -1.0,Color(1,1,1,0.55))
 		if int(s[1]) > 1: g.field_text(s[2]+Vector2(-14,24),"×%d" % int(s[1]),HORIZONTAL_ALIGNMENT_LEFT,40.0,15,Color(1,0.97,0.86,0.95))
 
 static func draw_reach(g, kind: String, cell: Vector2i, team: int, b: Dictionary = {}) -> void:
 	if not has_reach(kind): return
 	draw_cells(g,reach_area(g.model,kind,cell,team,b),Color(0.85,0.30,0.08,0.22),Color(0.80,0.25,0.05,0.90))
 
-# Hovering one of our or the enemy's damage buildings shows its reach.
+# Hovering one of our or the enemy's damage/healing buildings or healing troops shows its reach.
 static func draw_hover(g, mouse: Vector2) -> void:
 	for b: Dictionary in g.model.buildings:
 		if b.hp > 0 and b.pos.distance_to(mouse) <= 40.0 and has_reach(b.kind):
 			draw_reach(g,b.kind,b.cell,b.team,b)
 			return
+	for b: Dictionary in g.model.buildings:
+		if b.hp > 0 and b.pos.distance_to(mouse) <= 44.0 and is_heal_building_kind(b.kind):
+			draw_heal_building_reach(g,b.kind,b.cell,b)
+			return
+	for u: Dictionary in g.model.units:
+		if u.hp > 0 and u.get("spawn_delay",0.0) <= 0 and is_heal_unit_kind(u.kind):
+			var upos: Vector2 = u.get("draw",u.pos)
+			if upos.distance_to(mouse) <= 36.0:
+				var r: float = g.model.unit_heal_radius(u)+B.actor_radius(u)
+				draw_dashed_ring(g,u.pos,r,Color("5ce675"),0.09,2.2)
+				return

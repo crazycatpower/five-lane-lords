@@ -11,6 +11,7 @@ const Ornament = preload("res://interface_ornament.gd")
 const Style = preload("res://command_style.gd")
 const Keywords = preload("res://card_keywords.gd")
 const Economy = preload("res://economy_hud.gd")
+const Conveyor = preload("res://conveyor.gd")
 
 const CREAM := Color("fff0ca")
 const GOLD := Color("d2ad58")
@@ -109,12 +110,16 @@ static func draw(g, single_lane: bool = false, hide_bottom: bool = false) -> voi
 	pause_seal(g)
 	if hide_bottom: return
 	tray(g)
-	purse(g)
-	hand(g,single_lane)
+	if g.model.is_conveyor(g.me):
+		Conveyor.draw_hud(g)
+	else:
+		purse(g)
+		hand(g,single_lane)
 	keyword_strip(g,single_lane)
 	if g.dragging and g.selected >= 0 and g.card_at(g.get_global_mouse_position()) < 0 and g.model.cell_at(g.get_global_mouse_position()).x < 0:
 		var mouse: Vector2 = g.get_global_mouse_position()
-		g.draw_card_art(g.model.kind_at(g.me,g.selected),Rect2(mouse-Vector2(40,36),Vector2(80,72)),g.me,Color(1,1,1,0.7))
+		var drag_kind: String = g.model.kind_at(g.me,g.selected)
+		if not drag_kind.is_empty(): g.draw_card_art(drag_kind,Rect2(mouse-Vector2(40,36),Vector2(80,72)),g.me,Color(1,1,1,0.7))
 	lord_panel(g,single_lane)
 	if not single_lane and not g.spectating: g.draw_cursor_hint(g.get_global_mouse_position())
 
@@ -509,6 +514,8 @@ static func clear_xform(g) -> void:
 
 static func slot_blocked(g, slot: int) -> bool:
 	var kind: String = g.model.kind_at(g.me,slot)
+	if kind.is_empty() or not B.CARDS.has(kind): return true
+	if g.model.is_conveyor(g.me): return false
 	return g.model.ink[g.me] < B.CARDS[kind].cost or g.model.slot_cd(g.me,slot) > 0
 
 static func hand(g, single_lane: bool) -> void:

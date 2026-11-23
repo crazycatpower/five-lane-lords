@@ -6,6 +6,7 @@ const B = preload("res://balance.gd")
 const L = preload("res://layout.gd")
 const Arcane = preload("res://arcane_mechanics.gd")
 const GluttonNest = preload("res://glutton_nest.gd")
+const Giant = preload("res://giant_unit.gd")
 
 const SPELLS := ["mana_spring","chain_lightning","arcane_shield","time_field","charge_horn","levy","sacrifice","dread_howl"]
 const DEFENSIVE := ["chain_lightning","time_field","levy","dread_howl"] # worth more in the lane the AI is defending
@@ -114,6 +115,8 @@ static func chain(m, s: Dictionary, data: Dictionary, rect: Rect2 = Rect2()) -> 
 	var at: Vector2 = s.pos
 	var reach: float = data.radius
 	var tier: int = B.TIERS.damage.find(data.bolt_damage)
+	var base_tier: int = B.TIERS.damage.find(float(B.CARDS[s.kind].bolt_damage))
+	var hop_mult: float = float(data.bolt_damage)/maxf(1.0,float(B.CARDS[s.kind].bolt_damage))
 	var hit: Array = []
 	for i: int in range(data.hops+1):
 		var best: Dictionary = {}
@@ -128,7 +131,8 @@ static func chain(m, s: Dictionary, data: Dictionary, rect: Rect2 = Rect2()) -> 
 		if best.is_empty(): break
 		hit.append(best)
 		m.link(at,best.pos,s.team,"lightning")
-		m.damage(best,B.TIERS.damage[mini(tier+i,B.TIERS.damage.size()-1)],s.team,s.kind)
+		var dmg: float = float(B.TIERS.damage[mini(tier+i,B.TIERS.damage.size()-1)]) if tier >= 0 else (roundf(float(B.TIERS.damage[mini(base_tier+i,B.TIERS.damage.size()-1)])*hop_mult) if base_tier >= 0 else roundf(float(data.bolt_damage)*pow(0.65,i)))
+		m.damage(best,dmg,s.team,s.kind)
 		at = best.pos
 		reach = data.hop_radius
 
@@ -178,7 +182,7 @@ static func horn_active(m, u: Dictionary) -> bool:
 static func horn_count(m, u: Dictionary) -> int:
 	var n := 0
 	for h: Dictionary in m.horns:
-		if h.team == u.team and h.lane == u.lane: n += 1
+		if h.team == u.team and Giant.occupies_lane(u,h.lane): n += 1
 	return n
 
 # A troop that shoots, or a tower, inside our watchtower's reach: one range tier further.
@@ -190,7 +194,9 @@ static func watched(m, actor: Dictionary) -> bool:
 
 static func longer(r: float) -> float:
 	var i: int = B.TIERS.range.find(r)
-	return B.TIERS.range[i-1] if i > 0 else r
+	if i > 0: return B.TIERS.range[i-1]
+	if i == 0: return r
+	return minf(B.TIERS.range[0],roundf(r*1.25))
 
 static func unit_data(m, u: Dictionary, data: Dictionary) -> Dictionary:
 	if not data.get("projectile",false) or not watched(m,u): return data
@@ -219,10 +225,6 @@ static func on_hit(m, target: Dictionary, source: Dictionary) -> void:
 
 # Buildings with their own clock. True = handled.
 static func update_building(m, b: Dictionary, dt: float) -> bool:
-	if b.kind == "mass_grave":
-		b.production += dt
-		if b.production >= B.CARDS.mass_grave.period: grave_spawn(m,b)
-		return true
 	if b.kind == "blood_tower":
 		var d: Dictionary = B.CARDS.blood_tower
 		b.blood_fx_cd = maxf(0.0,b.get("blood_fx_cd",0.0)-dt)
@@ -230,7 +232,7 @@ static func update_building(m, b: Dictionary, dt: float) -> bool:
 		b.blood = minf(d.blood_max,b.get("blood",0.0)+d.blood_rate*dt)
 		if not b.get("bleeding",false) and b.blood > d.restart_at: b.bleeding = true
 		if not b.get("bleeding",false): return true
-		var hurt: Array = m.units.filter(func(u: Dictionary) -> bool: return u.hp > 0 and u.team == b.team and u.lane == b.cell.y and u.get("spawn_delay",0.0) <= 0 and u.hp < u.max_hp)
+		var hurt: Array = m.units.filter(func(u: Dictionary) -> bool: return u.hp > 0 and u.team == b.team and Giant.occupies_lane(u,b.cell.y) and u.get("spawn_delay",0.0) <= 0 and u.hp < u.max_hp)
 		if hurt.is_empty(): return true
 		var out := minf(b.blood,d.heal_rate*dt)
 		b.blood -= out
@@ -249,22 +251,21 @@ static func update_building(m, b: Dictionary, dt: float) -> bool:
 	return false
 
 static func grave_spawn(m, b: Dictionary) -> void:
-	b.production = 0.0 # like the grave, extra time is not kept
 	for i: int in range(B.CARDS.mass_grave.spawn_count):
 		var u: Dictionary = m.spawn_unit(b.team,b.cell.y,"skeleton",b.pos)
 		u.card = "mass_grave"
 		u.spawn_delay = i*0.12
 	m.event("summoned",b.pos,b.team)
 
-# A troop died in a lane (either side): the grave-like buildings there advance.
+# Any non-skeleton troop dying feeds mass graves globally; blood towers devour in-lane deaths.
 static func on_death(m, dead: Dictionary) -> void:
 	for b: Dictionary in m.buildings:
-		if b.hp <= 0 or b.cell.y != dead.lane: continue
+		if b.hp <= 0: continue
 		if b.kind == "mass_grave":
+			if String(dead.get("kind","")) == "skeleton": continue
 			m.link(dead.pos,b.pos,b.team,"soul")
-			b.production += B.CARDS.mass_grave.death_advance
-			if b.production >= B.CARDS.mass_grave.period: grave_spawn(m,b)
-		elif b.kind == "blood_tower":
+			grave_spawn(m,b)
+		elif b.kind == "blood_tower" and b.cell.y in dead.get("lanes",[dead.lane]):
 			m.link(dead.pos,b.pos,b.team,"devour")
 			b.blood = minf(B.CARDS.blood_tower.blood_max,b.get("blood",0.0)+B.CARDS.blood_tower.blood_per_death)
 
@@ -392,30 +393,47 @@ static func ai_score(c: Dictionary, s: Dictionary, covered: Dictionary = {}) -> 
 			if foes >= 3: return 690.0+float(foes)*14.0
 		"watchtower", "mass_grave", "blood_tower":
 			var col: int = c.cell.x if team == 0 else 8-c.cell.x
-			if col > 2: return -INF
+			if col > (4 if c.kind == "watchtower" else 2): return -INF
 			var same := 0
+			var total_same := 0
+			var wt_count := 0
+			var near_wt := false
 			var fight := 0
+			var non_skel := 0
 			for b: Dictionary in s.buildings:
-				if b.hp > 0 and b.team == team and b.kind == c.kind and b.cell.y == c.cell.y: same += 1
+				if b.hp > 0 and b.team == team and b.kind == c.kind:
+					total_same += 1
+					if b.cell.y == c.cell.y: same += 1
+					if c.kind == "watchtower":
+						wt_count += 1
+						if absi(b.cell.x-c.cell.x) <= 2 and absi(b.cell.y-c.cell.y) <= 2: near_wt = true
 			for u: Dictionary in s.units:
-				if u.hp > 0 and u.lane == c.cell.y and not (u.team != team and covered.has(u.get("id",-1))): fight += 1
-			if same >= (2 if c.kind == "mass_grave" else 1): return -INF
+				if u.hp <= 0 or (u.team != team and covered.has(u.get("id",-1))): continue
+				if u.kind != "skeleton": non_skel += 1
+				if u.lane == c.cell.y: fight += 1
 			if c.kind == "watchtower":
+				if wt_count >= 2 or near_wt: return -INF
 				var shooters := 0
 				var sneaky := false
 				for u: Dictionary in s.units:
 					if u.hp <= 0 or u.lane != c.cell.y: continue
 					if u.team == team and B.CARDS[u.kind].get("projectile",false): shooters += 1
 					if u.team != team and not covered.has(u.get("id",-1)) and B.CARDS[u.kind].get("stealth",false): sneaky = true
-				return 650.0-col*8 if shooters >= 2 or sneaky else -INF
+				if shooters >= 2 or sneaky: return 650.0+col*4
+				if col >= 1 and int(s.get("owned_cells",0)) < 28: return 625.0+col*10
+				return -INF
+			if c.kind == "mass_grave":
+				if same >= 2 or total_same >= 3: return -INF
+				if non_skel >= 4: return 640.0+float(non_skel)*4.0+float(fight)*2.0-col*8.0
+				return -INF
+			if same >= 1: return -INF
 			if fight >= 4: return 640.0+fight*4-col*8
 	return -INF
 
 # ---------- drawing (game.gd) ----------
 
 static func draw_bar(g, b: Dictionary) -> void:
-	if b.kind == "mass_grave": g.bar(Rect2(b.pos+Vector2(-30,36),Vector2(60,5)),b.production,B.CARDS.mass_grave.period,Color("6f8f4e")) # rot green: bone white vanished on the bar background
-	elif b.kind == "blood_tower": g.bar(Rect2(b.pos+Vector2(-30,36),Vector2(60,5)),b.get("blood",0.0),B.CARDS.blood_tower.blood_max,Color("b03a3a") if b.get("bleeding",false) else Color("6e3030"))
+	if b.kind == "blood_tower": g.bar(Rect2(b.pos+Vector2(-30,36),Vector2(60,5)),b.get("blood",0.0),B.CARDS.blood_tower.blood_max,Color("b03a3a") if b.get("bleeding",false) else Color("6e3030"))
 
 # Watchtower reach (producer 2026-11-05: the effect must match the real radius): a faint dashed ring
 # at the true range and a beam that sweeps out to it, both read from the card data.
@@ -432,9 +450,19 @@ static func draw_watchtowers(g) -> void:
 		g.draw_colored_polygon(fan,Color(1.0,0.89,0.47,0.10))
 		g.draw_arc(c,r,angle-0.18,angle+0.18,12,Color(1.0,0.92,0.60,0.7),2.5,true)
 
+static func draw_heal_auras(g) -> void:
+	for b: Dictionary in g.model.buildings:
+		if b.hp <= 0 or not b.kind in ["soul_well","blood_cauldron","sleepless_belfry"]: continue
+		var r: float = float(B.CARDS[b.kind].radius)+B.actor_radius(b)
+		var col := Color("dbd5ac",0.30) if b.kind == "sleepless_belfry" else Color("5ce675",0.30)
+		var c: Vector2 = b.pos
+		for i: int in range(48):
+			if i % 2 == 0: g.draw_arc(c,r,i*TAU/48,(i+1)*TAU/48,4,col,1.8,true)
+
 static func draw(g) -> void:
 	if not g.fx_enabled: return
 	draw_watchtowers(g)
+	draw_heal_auras(g)
 	for u: Dictionary in g.model.units:
 		if u.hp <= 0 or u.get("spawn_delay",0.0) > 0 or u.get("flying",false): continue
 		if horn_active(g.model,u):

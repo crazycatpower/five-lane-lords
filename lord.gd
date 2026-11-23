@@ -39,6 +39,7 @@ static func step(m: RefCounted, lord: Dictionary, dt: float) -> void:
 	if lord.cd <= 0:
 		var foe: Dictionary = m.lord_target(lord)
 		if not foe.is_empty():
-			if B.lord_is_ranged(lord.lord): m.shoot_lord(lord,foe,lord.damage)
+			if lord.has("shot"): m.boss_shot(lord,foe) # 肉鴿魔王的招牌彈 (roguelike_catalog.BOSS_SHOTS)
+			elif B.lord_is_ranged(lord.lord): m.shoot_lord(lord,foe,lord.damage)
 			else: m.damage(foe,lord.damage,lord.team,"lord")
-			lord.cd = B.lord_attack_interval(lord.lord)
+			lord.cd = float(lord.shot.interval) if lord.has("shot") else B.lord_attack_interval(lord.lord)

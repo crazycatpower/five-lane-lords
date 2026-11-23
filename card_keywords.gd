@@ -417,7 +417,15 @@ const CARD_OVERRIDES := {
 	"shroud_arbalist": ["遠射"],
 	"tower": ["遠射"],
 	"militia": ["人海"],
-	"skeleton": ["人海"]
+	"skeleton": ["人海"],
+	"giant_arcane_golem": ["護盾","爆破","橫掃","重裝"],
+	"giant_catapult": ["爆破","遠射","重裝"],
+	"giant_thorn_dragon": ["反傷","橫掃","重裝"],
+	"giant_corpse_giant": ["召喚","橫掃","重裝"],
+	"giant_thorn_mother": ["反傷","召喚","橫掃","重裝"],
+	"giant_dire_hydra": ["再生","橫掃","重裝"],
+	"giant_knight": ["衝鋒","護甲","橫掃","重裝"],
+	"giant_plague_bishop": ["遲緩","毒蝕","恐懼","橫掃","重裝"]
 }
 
 const LORD_KEYWORDS := {

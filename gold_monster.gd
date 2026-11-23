@@ -35,17 +35,19 @@ static func stage(gold: int) -> Array:
 static func shape(groups: Array, gold: int) -> void:
 	groups[0][1] = int(stage(gold)[1])
 
-# deploy(): each body's stats for this stage; run upgrades still shift them from the stage values.
+# deploy(): each body's stats for this stage; run upgrades add additive percentages from stage values.
 static func apply(u: Dictionary, gold: int, ups: Dictionary, body_index: int = 0, total_bodies: int = 0) -> void:
 	var s: Array = stage(gold)
-	var stats := {"hp":float(s[2]),"damage":float(s[3]),"interval":float(s[4]),"speed":float(s[5])}
-	for key: String in ups:
-		if stats.has(key): stats[key] = Upgrades.shifted(key,stats[key],int(ups[key]))
-	u.max_hp = stats.hp
-	u.hp = stats.hp
-	u.damage = stats.damage
-	u.interval = stats.interval
-	u.speed = stats.speed
+	u.base_hp = float(s[2])
+	u.hp_pct = float(u.get("hp_pct",0.0))+Upgrades.stat_pct("hp",int(ups.get("hp",0)))
+	u.max_hp = roundf(u.base_hp*maxf(0.1,1.0+float(u.hp_pct)))
+	u.hp = u.max_hp
+	u.damage = Upgrades.scaled("damage",float(s[3]),int(ups.get("damage",0)))
+	u.damage_mult = 1.0+Upgrades.stat_pct("damage",int(ups.get("damage",0)))
+	u.interval = float(s[4])
+	u.speed = float(s[5])
+	u.atk_speed_pct = float(u.get("atk_speed_pct",0.0))+Upgrades.stat_pct("interval",int(ups.get("interval",0)))
+	u.speed_pct = float(u.get("speed_pct",0.0))+Upgrades.stat_pct("speed",int(ups.get("speed",0)))
 	u.gold_paid = gold
 	var bodies: int = total_bodies if total_bodies > 0 else maxi(1,int(s[1]))
 	var total_refund: int = int(floor(float(gold)*REFUND_SHARE))

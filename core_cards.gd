@@ -23,7 +23,8 @@ static func on_card_played(m, team: int, kind: String) -> void:
 # One tier stronger (damage) or faster (interval), never past S. Both tables list the strongest first.
 static func faster_or_stronger(stat: String, value: float) -> float:
 	var at: int = B.TIERS[stat].find(value)
-	if at < 0: return value
+	if at < 0:
+		return roundf(value*1.35) if stat == "damage" else (snappedf(value/1.3,0.01) if stat == "interval" else value)
 	return B.TIERS[stat][maxi(B.tier_index("S"),at-1)]
 
 # 荊棘母獸 aura, read by monster_cards.on_hit for the troop or building that was hit.

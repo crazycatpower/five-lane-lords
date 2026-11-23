@@ -1,11 +1,18 @@
 # Windows 玩家版
 
-目前版本 0.4.0，Godot 4.7.1。輸出於專案旁 `release/FiveLaneLords-0.4.0/FiveLaneLords.exe`，分享包為 `release/FiveLaneLords-Windows-0.4.0.zip`，更新說明在 `release/release-notes-0.4.0.md`。單一 x86_64 EXE，資源內嵌，保留所有舊版。
+目前版本 0.5.0，Godot 4.7.1。輸出於專案旁 `release/FiveLaneLords-0.5.0/FiveLaneLords.exe`，分享包為 `release/FiveLaneLords-Windows-0.5.0.zip`，更新說明在 `release/release-notes-0.5.0.md`。單一 x86_64 EXE，資源內嵌，保留所有舊版。
 
 ## 重建
 
 新增中文字先執行 `python tools/build_font.py`，改圖先執行 `godot_console --headless --path . -s tools/prepare_assets.gd`，再 `godot_console --headless --path . --import`。
-執行 `tools/build_windows.ps1 -Version 0.4.0`。模板在 `.runtime/windows-templates/windows_release_x86_64.exe`。圖示及檔案版本由 export_presets.cfg 設定。
+執行 `tools/build_windows.ps1 -Version 0.5.0`。模板在 `.runtime/windows-templates/windows_release_x86_64.exe`。圖示及檔案版本由 export_presets.cfg 設定。
+
+## 2026-11-24 驗收（0.5.0）
+
+- `quick_test.gd`：50 項、0 失敗；`test_startup.gd` 通過（2032 ms，6 筆預處理調色盤參照）；`test_net_match.gd`：22 項、0 失敗。
+- 獨立 EXE 以隔離 APPDATA 啟動 120 幀，結束碼 0，`godot.log` 無錯誤（stderr 於退出清理有 9 個 ObjectDB 殘留提示）；檔案／產品版本 0.5.0；EXE SHA256 `41D61800BD9421B42735D96EC0CA9163020E6180524E8CC12ED1A065FC30C131`，412.8 MB，ZIP 341.4 MB（完整性檢查無誤）。
+- 字型子集已重切（1996 字元）並完成 `--import`。
+- 本版為多格建築佔地改版前的版本。
 
 ## 2026-11-22 驗收（0.4.0）
 

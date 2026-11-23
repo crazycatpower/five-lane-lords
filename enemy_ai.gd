@@ -6,6 +6,7 @@ const GluttonNest = preload("res://glutton_nest.gd")
 const ExpansionMore = preload("res://expansion_more.gd")
 const GoldMonster = preload("res://gold_monster.gd")
 const SealAltar = preload("res://seal_altar.gd")
+const Giant = preload("res://giant_unit.gd")
 const L = preload("res://layout.gd")
 const MapAI = preload("res://map_ai.gd") # 地圖機制：順風、水閘、泥沼、熔岩、符文、傳送門、落石、上坡
 
@@ -91,19 +92,26 @@ static func decide(s: Dictionary) -> Dictionary:
 	var nest_bait: Array = nest_plan.bait_lanes
 	for u: Dictionary in s.units:
 		if u.hp <= 0: continue
+		var u_lanes := Giant.lanes(u)
+		var share: float = u.hp/float(maxi(1,u_lanes.size()))
 		if u.team == team:
-			ours[u.lane] += u.hp
-			my_troops[u.lane] += u.hp
-			my_troop_x[u.lane].append(u.pos.x)
+			for ul in u_lanes:
+				var uli := int(ul)
+				ours[uli] += share
+				my_troops[uli] += share
+				my_troop_x[uli].append(u.pos.x)
 			continue
-		foes[u.lane] += u.hp
-		if nest_covered.has(u.get("id",-1)): continue
 		var distance := absf(u.pos.x-home_x)
 		var closeness := clampf(1.0-distance/(6.0*L.CELL_SIZE.x),0,1)
-		urgency[u.lane] += u.hp*(0.3+1.7*closeness)
-		if distance < foe_reach[u.lane]:
-			foe_reach[u.lane] = distance
-			foe_x[u.lane] = u.pos.x
+		var covered_foe: bool = nest_covered.has(u.get("id",-1))
+		for ul in u_lanes:
+			var uli := int(ul)
+			foes[uli] += share
+			if covered_foe: continue
+			urgency[uli] += share*(0.3+1.7*closeness)
+			if distance < foe_reach[uli]:
+				foe_reach[uli] = distance
+				foe_x[uli] = u.pos.x
 	for b: Dictionary in s.buildings:
 		if b.hp <= 0: continue
 		if b.team == team:
@@ -160,6 +168,9 @@ static func decide(s: Dictionary) -> Dictionary:
 	# If nothing in hand can answer the threat (e.g. a ram already at our gate), play normally
 	# instead of freezing: plant, cultivate or counter-attack elsewhere.
 	for defend: int in ([danger,-1] if danger >= 0 else [-1]):
+		if defend < 0:
+			var g_cost: float = float(s.get("giant_ready_cost",0.0))
+			if g_cost > 0.0 and float(s.ink) < g_cost and float(s.ink) >= g_cost-8.0: break
 		for c: Dictionary in s.candidates:
 			var data: Dictionary = B.CARDS[c.kind]
 			var score := -INF
@@ -252,6 +263,16 @@ static func decide(s: Dictionary) -> Dictionary:
 						best_score = score
 						best = c.duplicate()
 					continue
+				if data.get("giant",false):
+					var g_lanes: Array = [lane,lane+1] if lane+1 < L.GRID_ROWS else [lane]
+					if not defend in g_lanes: continue
+					var gfx: float = foe_x[defend]
+					if (gfx-c.pos.x)*forward >= -L.CELL_SIZE.x*0.5 and not B.has_tag(c.kind,"no_defend") and c.kind != "giant_catapult":
+						score = 920.0-absf(gfx-c.pos.x)*0.4
+					if score > best_score:
+						best_score = score
+						best = c.duplicate()
+					continue
 				if lane != defend: continue
 				var fx: float = foe_x[lane]
 				if data.type == "unit" and not B.has_tag(c.kind,"no_defend"):
@@ -301,6 +322,10 @@ static func decide(s: Dictionary) -> Dictionary:
 					for x: float in my_troop_x[lane]:
 						var ahead: float = (x-c.pos.x)*forward
 						if ahead >= 0 and ahead <= B.HEAL_RADIUS and my_troops[lane] >= 200: score = maxf(score,pr.get("healer_score",690.0)-ahead*0.5)
+				elif data.get("giant",false) and c.kind != "giant_catapult":
+					var g_lanes: Array = [lane,lane+1] if lane+1 < L.GRID_ROWS else [lane]
+					if not nest_bait[lane] and not (lane+1 < nest_bait.size() and nest_bait[lane+1]):
+						score = 740.0+col*6.0+(20.0 if target_lane in g_lanes else 0.0)-(attack[target_lane]-attack[lane])*0.02
 				elif wave and data.type == "unit" and c.kind != "farmer" and not nest_bait[lane]:
 					# Front-most legal cell of the chosen lane; other lanes only as a weaker fallback.
 					score = pr.get("wave_score",600.0)+col*4-data.cost-(0 if lane == target_lane else 60+(attack[target_lane]-attack[lane])*0.05)
@@ -337,7 +362,7 @@ static func area_value(c: Dictionary, s: Dictionary, data: Dictionary, defend: i
 	for u: Dictionary in s.units:
 		if u.hp <= 0 or u.team == s.team or covered.has(u.get("id",-1)) or not B.rect_hits_actor(rect,u): continue
 		value += minf(u.hp,dmg) if dmg > 0 else u.hp*0.5 # curse-like spells: worth part of the troop
-		if u.lane == defend: reaches = true
+		if Giant.occupies_lane(u,defend): reaches = true
 	if data.get("building_damage",0.0) > 0:
 		for b: Dictionary in s.buildings:
 			if b.hp > 0 and b.team != s.team and B.rect_hits_actor(rect,b): value += minf(b.hp,data.building_damage)*0.5
@@ -394,6 +419,28 @@ static func dark_card_score(c: Dictionary, s: Dictionary, ours: Array, foes: Arr
 	var lane: int = c.cell.y
 	var forward := 1.0 if s.team == 0 else -1.0
 	match c.kind:
+		"giant_catapult":
+			var data: Dictionary = B.CARDS[c.kind]
+			var g_lanes: Array = [lane,lane+1] if lane+1 < L.GRID_ROWS else [lane]
+			var gx: float = c.pos.x-forward*L.CELL_SIZE.x*0.5
+			var gr: float = B.kind_radius(c.kind)
+			var targets := 0
+			for u: Dictionary in s.units:
+				if u.hp <= 0 or u.team == s.team or covered.has(u.get("id",-1)) or not Giant.lanes(u).any(func(ul) -> bool: return int(ul) in g_lanes): continue
+				var distance: float = maxf(0.0,absf(u.pos.x-gx)-gr-B.actor_radius(u))
+				if distance < data.min_range: return -INF
+				if distance <= data.range: targets += 1
+			for b: Dictionary in s.buildings:
+				if b.hp <= 0 or b.team == s.team or not b.cell.y in g_lanes: continue
+				var distance: float = maxf(0.0,absf(b.pos.x-gx)-gr-B.actor_radius(b))
+				if distance < data.min_range: return -INF
+				if distance <= data.range: targets += 1
+			var gate_x: float = L.gate_stop(1-s.team)
+			var gd: float = maxf(0.0,absf(gate_x-gx)-gr)
+			if gd >= data.min_range and gd <= data.range:
+				for gl in g_lanes:
+					if s.gates[1-s.team][int(gl)] > 0: targets += 1
+			if targets > 0: return 760.0+targets*15.0-float(c.cell.x if s.team == 0 else 8-c.cell.x)*8.0
 		"catapult":
 			var data: Dictionary = B.CARDS[c.kind]
 			var targets := 0

@@ -28,7 +28,7 @@ const MAPS := {
 	"our_moat":{"name":"我城護城河","water_cols":[2]},
 	"wind_mid":{"name":"中路順風","wind_lanes":[2],"wind_shift":{"interval":35.0}},
 	"wind_flanks":{"name":"兩翼對吹","wind_lanes":[0],"wind_left_lanes":[4],"wind_shift":{"interval":40.0}},
-	"gale6":{"name":"狂風高原","rows":6,"wind_left_lanes":[1,4],"wind_shift":{"interval":30.0},"gusts":{"interval":25.0}},
+	"gale6":{"name":"狂風高原","rows":6,"wind_lanes":[1],"wind_left_lanes":[4],"wind_shift":{"interval":30.0},"gusts":{"interval":25.0}},
 	"rocks":{"name":"亂石坡","blocked":[[3,1],[5,0],[4,3],[6,2],[3,4]]},
 	"checker":{"name":"棋盤石陣","blocked":[[3,0],[5,0],[4,1],[3,2],[5,2],[4,3],[3,4],[5,4]]},
 	"quarry6":{"name":"採石場","rows":6,"blocked":[[3,0],[4,2],[5,4],[3,5],[5,1]]},
@@ -63,26 +63,25 @@ const ELITES := [
 # 精英特性（使用者 2026-11-22：不要異變，也許塞到某些怪的被動效果中）。原本隨機抽的精英異變改成每個精英固定一個，
 # 寫在牠的被動效果裡，只在精英戰生效。[名稱, 說明, 敵方 mods, 開局額外金幣]
 const ELITE_TRAITS := {
-	"iron_hide":["鐵皮重甲","敵軍全體生命升一檔。",{"toughen":["*"]},0.0],
-	"frenzy":["狂暴突襲","敵軍全體移速與攻速升一檔，開局金幣 +12。",{"haste":["*"]},12.0],
+	"iron_hide":["鐵皮重甲","敵軍全體生命 +35%。",{"toughen":{"*":0.35}},0.0],
+	"frenzy":["狂暴突襲","敵軍全體移速與攻速 +25%。",{"haste":{"*":0.25}},0.0],
 	"swarm":["兵海狂潮","敵方每張部隊卡多出 1 名。",{"swarm":{"*":1}},0.0],
-	"muster":["急行徵兵","敵方出牌冷卻快 50%。",{"cd_speed_mult":1.5},0.0],
-	"bastion":["荊棘堡壘","敵方城牆減傷 25%，近身攻城每下反傷 40。",{"gate_armor":0.25,"thorns_gate":40.0},0.0],
-	"treasury":["敵軍金庫","敵方基本產金 ×1.5，開局金幣 +10。",{"income_mult":1.5},10.0],
+	"muster":["急行徵兵","敵方出牌冷卻速度 +45%、技能充能 +25%，開局額外 +5 金。",{"cd_speed_mult":1.45,"skill_charge_mult":1.25},5.0],
+	"bastion":["荊棘堡壘","敵方城牆減傷 25%（近身攻城反傷 40）、產金 +20%、開局 +6 金。",{"gate_armor":0.25,"thorns_gate":40.0,"income_mult":1.2},6.0],
+	"treasury":["敵軍金庫","敵方基本產金 +45%，開局額外 +10 金。",{"income_mult":1.45},10.0],
 }
 const ELITE_TRAIT_OF := {
-	"shield_sergeant":"iron_hide","knight_commander":"iron_hide","golem_smith":"iron_hide","card_enemy_bog_troll":"iron_hide",
-	"card_enemy_pouch_beast":"iron_hide","card_enemy_guard":"iron_hide","card_enemy_dire_hydra":"iron_hide",
-	"card_enemy_blink_blade":"frenzy","phase_stalker":"frenzy","card_enemy_sky_scavenger":"frenzy","card_enemy_hooknose_flyer":"frenzy",
-	"card_enemy_imp_bomb_runner":"frenzy","card_enemy_eyewing_dragon":"frenzy","dragon_lord":"frenzy",
-	"skeleton_king":"swarm","card_enemy_mass_grave":"swarm","card_enemy_grave":"swarm","card_enemy_monster_hatchery":"swarm",
-	"card_enemy_hive_nest":"swarm","card_enemy_mourning_maid":"swarm",
-	"card_enemy_chain_lightning":"muster","clock_warden":"muster","card_enemy_plague":"muster","card_enemy_plague_bishop":"muster",
-	"card_enemy_teleport_trap":"muster","card_enemy_warp_beacon":"muster","card_enemy_orrery_walker":"muster",
-	"tower_warden":"bastion","catapult_engineer":"bastion","card_enemy_thorn_mother":"bastion","card_enemy_arcane_tower":"bastion",
-	"card_enemy_ballista_tower":"bastion","card_enemy_arquebusier":"bastion",
+	"golem_smith":"iron_hide","card_enemy_pouch_beast":"iron_hide","card_enemy_dire_hydra":"iron_hide","card_enemy_grave":"iron_hide",
+	"card_enemy_blink_blade":"frenzy","phase_stalker":"frenzy","card_enemy_sky_scavenger":"frenzy","knight_commander":"frenzy",
+	"shield_sergeant":"frenzy","card_enemy_bog_troll":"frenzy","card_enemy_mass_grave":"frenzy",
+	"skeleton_king":"swarm","card_enemy_monster_hatchery":"swarm","card_enemy_mourning_maid":"swarm","card_enemy_plague":"swarm",
+	"clock_warden":"muster","card_enemy_teleport_trap":"muster","card_enemy_warp_beacon":"muster","card_enemy_orrery_walker":"muster",
+	"card_enemy_imp_bomb_runner":"muster","card_enemy_eyewing_dragon":"muster","card_enemy_hooknose_flyer":"muster",
+	"dragon_lord":"muster","card_enemy_thorn_mother":"muster",
+	"tower_warden":"bastion","catapult_engineer":"bastion","card_enemy_arcane_tower":"bastion","card_enemy_ballista_tower":"bastion",
+	"card_enemy_arquebusier":"bastion","card_enemy_hive_nest":"bastion","card_enemy_plague_bishop":"bastion",
 	"card_enemy_glutton_nest":"treasury","card_enemy_rolling_boulder":"treasury","blood_prior":"treasury",
-	"card_enemy_sleepless_belfry":"treasury","card_enemy_powder_barrel":"treasury",
+	"card_enemy_sleepless_belfry":"treasury","card_enemy_powder_barrel":"treasury","card_enemy_chain_lightning":"treasury","card_enemy_guard":"treasury",
 }
 
 static func elite_trait(foe: String) -> Array:
@@ -301,7 +300,7 @@ static func plan(foe: String, slot_kind: String = "battle", slot_mut: Dictionary
 		"pre": rules.append(["敵方預築","開局已蓋好 %d 座%s。" % [mech[2].size(),cname]])
 		"pulse": rules.append(["定時%s" % cname,"敵方約每 %d 秒施放一次%s。" % [int(mech[2]),cname]])
 		"grow": rules.append(["冒出%s" % cname,"敵方半場約每 %d 秒冒出一座%s。" % [int(mech[2]),cname]])
-		"van": rules.append(["先行壓境","開局已有%s從 %d 路出發。" % [cname,mech[2].size()]])
+		"van": rules.append(["先行壓境","開局已有%s從 %d 路出發（費用從敵方開局金幣扣除）。" % [cname,mech[2].size()]])
 	if not slot_mut.is_empty(): rules.append(["異變：%s" % String(slot_mut.get("name","")),String(slot_mut.get("desc",""))])
 	var room: int = maxi(0,budget-rules.size())
 	# The slot's twist may already flood or wall the field: those count against the map's features.

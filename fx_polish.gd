@@ -524,7 +524,7 @@ static func hit_spark(g, e: Dictionary, p: float) -> void:
 	var target: String = String(e.get("target", ""))
 	var is_shield := target in ["shieldguard", "barricade", "bonewall"]
 	var is_magic := attacker in ["dark_wizard", "prism_mage", "spell_tide_magus", "arcane_archer", "arcane_tower", "chronomancer", "orrery_walker", "old_witch", "seal_bearer", "plague_bishop", "lord_mage", "lord_rune", "lord_underworld"]
-	var is_heavy := attacker in ["corpse_giant", "arcane_golem", "bog_troll", "thorn_dragon", "dire_hydra", "tusk_boar", "gold_monster", "thorn_mother", "knight", "reaper", "ram", "lord_iron", "lord_beast", "lord_lion", "lord_vampire", "lord_adventure"]
+	var is_heavy := attacker.begins_with("giant_") or attacker in ["corpse_giant", "arcane_golem", "bog_troll", "thorn_dragon", "dire_hydra", "tusk_boar", "gold_monster", "thorn_mother", "knight", "reaper", "ram", "lord_iron", "lord_beast", "lord_lion", "lord_vampire", "lord_adventure"]
 	if is_shield:
 		var r := 10.0 + p * 14.0
 		g.draw_arc(at, r, -PI * 0.55, PI * 0.55, 14, Color("e8d294", a * 0.9), 2.6, true)

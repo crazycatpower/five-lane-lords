@@ -12,7 +12,7 @@ const L = preload("res://layout.gd")
 const SEASONS := {
 	"spring":{"name":"春","title":"春暖","rule":"春暖：雙方出牌冷卻快 10%。","mods":{"cd_speed_mult":1.1},"tint":Color("b8d08a"),"mix":0.28},
 	"summer":{"name":"夏","title":"長晝","rule":"長晝：入夜延後 60 秒。","night_delay":60.0,"tint":Color("4f8a2e"),"mix":0.34},
-	"autumn":{"name":"秋","title":"秋收","rule":"秋收：雙方農田產出 ×1.25。","mods":{"farm_mult":1.25},"tint":Color("b8853a"),"mix":0.42},
+	"autumn":{"name":"秋","title":"秋收","rule":"秋收：雙方農田產出 +25%。","mods":{"farm_mult":1.25},"tint":Color("b8853a"),"mix":0.42},
 	"winter":{"name":"冬","title":"積雪","rule":"積雪：雙方地面部隊移速降一檔（飛行不受影響）。","tint":Color("e4e8ec"),"mix":0.62},
 }
 

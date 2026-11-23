@@ -199,6 +199,9 @@ static func draw_projectile(g, arrow: Dictionary) -> void:
 		g.draw_arc(Vector2.ZERO, float(arrow.radius), 0.0, TAU, 28, Color(0.84, 0.34, 0.14, pulse), 1.8, true)
 		g.draw_arc(Vector2.ZERO, float(arrow.radius) * maxf(0.15, 1.0 - flight), 0.0, TAU, 20, Color(0.95, 0.56, 0.24, 0.45), 1.5, true)
 		g.tf()
+		if arrow.has("look"):
+			draw_boss_bomb(g, arrow, flight)
+			return
 		var is_bomb: bool = arrow.kind in ["funeral_grenadier", "dog_cannon"]
 		for i: int in range(1, 5):
 			var bt: float = maxf(0.0, flight - float(i) * 0.045)
@@ -226,6 +229,10 @@ static func draw_projectile(g, arrow: Dictionary) -> void:
 		var tip: Vector2 = arrow.pos
 		var tail := Vector2(dir * 26.0, 0.0)
 		var beam := [Color("c4a75f", 0.42), Color("e5c158"), Color("fff1b8")] if arrow.kind == "orrery_walker" else [Color("8966b8", 0.38), Color("c5a4eb"), Color("ead7ff")]
+		if arrow.has("look"):
+			beam = BOSS_BEAM.get(String(arrow.look), beam)
+			tail *= 1.8
+			g.draw_line(tip - tail * 1.4, tip, Color(beam[0], 0.25), 14.0, true)
 		g.draw_line(tip - tail * 1.6, tip, beam[0], 5.5, true)
 		g.draw_line(tip - tail, tip, beam[1], 2.2, true)
 		g.draw_polyline(PackedVector2Array([tip - Vector2(dir * 6.0, 4.0), tip, tip - Vector2(dir * 6.0, -4.0)]), beam[2], 2.0, true)
@@ -237,6 +244,17 @@ static func draw_projectile(g, arrow: Dictionary) -> void:
 		g.draw_circle(pos - Vector2(10.0 * dir, sin(float(g.clock) * 18.0) * 2.5), 3.0, Color(0.75, 0.50, 0.92, 0.65))
 		g.draw_circle(pos, 6.2, Color("aa6bce"))
 		g.draw_circle(pos, 2.6, Color("f0deff"))
+		return
+
+	if arrow.get("curse_splash", false) and arrow.has("look"):
+		var lk: Array = BOSS_CURSE.get(String(arrow.look), BOSS_CURSE.plague)
+		var cp: Vector2 = arrow.pos
+		for i: int in range(1, 6):
+			g.draw_circle(cp - Vector2(dir * float(i) * 7.0, sin(float(g.clock) * 14.0 + float(i)) * 2.5), 7.0 - float(i), Color(lk[0], 0.5 - float(i) * 0.08))
+		g.draw_circle(cp, 11.0, Color(lk[0], 0.3))
+		g.draw_circle(cp, 7.5, lk[1])
+		g.draw_arc(cp, 7.5, 0.0, TAU, 14, Color(lk[1].darkened(0.5)), 1.6, true)
+		g.draw_circle(cp + Vector2(-2.0, -2.0), 2.6, lk[2])
 		return
 
 	if arrow.get("curse_splash", false):
@@ -256,15 +274,171 @@ static func draw_projectile(g, arrow: Dictionary) -> void:
 		g.draw_colored_polygon(PackedVector2Array([bp + Vector2(dir * 6.0, 0.0), bp - Vector2(dir * 4.0, 3.8), bp - Vector2(dir * 4.0, -3.8)]), Color("cfd8df"))
 		return
 
-	# Standard arrow: feathered tail, wooden shaft, and steel point with faint motion streak.
-	var p: Vector2 = arrow.pos
-	var back := Vector2(dir * 16.0, 0.0)
-	var tail_p: Vector2 = p - back
-	g.draw_line(p - back * 1.7, tail_p, Color(g.INK, 0.16), 1.4, true)
-	g.draw_line(tail_p, p, Color("6b4a2b"), 2.1, true)
-	g.draw_line(tail_p, tail_p + Vector2(-dir * 4.0, -3.2), Color("ece2c6"), 1.4, true)
-	g.draw_line(tail_p, tail_p + Vector2(-dir * 4.0, 3.2), Color("ece2c6"), 1.4, true)
-	g.draw_colored_polygon(PackedVector2Array([p + Vector2(dir * 4.0, 0.0), p - Vector2(dir * 3.0, 2.6), p - Vector2(dir * 3.0, -2.6)]), Color("b6b8bc"))
+	draw_shot(g, arrow, dir)
+
+# ---- 肉鴿魔王的招牌彈 (roguelike_catalog.BOSS_SHOTS, 2026-11-22) ----------------------------------
+# Beams for the shots that run the whole lane, colours for the bursting curses, and the lobbed bombs.
+const BOSS_BEAM := {
+	"sword":[Color("9fc6e8", 0.45), Color("e4f2ff"), Color("ffffff")],
+	"iron":[Color("6d6a64", 0.5), Color("b9b3a6"), Color("f2ede0")],
+	"blood":[Color("7a1020", 0.5), Color("c8283c"), Color("ff9aa8")],
+	"fire_beam":[Color("a8401a", 0.5), Color("f08a2c"), Color("ffe08a")],
+}
+const BOSS_CURSE := {
+	"plague":[Color("5f8a3a"), Color("2f5a22"), Color("c9f08c")],
+	"acid":[Color("a6c81e"), Color("6f8a14"), Color("f1ff9a")],
+}
+const BOSS_BOMB := { # shell, glow, fuse spark
+	"fire":[Color("5a2a18"), Color("ff8a2a"), Color("fff0a0")],
+	"harvest":[Color("b88a2e"), Color("f2c75a"), Color("fff6c8")],
+	"time":[Color("2c4c7a"), Color("7fb8ff"), Color("e6f4ff")],
+	"rune":[Color("4a2a6a"), Color("c58cff"), Color("f3e2ff")],
+	"bone":[Color("3a3a2e"), Color("9fd08a"), Color("eef7d8")],
+	"acid":[Color("4f5e12"), Color("b8d42a"), Color("f4ffb0")],
+}
+
+static func draw_boss_bomb(g, arrow: Dictionary, flight: float) -> void:
+	var c: Array = BOSS_BOMB.get(String(arrow.look), BOSS_BOMB.fire)
+	var lift: float = 90.0
+	var t: float = float(g.clock)
+	# Where it will land: a pulsing warning ring that tightens as the shell comes down.
+	g.tf(arrow.impact, 0.0, Vector2(1.0, 0.48))
+	g.draw_circle(Vector2.ZERO, float(arrow.radius), Color(c[1], 0.10 + 0.12 * flight))
+	g.draw_arc(Vector2.ZERO, float(arrow.radius), 0.0, TAU, 32, Color(c[1], 0.55 + 0.25 * sin(t * 14.0)), 2.4, true)
+	g.draw_arc(Vector2.ZERO, float(arrow.radius) * maxf(0.12, 1.0 - flight), 0.0, TAU, 24, Color(c[2], 0.6), 1.8, true)
+	g.tf()
+	var shadow: Vector2 = (arrow.start as Vector2).lerp(arrow.impact, flight)
+	g.tf(shadow, 0.0, Vector2(1.0, 0.45))
+	g.draw_circle(Vector2.ZERO, 6.0 + 10.0 * flight, Color(0.12, 0.08, 0.05, 0.3))
+	g.tf()
+	for i: int in range(1, 7):
+		var bt: float = maxf(0.0, flight - float(i) * 0.04)
+		var bp: Vector2 = (arrow.start as Vector2).lerp(arrow.impact, bt) - Vector2(0.0, sin(bt * PI) * lift)
+		g.draw_circle(bp, 6.5 - float(i) * 0.8, Color(c[1], 0.55 - float(i) * 0.08))
+	var p: Vector2 = (arrow.pos as Vector2) - Vector2(0.0, sin(flight * PI) * lift)
+	g.draw_circle(p, 15.0 + 2.0 * sin(t * 20.0), Color(c[1], 0.25))
+	g.draw_circle(p, 10.0, c[0])
+	g.draw_arc(p, 10.0, 0.0, TAU, 16, g.INK, 1.8, true)
+	g.draw_circle(p + Vector2(-3.0, -3.0), 3.2, Color(c[1], 0.9))
+	g.draw_circle(p + Vector2(4.0, -8.0), 3.0 + sin(t * 30.0), c[2])
+
+# ---- shots (2026-11-22) ------------------------------------------------------------------------
+# Everything that fires through Battle.shoot(): the model moves the shot in a straight line and lands it
+# after B.ARROW_TIME; drawing only lifts it onto an arc and dresses it by shooter, so timing is untouched.
+const SHOT_STYLE := {
+	"tower":"bolt", "watchtower":"bolt", "ballista_tower":"bolt", "shroud_arbalist":"dark_bolt", "vampire_hunter":"silver_bolt",
+	"arquebusier":"bullet", "spearbow":"javelin",
+	"prism_mage":"orb", "sigil_weaver":"orb", "spell_mirror":"orb", "spell_tide_magus":"orb", "astrolabe_surveyor":"orb", "seal_bearer":"orb", "arcane_archer":"orb",
+	"necromancer":"dark_orb", "funeral_monk":"dark_orb", "mourning_maid":"dark_orb",
+	"bellbearer":"ring", "beekeeper":"bees", "net_hunter":"net", "web_spinner":"web",
+}
+const ORB_COLOR := {
+	"prism_mage":Color("e6a1ff"), "sigil_weaver":Color("8fb8ff"), "spell_mirror":Color("b9e6ff"), "spell_tide_magus":Color("5fb4e8"),
+	"astrolabe_surveyor":Color("f0c862"), "seal_bearer":Color("f2d27a"), "arcane_archer":Color("c5a4eb"),
+	"necromancer":Color("7fd38f"), "funeral_monk":Color("a88fd0"), "mourning_maid":Color("9db0c8"),
+}
+
+static func shot_style(arrow: Dictionary) -> String:
+	var vk := String(arrow.get("visual_kind", ""))
+	if vk == "lord": return "arrow"
+	if SHOT_STYLE.has(vk): return SHOT_STYLE[vk] # a 小怪領主 firing its card's shot
+	return SHOT_STYLE.get(String(arrow.kind), "arrow")
+
+# 0..1 along the flight, the straight-line end point, and the arc lift for this style.
+static func shot_path(arrow: Dictionary, style: String) -> Array:
+	var k: float = clampf(1.0 - float(arrow.remaining) / B.ARROW_TIME, 0.0, 1.0)
+	var start: Vector2 = arrow.get("start", arrow.pos)
+	var pos: Vector2 = arrow.pos
+	var end: Vector2 = start + (pos - start) / maxf(k, 0.05) if k > 0.05 else pos
+	var lift_share: float = {"arrow":0.16, "javelin":0.14, "net":0.2, "web":0.18, "bees":0.05, "bolt":0.06, "dark_bolt":0.06, "silver_bolt":0.06}.get(style, 0.0)
+	var lift: float = clampf(start.distance_to(end) * lift_share, 0.0, 46.0)
+	return [k, start, end, lift]
+
+static func arc_at(path: Array, k: float) -> Vector2:
+	return (path[1] as Vector2).lerp(path[2], k) - Vector2(0.0, sin(k * PI) * float(path[3]))
+
+static func draw_shot(g, arrow: Dictionary, dir: float) -> void:
+	var style := shot_style(arrow)
+	var path := shot_path(arrow, style)
+	var k: float = path[0]
+	var p := arc_at(path, k)
+	var ahead := arc_at(path, minf(1.0, k + 0.03)) - p
+	var angle: float = ahead.angle() if ahead.length() > 0.01 else (0.0 if dir > 0.0 else PI)
+	var t: float = float(g.clock)
+	match style:
+		"bolt", "dark_bolt", "silver_bolt":
+			var shaft := Color("4a3626") if style == "bolt" else (Color("2b2133") if style == "dark_bolt" else Color("8b8f96"))
+			var head := Color("9aa0a6") if style == "bolt" else (Color("7a4fa0") if style == "dark_bolt" else Color("eef3f7"))
+			if style == "dark_bolt":
+				for i: int in range(1, 4):
+					g.draw_circle(arc_at(path, maxf(0.0, k - float(i) * 0.07)), 4.5 - float(i), Color(0.35, 0.2, 0.45, 0.32 - float(i) * 0.08))
+			g.tf(p, angle)
+			g.draw_line(Vector2(-34.0, 0.0), Vector2(-14.0, 0.0), Color(g.INK, 0.14), 2.0, true)
+			g.draw_line(Vector2(-14.0, 0.0), Vector2(8.0, 0.0), shaft, 3.2, true)
+			g.draw_colored_polygon(PackedVector2Array([Vector2(-14.0, 0.0), Vector2(-19.0, -4.0), Vector2(-11.0, 0.0), Vector2(-19.0, 4.0)]), Color("d7c9a6"))
+			g.draw_colored_polygon(PackedVector2Array([Vector2(15.0, 0.0), Vector2(6.0, -4.2), Vector2(8.0, 0.0), Vector2(6.0, 4.2)]), head)
+			if style == "silver_bolt": g.draw_circle(Vector2(10.0, -1.5), 1.6, Color(1, 1, 1, 0.5 + 0.5 * sin(t * 30.0)))
+			g.tf()
+		"bullet":
+			var start: Vector2 = path[1]
+			if k < 0.45: # muzzle smoke where the shot left
+				var puff: float = k / 0.45
+				for i: int in range(3):
+					g.draw_circle(start + Vector2(dir * (6.0 + i * 7.0 * puff), -3.0 - i * 4.0 * puff), (5.0 + i * 3.0) * (0.6 + puff * 0.6), Color(0.86, 0.84, 0.8, 0.5 * (1.0 - puff)))
+				g.draw_circle(start + Vector2(dir * 4.0, 0.0), 6.0 * (1.0 - puff), Color(1.0, 0.8, 0.35, 0.8 * (1.0 - puff)))
+			g.draw_line(p - Vector2(dir * 30.0, 0.0), p, Color(1.0, 0.93, 0.7, 0.32), 2.0, true)
+			g.draw_circle(p, 3.0, Color("3b3633"))
+			g.draw_circle(p + Vector2(-0.8, -0.8), 1.1, Color(1, 1, 1, 0.5))
+		"orb", "dark_orb":
+			var col: Color = ORB_COLOR.get(String(arrow.kind), Color("c5a4eb"))
+			for i: int in range(1, 6):
+				var trail := arc_at(path, maxf(0.0, k - float(i) * 0.035)) + Vector2(0.0, sin(t * 16.0 + float(i)) * 1.6)
+				g.draw_circle(trail, 5.0 - float(i) * 0.75, Color(col, 0.42 - float(i) * 0.07))
+			var wob := Vector2(0.0, sin(t * 11.0) * 1.5)
+			g.draw_circle(p + wob, 9.0 + sin(t * 18.0), Color(col, 0.22))
+			g.draw_circle(p + wob, 5.5, col.darkened(0.25) if style == "dark_orb" else col)
+			g.draw_circle(p + wob + Vector2(-1.2, -1.2), 2.3, Color(1, 1, 1, 0.8) if style == "orb" else Color(col.lightened(0.6), 0.85))
+		"ring":
+			for i: int in range(3):
+				var rk := fposmod(t * 3.0 + float(i) / 3.0, 1.0)
+				g.draw_arc(p, 4.0 + rk * 12.0, angle - 0.9, angle + 0.9, 10, Color(0.95, 0.82, 0.45, 0.75 * (1.0 - rk)), 2.0, true)
+			g.draw_circle(p, 3.2, Color("d9b45a"))
+		"bees":
+			for i: int in range(5):
+				var off := Vector2(sin(t * 22.0 + float(i) * 1.7) * 7.0, cos(t * 19.0 + float(i) * 2.3) * 5.0) + Vector2(-dir * float(i) * 3.0, 0.0)
+				g.draw_circle(p + off, 2.2, Color("e0a82e"))
+				g.draw_line(p + off + Vector2(-1.5, 0), p + off + Vector2(1.5, 0), Color("2b2116"), 1.0)
+				g.draw_circle(p + off + Vector2(0.0, -2.0), 1.4, Color(1, 1, 1, 0.55))
+		"net", "web":
+			var spin: float = k * TAU * 1.5 * dir
+			var col := Color("8a6d45") if style == "net" else Color("f2efe6")
+			var r: float = 7.0 + k * 5.0
+			g.tf(p, spin)
+			for i: int in range(6):
+				var a0: float = float(i) * TAU / 6.0
+				g.draw_line(Vector2.ZERO, Vector2(cos(a0), sin(a0)) * r, col, 1.2, true)
+			g.draw_arc(Vector2.ZERO, r * 0.55, 0.0, TAU, 12, col, 1.0, true)
+			g.draw_arc(Vector2.ZERO, r, 0.0, TAU, 14, col, 1.2, true)
+			if style == "net":
+				for w: int in range(3): g.draw_circle(Vector2(cos(w * TAU / 3.0), sin(w * TAU / 3.0)) * r, 1.8, Color("5b5752"))
+			g.tf()
+		"javelin":
+			g.tf(p, angle)
+			g.draw_line(Vector2(-30.0, 0.0), Vector2(6.0, 0.0), Color("6b4a2b"), 2.6, true)
+			g.draw_colored_polygon(PackedVector2Array([Vector2(14.0, 0.0), Vector2(5.0, -3.6), Vector2(5.0, 3.6)]), Color("b6b8bc"))
+			g.tf()
+		_:
+			# A feathered arrow on its arc: wooden shaft, goose fletching, steel point and a faint streak.
+			for i: int in range(1, 4):
+				var a := arc_at(path, maxf(0.0, k - float(i) * 0.05))
+				var b2 := arc_at(path, maxf(0.0, k - float(i - 1) * 0.05))
+				g.draw_line(a, b2, Color(g.INK, 0.12 - float(i) * 0.03), 1.4, true)
+			g.tf(p, angle)
+			g.draw_line(Vector2(-18.0, 0.0), Vector2(4.0, 0.0), Color("6b4a2b"), 2.2, true)
+			g.draw_colored_polygon(PackedVector2Array([Vector2(-18.0, 0.0), Vector2(-23.0, -3.6), Vector2(-15.0, 0.0), Vector2(-23.0, 3.6)]), Color("ece2c6"))
+			g.draw_colored_polygon(PackedVector2Array([Vector2(9.0, 0.0), Vector2(2.0, -3.0), Vector2(2.0, 3.0)]), Color("b6b8bc"))
+			g.draw_polyline(PackedVector2Array([Vector2(2.0, -3.0), Vector2(9.0, 0.0), Vector2(2.0, 3.0)]), Color(g.INK, 0.6), 1.0, true)
+			g.tf()
 
 ## Card toss & summon ring, gold harvest coin parabola, and staggered death fade.
 static func draw_play(g, e: Dictionary, progress: float) -> void:

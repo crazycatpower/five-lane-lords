@@ -318,6 +318,8 @@ func make_battle(i: int, deck: Array, lead_lord: String) -> Battle:
 		m.apply_campaign_mods(1, p.mods)
 	if plus > 0:
 		m.apply_campaign_mods(1, {"start_ink":float(5 * plus),"cd_speed_mult":1.0 + 0.1 * mini(plus, 3)})
+	if not d.get("conveyor",{}).is_empty():
+		preload("res://conveyor.gd").setup(m, d.conveyor)
 	return m
 
 # The enemy AI level for stage i: the stage's own, unless the difficulty sets one; a new cycle adds one.
@@ -447,7 +449,7 @@ func tip_spot(game, rect: Rect2, text: String) -> void:
 	b.tooltip_text = text
 
 func ruler_name(i: int) -> String:
-	return "強盜" if STAGES[i].enemy_camp else B.lord_name(STAGES[i].enemy_lord)
+	return "強盜" if STAGES[i].enemy_camp and STAGES[i].enemy_lord == "bandit_chief" else B.lord_name(STAGES[i].enemy_lord)
 
 func show(game) -> void:
 	load_progress()
@@ -728,7 +730,10 @@ func paint_side(g) -> void:
 	var foe_line := "照教學腳本出兵" if scripted_foe(selected) else "AI %s" % ["簡單","普通","困難"][eff_ai]
 	g.label_at(Vector2(x+126,y+134),"%s · %d 路%s" % [foe_line, d.active_lanes.size(), " · 守城 %d 秒" % int(d.survive_time) if d.survive_time > 0.0 else ""],17,Color("6f5a3e"))
 	var terrain_line := preload("res://adventure_terrain.gd").summary(d)
-	if terrain_line.is_empty(): g.label_at(Vector2(x+126,y+160),"牌組　" + ("教學固定牌組" if d.deck is Array else ("自己挑 8 張" if bool(d.get("deck_lesson",false)) else "自組＋本關新卡")),17,Color("6f5a3e"))
+	if not d.get("conveyor",{}).is_empty():
+		var cv_line := "傳送帶 · " + terrain_line if not terrain_line.is_empty() else "牌組　補給傳送帶（免費送牌）"
+		g.label_at(Vector2(x+126,y+160),cv_line,15 if not terrain_line.is_empty() else 17,Color("8e4a1e"))
+	elif terrain_line.is_empty(): g.label_at(Vector2(x+126,y+160),"牌組　" + ("教學固定牌組" if d.deck is Array else ("自己挑 8 張" if bool(d.get("deck_lesson",false)) else "自組＋本關新卡")),17,Color("6f5a3e"))
 	else: g.label_at(Vector2(x+126,y+160),"地形　" + terrain_line,16,Color("3c6e2e"))
 	# The lesson: what this stage teaches.
 	var rule_r := Rect2(x + 20, y + LESSON_Y, w - 40, 118)

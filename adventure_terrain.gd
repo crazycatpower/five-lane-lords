@@ -25,7 +25,7 @@ const STAGES := {
 	"w1_4":{"name":"木拒馬隘口","lanes":[2],"season":"spring"},
 	"w1_5":{"name":"稻草人田","lanes":[2],"season":"summer","ruler":"card_enemy_scarecrow"},
 	"w1_6":{"name":"三岔城門","lanes":MID,"season":"summer"},
-	"w1_7":{"name":"強盜糧道","lanes":MID,"season":"summer"},
+	"w1_7":{"name":"磨坊莊園","lanes":MID,"season":"summer"},
 	"w1_8":{"name":"三岔路口","lanes":MID,"season":"autumn"},
 	"w1_9":{"name":"攻城坡道","lanes":MID,"season":"autumn","slope":{"high":1}},
 	"w1_10":{"name":"豐收大道","lanes":FIVE,"season":"autumn","wind_lanes":[2],"wind_shift":{"interval":50.0}},

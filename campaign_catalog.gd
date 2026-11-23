@@ -126,6 +126,7 @@ static func _stage(id: String, code: String, world: int, node_idx: int, name: St
 		"biome":WORLDS[world].biome,
 		"deck":opts.get("deck","player"),
 		"allow_duplicates":bool(opts.get("allow_duplicates",opts.get("deck","player") is Array)),
+		"conveyor":opts.get("conveyor",{}),
 		"enemy_deck":enemy_deck,
 		"rows":int(opts.get("rows",5)), # field rows: 5, or 6 for a six-lane stage
 		"active_lanes":opts.get("active_lanes",ALL_LANES),
@@ -194,36 +195,47 @@ static func build_stages() -> Array:
 			"老隊長的兵這回會自己出牌，還在路上插滿稻草人。",
 			"小考：單路實戰","對手會自己種田、出兵、蓋稻草人擋路。用前四課學的出兵、種田、推領地，再用新拿到的火罐（對建築 600 傷害）燒開他的防線。",
 			_lesson({"prev":"w1_4","deck":["militia","archer","farmer","barricade","militia","archer","farmer","fire"],"tip":"稻草人擋路就丟火罐；開局先種兩塊田、派農民。"})),
-		_stage("w1_6","1-6",0,5,"守住城門","bandit_chief",0,
-			["bandit","bandit","bandit","bandit","bandit","bandit","bandit","bandit"],
+		_stage("w1_6","1-6",0,5,"守住城門","mob_foreman",0,
+			["mob","mob","militia","militia","mob","militia","hunter","militia"],
 			["scarecrow","tower"],
-			"強盜分三路撲向城門，只能靠你守住。",
+			"暴民頭領煽動鄉民，拿著乾草叉分三路撲向城門，只能靠你守住。",
 			"防守：部隊不回頭","部隊只會往前走，漏過去的敵兵不會回頭追。防守要靠建築：稻草人把上下三路的敵兵吸到同一路，箭樓射周圍兩格。守滿倒數就算贏。",
 			_lesson({"prev":"w1_5","deck":["tower","scarecrow","militia","archer","tower","militia","scarecrow","archer"],"camp":true,"survive_time":90.0,"tip":"箭樓蓋在城牆前，稻草人擺在它前面擋。"})),
-		_stage("w1_7","1-7",0,6,"箭雨與火罐","bandit_chief",0,
-			["bandit","bandit","bandit","bandit","bandit","bandit","bandit","bandit"],
+		_stage("w1_7","1-7",0,6,"箭雨與火罐","card_enemy_mill",0,
+			["militia","militia","farmer","militia","militia","farmer","militia","hunter"],
 			["rain"],
-			"強盜三路並排擠過來，搶來的糧食就堆在營地裡。",
+			"磨坊莊園囤糧抗稅，莊上的鄉兵三路並排擠過來，糧食就堆在莊裡。",
 			"法術","法術可以丟在戰場任何地方，不必在自己領地。箭雨（2×3 格）一次蓋住三路清人群，火罐（2×2 格）專燒建築。",
 			_lesson({"prev":"w1_6","deck":["rain","fire","militia","archer","rain","militia","fire","archer"],"camp":true,"buildings":[[7,2,"granary"]],"tip":"箭雨清人群，火罐燒建築。"})),
-		_stage("w1_8","1-8",0,7,"三岔路口","bandit_chief",0,
-			["bandit","bandit","bandit","bandit","bandit","bandit","bandit","bandit"],
+		_stage("w1_8","1-8",0,7,"三岔路口","militia_captain",0,
+			["militia","militia","militia","hunter","militia","militia","hunter","militia"],
 			["hunter"],
-			"強盜分三路包抄，領主終於親自上陣。",
+			"叛變的民兵隊長帶著人馬分三路包抄，領主終於親自上陣。",
 			"三路與領主","每一路都有一段城牆，任何一段被打破敵兵就能走進來。你的領主會自己去攔最深入的敵兵，倒下後 12 秒重生。",
 			_lesson({"prev":"w1_7","deck":["hunter","militia","archer","farmer","hunter","militia","tower","rain"],"active_lanes":MIDDLE_LANES,"camp":true,"tip":"看上方城牆血條，哪一路有敵人就補哪一路。"})),
-		_stage("w1_9","1-9",0,8,"破陣斬","bandit_chief",0,
-			["bandit","bandit","bandit","bandit","bandit","bandit","bandit","bandit"],
+		_stage("w1_9","1-9",0,8,"破陣斬","ram_marshal",0,
+			["ram","militia","militia","shieldguard","ram","militia","militia","shieldguard"],
 			["recruit_camp"],
-			"強盜推出了攻城槌，普通的兵砍不動它。",
+			"攻城槌元帥推出了攻城槌，普通的兵砍不動它。",
 			"領主技能","花出去的每一枚金幣都會替領主技能充能。充滿後按 Q：邊境領主的破陣斬向前斬出 5 格長、3 路寬的劍氣。",
 			_lesson({"prev":"w1_8","deck":["militia","hunter","archer","farmer","militia","hunter","archer","rain"],"active_lanes":MIDDLE_LANES,"camp":true,"tip":"等攻城槌走近領主再按 Q，劍氣才砍得到。","card_note":"新兵營：蓋好後每 24 秒在這一路訓練 2 名民兵。"})),
 		_stage("w1_10","1-10",0,9,"畢業考：豐收莊園","harvest",0,
 			["farmer","militia","hunter","mob","barricade","scarecrow","rain","tower"],
 			["mob"],
-			"豐收領主想看看邊境新領主的本事。",
-			"畢業考：五路一日","五路全開，對手有領主也會出牌。第一次自己挑 8 張牌出征；日晷走到入夜城牆會崩，天亮還沒分勝負就比領地。",
-			{"prev":"w1_9","deck_lesson":true,"tip":"先種田耕田撐經濟，再挑一兩路集中推進；打不贏就把難度調成簡單。"}),
+			"豐收領主打開糧倉閘門，補給車源源不斷駛向五路前線。",
+			"畢業考：傳送帶","本關沒有金幣與農田，改由底部傳送帶免費送出農民軍團與法術（最多存 8 張）；直接出牌不花錢並替領主大招充能。日晷走到入夜城牆會崩，天亮還沒分勝負就比領地。",
+			{"prev":"w1_9",
+			"deck":["militia","archer","hunter","mob","barricade","scarecrow","tower","rain"],
+			"allow_duplicates":false,
+			"conveyor":{
+				"capacity":8,
+				"interval":2.8,
+				"min_interval":1.7,
+				"start_count":3,
+				"opening":["militia","archer","hunter","barricade","mob","rain"],
+				"pool":["militia","militia","archer","archer","hunter","hunter","mob","mob","mob","barricade","scarecrow","tower","recruit_camp","rain","rain","fire"],
+			},
+			"tip":"免費出牌不用省金幣，傳送帶快滿 8 張就趕快傾瀉兵力；打不贏就把難度調成簡單。"}),
 
 		# ---- 二・運河渡口：經典兵種相剋 ----
 		_stage("w2_1","2-1",1,0,"盾牆渡口","shield_sergeant",0,
@@ -231,7 +243,7 @@ static func build_stages() -> Array:
 			["macebreaker"],
 			"渡口守軍舉起一整排大盾，箭射上去叮叮噹噹。",
 			"重甲與破甲","盾衛每次受到傷害先減 20：獵戶的箭只剩 30，民兵也砍得很慢。釘錘破甲兵的攻擊無視護甲，專拆硬殼。",
-			{"prev":"w1_10","active_lanes":MIDDLE_LANES,"new_enemy":"shieldguard","enemy_note":"每次受到傷害減少 20；小傷害打它幾乎沒用。","tip":"釘錘破甲兵無視護甲；火罐、領主這種大傷害也不怕盾。"}),
+			{"prev":"w1_10","deck_lesson":true,"active_lanes":MIDDLE_LANES,"new_enemy":"shieldguard","enemy_note":"每次受到傷害減少 20；小傷害打它幾乎沒用。","tip":"釘錘破甲兵無視護甲；火罐、領主這種大傷害也不怕盾。"}),
 		_stage("w2_2","2-2",1,1,"雙塔哨口","tower_warden",0,
 			["tower","militia","hunter","farmer","shieldguard","barricade","rain","scarecrow"],
 			["knight"],
@@ -524,6 +536,14 @@ static func validate(list: Array = stages()) -> Array[String]:
 		if deck is Array:
 			for card in deck:
 				if not granted.has(card): errors.append(id+": lesson hand uses %s before it is taught" % str(card))
+		var cv: Dictionary = d.get("conveyor",{})
+		if not cv.is_empty():
+			var cv_pool = cv.get("pool",[])
+			if not cv_pool is Array or cv_pool.is_empty(): errors.append(id+": conveyor pool cannot be empty")
+			for src_key: String in ["opening","pool"]:
+				for card in cv.get(src_key,[]):
+					if not B.CARDS.has(card): errors.append(id+": conveyor unknown card "+str(card))
+					elif not granted.has(card): errors.append(id+": conveyor uses %s before it is taught" % str(card))
 		var foe_kind: String = d.get("new_enemy","")
 		if not foe_kind.is_empty() and foe_kind != "skill" and not B.CARDS.has(foe_kind): errors.append(id+": unknown new enemy "+foe_kind)
 		if foe_kind == "skill" and not B.LORDS.has(d.get("enemy_lord","")): errors.append(id+": a skill callout needs a real lord")

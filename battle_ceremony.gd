@@ -14,7 +14,7 @@ const PANEL_IN := 0.45
 static func headline(g) -> String:
 	if g.net != null: return "線上對戰"
 	if not g.vs_ai_matched_name.is_empty(): return "配對對戰 · " + g.vs_ai_matched_name
-	if g.rogue.in_battle: return "肉鴿 · 第 %d / %d 場" % [g.rogue.battle_floor_number(),g.rogue.Catalog.FLOORS]
+	if g.rogue.in_battle: return "肉鴿 · %s" % g.rogue.season_label().get_slice(" · ",0)
 	if g.adventure.index >= 0:
 		var st: Dictionary = g.adventure.STAGES[g.adventure.index]
 		return "遠征 %s · %s" % [st.get("code",""), st.name]
@@ -23,7 +23,7 @@ static func headline(g) -> String:
 
 # The name under a side's portrait: its lord, or the rabble an adventure stage fields without one.
 static func side_name(g, team: int) -> String:
-	if team == 1 and g.adventure.index >= 0 and g.adventure.STAGES[g.adventure.index].enemy_camp: return "強盜"
+	if team == 1 and g.adventure.index >= 0 and g.adventure.STAGES[g.adventure.index].enemy_camp: return g.adventure.ruler_name(g.adventure.index)
 	return B.lord_name(g.model.lords[team].lord)
 
 static func short_name(g, team: int) -> String:

@@ -118,6 +118,36 @@ func tutorial_lesson_ok() -> String:
 	adv.lord = "adventure"
 	var fed: Array = adv.with_featured(["militia","hunter","farmer","barricade","scarecrow","tower","rain","mob"], 10)
 	if not "macebreaker" in fed or not DS.valid(fed, "adventure") or not "farmer" in fed: return "stage 2-1 did not put 釘錘破甲兵 into the deck: %s" % str(fed)
+	var Conveyor = preload("res://conveyor.gd")
+	if adv.STAGES[9].id != "w1_10" or adv.STAGES[10].id != "w2_1": return "stage indices shifted for 1-10 / 2-1"
+	if bool(adv.STAGES[9].get("deck_lesson", false)) or not bool(adv.STAGES[10].get("deck_lesson", false)): return "deck_lesson must move from w1_10 to w2_1"
+	var conv: Battle = adv.make_battle(9, adv.STAGES[9].deck.duplicate(), "adventure")
+	if not conv.is_conveyor(0) or conv.is_conveyor(1): return "1-10 conveyor flag wrong"
+	if not is_zero_approx(conv.production_rate(0)): return "1-10 conveyor should have 0 production_rate"
+	if Conveyor.count(conv) != 3 or conv.ink[0] > 0.001: return "1-10 conveyor start state wrong"
+	for _f: int in range(60 * 25):
+		conv.step(1.0 / 60.0)
+		conv.events.clear()
+		if conv.ended: break
+	if Conveyor.count(conv) != 8 or conv.ink[0] > 0.001: return "1-10 conveyor failed to cap at 8 or leaked gold"
+	var play_slot := -1
+	var play_pos := L.cell_center(Vector2i(0, 2))
+	for s: int in range(Conveyor.count(conv)):
+		if conv.can_play(0, s, play_pos):
+			play_slot = s
+			break
+	if play_slot < 0: return "1-10 conveyor had no playable card on belt"
+	var before_cnt := Conveyor.count(conv)
+	var before_chg: float = conv.skill_charge[0]
+	if not conv.play(0, play_slot, play_pos): return "1-10 conveyor free play failed"
+	if Conveyor.count(conv) != before_cnt - 1: return "1-10 conveyor play did not consume card"
+	if conv.skill_charge[0] <= before_chg: return "1-10 conveyor play did not charge lord skill"
+	for _f2: int in range(20):
+		conv.step(1.0 / 60.0)
+		conv.events.clear()
+	for si: int in range(1, Conveyor.count(conv)):
+		if Conveyor.card_rect(conv, si).position.x < Conveyor.card_rect(conv, si - 1).position.x + Conveyor.CARD_STEP - 0.1:
+			return "1-10 conveyor cards overlapped after slide"
 	return ""
 
 # ---------------- data and determinism (9) ----------------
@@ -265,11 +295,14 @@ func combat_checks() -> void:
 	var spell_hits: bool = bandit.hp < hp_before
 	bandit.hp = hp_before
 	var tower := sb.add_building(1, Vector2i(3, 2), "watchtower")
+	var wt_expand_ok: bool = sb.territory_owner(Vector2i(5, 0)) == 1 and sb.territory_owner(Vector2i(1, 2)) == 0 and sb.territory_owner(Vector2i(6, 2)) == -1
 	bandit.pos = tower.pos - Vector2(40, 0)
 	sb.step(1.0 / 60.0)
 	sb.buildings.clear()
+	sb.refresh_territory()
+	wt_expand_ok = wt_expand_ok and sb.territory_owner(Vector2i(5, 0)) == -1
 	for i: int in range(185): sb.step(1.0 / 60.0)
-	check(hidden_at_start and broke and restealthed and stealth_immune and spell_hits and bandit.revealed and not bandit.stealthed, "stealth breaks on attack, returns after marching, only spells hurt it while hidden, and a watchtower reveals it for good (immune=%s spell=%s)" % [stealth_immune, spell_hits])
+	check(hidden_at_start and broke and restealthed and stealth_immune and spell_hits and bandit.revealed and not bandit.stealthed and wt_expand_ok, "stealth breaks on attack, returns after marching, only spells hurt it while hidden, and a watchtower reveals it for good and expands 5x5 territory (immune=%s spell=%s expand=%s)" % [stealth_immune, spell_hits, wt_expand_ok])
 
 	# Poison stacking, immunity for buildings and mechanical units, and healing; armor keeps a 1-damage floor.
 	var pb := quiet(33)
@@ -284,6 +317,32 @@ func combat_checks() -> void:
 	sg.hex_team = 1
 	pb.heal(pb.spawn_unit(0, 2, "healer", Vector2(380, 420)), 0.1)
 	var heal_ok: bool = int(sg.poison_stacks) == 2 and int(sg.hex_stacks) == 2
+	var ExpCards = preload("res://expansion_cards.gd")
+	var hrb := quiet(34)
+	hrb.record_events = true
+	var h_u := hrb.spawn_unit(0, 2, "healer", Vector2(380, 420))
+	var a_in := ready_unit(hrb, 0, 2, "shieldguard", Vector2(380.0 + 244.0, 420.0))
+	var a_out := ready_unit(hrb, 0, 2, "shieldguard", Vector2(380.0 + 274.0, 420.0))
+	a_in.hp = a_in.max_hp - 80.0
+	a_out.hp = a_out.max_hp - 80.0
+	hrb.heal(h_u, 0.1)
+	var pulse_ok: bool = hrb.events.any(func(ev: Dictionary) -> bool: return ev.get("kind", "") == "support_pulse" and ev.get("style", "") == "heal" and is_equal_approx(float(ev.get("radius", 0.0)), 236.0) and is_equal_approx(float(ev.get("source_radius", 0.0)), 12.0))
+	var heal_range_ok: bool = is_equal_approx(hrb.unit_heal_radius(h_u), 236.0) and a_in.hp > a_in.max_hp - 80.0 and is_equal_approx(a_out.hp, a_out.max_hp - 80.0) and pulse_ok
+	h_u.range_pct = 0.30
+	h_u.heal_cd = 0.0
+	hrb.heal(h_u, 0.1)
+	heal_range_ok = heal_range_ok and is_equal_approx(hrb.unit_heal_radius(h_u), 307.0) and a_out.hp > a_out.max_hp - 80.0
+	for uk: String in ["bellbearer", "funeral_monk"]:
+		var ub := quiet(37)
+		ub.record_events = true
+		var bu := ub.spawn_unit(0, 2, uk, Vector2(380, 420))
+		var bi := ready_unit(ub, 0, 2, "shieldguard", Vector2(380.0 + 244.0, 420.0))
+		var bo := ready_unit(ub, 0, 2, "shieldguard", Vector2(380.0 + 274.0, 420.0))
+		bi.hp = bi.max_hp - 60.0
+		bo.hp = bo.max_hp - 60.0
+		ExpCards.support(ub, bu, B.CARDS[uk])
+		var u_pulse: bool = ub.events.any(func(ev: Dictionary) -> bool: return ev.get("kind", "") == "support_pulse" and ev.get("style", "") == "heal" and is_equal_approx(float(ev.get("radius", 0.0)), 236.0))
+		heal_range_ok = heal_range_ok and is_equal_approx(ub.unit_heal_radius(bu), 236.0) and bi.hp > bi.max_hp - 60.0 and is_equal_approx(bo.hp, bo.max_hp - 60.0) and u_pulse
 
 	# Hex stacks infinitely and expires cleanly after duration.
 	var hex_pb := quiet(35)
@@ -320,7 +379,7 @@ func combat_checks() -> void:
 		imm_ok = imm_ok and is_equal_approx(iu.hp, iu.max_hp) and int(iu.get("poison_stacks", 0)) == 0 and int(iu.get("hex_stacks", 0)) == 0
 	imm_ok = imm_ok and B.poison_immune(imm_units[1]) and not B.poison_immune(esc_mil)
 
-	check(heal_ok and hex_4_ok and hex_dmg_ok and hex_exp_ok and imm_ok, "poison stacks infinitely, healer removes 1 stack of each, and buildings/mechanical units are immune")
+	check(heal_ok and heal_range_ok and hex_4_ok and hex_dmg_ok and hex_exp_ok and imm_ok, "poison stacks infinitely, healer units heal within their attack range and emit true-radius pulse, and buildings/mechanical units are immune")
 	var armor: float = float(B.CARDS.shieldguard.armor)
 	var hp0: float = sg.hp
 	pb.damage(sg, armor, 1, "knight")
@@ -485,7 +544,7 @@ func combat_checks() -> void:
 	pv.ai_enabled = [false, false]
 	pv.lord_active = [false, false]
 	var mismatched: Array = []
-	for pc: Array in [["aether_hound", Vector2i(1, 1)], ["dog_cannon", Vector2i(1, 3)], ["ward_phalanx", Vector2i(1, 2)], ["orrery_walker", Vector2i(1, 1)], ["militia", Vector2i(1, 1)], ["shieldguard", Vector2i(1, 2)], ["skeleton", Vector2i(1, 3)], ["guard", Vector2i(1, 2)], ["ram", Vector2i(1, 1)], ["mob", Vector2i(1, 2)], ["gold_monster", Vector2i(1, 2)], ["necromancer", Vector2i(1, 2)], ["pallbearer", Vector2i(1, 2)], ["blink_blade", Vector2i(1, 2)], ["aether_hound", Vector2i(1, 2)], ["raven", Vector2i(1, 2)], ["dark_wizard", Vector2i(1, 2)], ["thorn_mother", Vector2i(1, 2)]]:
+	for pc: Array in [["aether_hound", Vector2i(1, 1)], ["dog_cannon", Vector2i(1, 3)], ["ward_phalanx", Vector2i(1, 2)], ["orrery_walker", Vector2i(1, 1)], ["militia", Vector2i(1, 1)], ["shieldguard", Vector2i(1, 2)], ["skeleton", Vector2i(1, 3)], ["guard", Vector2i(1, 2)], ["ram", Vector2i(1, 1)], ["mob", Vector2i(1, 2)], ["gold_monster", Vector2i(1, 2)], ["necromancer", Vector2i(1, 2)], ["pallbearer", Vector2i(1, 2)], ["blink_blade", Vector2i(1, 2)], ["aether_hound", Vector2i(1, 2)], ["raven", Vector2i(1, 2)], ["dark_wizard", Vector2i(1, 2)], ["thorn_mother", Vector2i(1, 2)], ["giant_arcane_golem", Vector2i(1, 2)]]:
 		pv.units.clear()
 		pv.decks[0][0] = pc[0]
 		pv.hand_cd[0][0] = 0.0
@@ -640,23 +699,86 @@ func economy_and_roguelike_checks() -> void:
 	var rg := Rogue.new()
 	rg.save_path = "user://quick_test_rogue.json"
 	rg.begin("lion", 4242, 1)
-	check(rg.run.board.size() == 4 and rg.run.deck.size() == 8 and DS.valid(rg.run.deck, "lion") and rg.run.deck.all(func(k: String) -> bool: return B.card_faction(k) == B.lord_faction("lion")), "a roguelike run starts with a 4-slot board and a legal 8-card faction deck")
+	var season_cards: Array = rg.run.pile + rg.run.board.map(func(sl: Dictionary) -> String: return String(sl.kind))
+	var support_ok: bool = season_cards.filter(func(k: String) -> bool: return k in RCatalog.SEASON_RANDOM_KINDS).size() == RCatalog.SEASON_RANDOM_COUNT
+	var pile_ok: bool = season_cards.size() == RCatalog.SEASON_SIZE and season_cards.count("battle") == 4 and season_cards.count("elite") == 2 and support_ok and rg.run.pile.size() == 6 and String(rg.run.pile[-1]) == "sboss" and rg.run.season == 0 and int(rg.run.get("cards_cleared", -1)) == 0
+	check(pile_ok and rg.run.board.size() == 4 and rg.run.deck.size() == 8 and DS.valid(rg.run.deck, "lion") and rg.run.deck.all(func(k: String) -> bool: return B.card_faction(k) == B.lord_faction("lion")), "a roguelike run starts in spring: a 4-flag board drawn from a 10-card season pile (4 battles, 2 elites, 3 random support, the boss last), and a legal 8-card faction deck")
+	rg.run.board[3] = RCatalog.make_slot("camp", rg.run, 3)
 	rg.select_node(3)
 	rg.trigger_node()
 	var at_camp: bool = rg.run.phase == "camp"
 	rg.camp_card_index = 0
 	rg.camp_action(1)
-	check(at_camp and rg.run.phase == "map" and Upgrades.level(rg.run.upgrades.get(rg.run.deck[0], {})) == 1, "the camp forge upgrades the chosen card by one level")
+	check(at_camp and rg.run.phase == "map" and Upgrades.level(rg.run.upgrades.get(rg.run.deck[0], {})) == 1 and int(rg.run.get("cards_cleared", 0)) == 1 and is_equal_approx(Upgrades.stat_pct("hp", 2), 0.5), "the camp forge upgrades the chosen card additively by percentage and increments cards_cleared")
 	rg.set_elite(true)
 	rg.make_battle()
 	rg.settle(true)
-	check(rg.run.floor == 1 and rg.run.relics.size() >= 1 and rg.run.phase == "reward", "winning an elite battle drops a relic and advances the floor")
+	var elite_ok: bool = rg.run.season_wins == 1 and rg.run.relics.size() >= 1 and rg.run.phase == "reward" and int(rg.run.get("cards_cleared", 0)) == 2
+	# The season's boss card turns every flag into the boss; beating it opens the next season, and after winter the 魔王.
+	rg.run.phase = "map"
+	rg.run.pile = ["sboss"]
+	rg.select_node(0)
+	rg.consume_board_slot(true)
+	var boss_board: bool = rg.run.board.all(func(sl: Dictionary) -> bool: return sl.kind == "sboss")
+	var sb_battle := rg.make_battle()
+	var sb_key: String = rg.run.sbosses[0]
+	var sb_giant: String = String(RCatalog.SEASON_BOSSES[sb_key].giant)
+	var summons: bool = sb_battle.field_mutators.all(func(fm: Dictionary) -> bool: return fm.get("mode", "") != "units") and sb_battle.lords[1].has("shot") and sb_giant in sb_battle.decks[1]
+	rg.settle(true)
+	var summer: bool = rg.run.season == 1 and rg.run.pile.size() == 6 and not rg.run.board.any(func(sl: Dictionary) -> bool: return sl.kind == "sboss") and int(rg.run.get("cards_cleared", 0)) == 4
+	rg.run.phase = "map"
+	rg.run.season = 3
+	rg.run.pile = ["sboss"]
+	rg.consume_board_slot(true)
+	rg.settle(true)
+	var throne: bool = rg.is_boss() and rg.run.board[0].kind == "boss" and rg.valid_run(rg.run) and int(rg.run.get("cards_cleared", 0)) == 6
+	var gold_rg := Rogue.new()
+	gold_rg.save_path = "user://quick_test_rogue_gold.json"
+	gold_rg.begin("lion", 4242, 1)
+	gold_rg.run.board[0] = RCatalog.make_slot("battle", gold_rg.run, 0)
+	gold_rg.run.board[1] = RCatalog.make_slot("battle", gold_rg.run, 1)
+	gold_rg.select_node(0)
+	gold_rg.consume_board_slot(true)
+	var aged_bounty_ok: bool = int(gold_rg.run.board[1].get("bounty", 0)) == 70
+	gold_rg.run.gold = 200
+	gold_rg.reroll_board()
+	var reroll_bounty_ok: bool = true
+	for sl: Dictionary in gold_rg.run.board:
+		if sl.get("kind", "") in ["battle", "elite", "boss", "sboss"] and int(sl.get("bounty", 0)) != 50:
+			reroll_bounty_ok = false
+	var gold_double_ok: bool = RCatalog.GOLD_BY_FLOOR == [200, 280, 360, 460, 560, 660, 780] and RCatalog.SKIP_REWARD_GOLD == 130 and gold_rg.win_gold(0, false, false) == 192 and gold_rg.win_gold(0, true, false) == 288 and gold_rg.win_gold(0, false, true) == 576 and aged_bounty_ok and reroll_bounty_ok
+	for fp: String in [gold_rg.save_path, gold_rg.save_path + ".bak"]:
+		if FileAccess.file_exists(fp): DirAccess.remove_absolute(ProjectSettings.globalize_path(fp))
+	check(elite_ok and gold_double_ok and boss_board and summons and summer and throne, "an elite win drops a relic; post-battle gold/bounty/skip rewards are doubled; the drawn season boss takes the whole board and opens the next 10-card season (elite %s gold2x %s board %s summons %s summer %s throne %s)" % [elite_ok, gold_double_ok, boss_board, summons, summer, throne])
 	var rs := Rogue.new()
 	rs.save_path = "user://quick_test_rogue_scale.json"
 	rs.begin("adventure", 777, 3)
+	rs.run.cards_cleared = 10
 	rs.run.floor = RCatalog.FLOORS - 1
 	var last := rs.make_battle()
-	check(is_equal_approx(float(last.lord_mod(1, "gold_gain_mult", 1.0)), 2.0) and is_equal_approx(float(last.lord_mod(1, "cd_speed_mult", 1.0)), 2.0), "the final floor doubles enemy gold and cooldown speed")
+	var boss_ld := B.lord_data(last.lords[1].lord)
+	var boss_lord_ok: bool = is_equal_approx(last.lords[1].max_hp, roundf(float(boss_ld.hp) * (1.0 + RCatalog.BOSS_LORD_PCT + 0.50))) and is_equal_approx(last.lords[1].damage, roundf(float(boss_ld.damage) * (1.0 + RCatalog.BOSS_LORD_PCT + 0.50)))
+	var rs2 := Rogue.new()
+	rs2.save_path = rs.save_path
+	rs2.begin("lion", 555, 0)
+	rs2.run.cards_cleared = 10
+	rs2.run.board[0] = RCatalog.make_slot("battle", rs2.run, 0)
+	rs2.select_node(0)
+	var b10 := rs2.make_battle()
+	var foe_ld := B.lord_data(rs2.foe())
+	var foe_lord_ok: bool = is_equal_approx(b10.lords[1].max_hp, roundf(float(foe_ld.hp) * 1.50)) and is_equal_approx(b10.lords[1].damage, roundf(float(foe_ld.damage) * 1.50))
+	var m_add: Dictionary = RCatalog.merge_mods({"income_mult": 1.25, "cycle_speed": {"*": 1.15}, "skill_charge_mult": 1.2, "toughen": {"*": 0.35}, "haste": {"*": 0.25}, "lord_pct": 0.30}, {"income_mult": 1.35, "cycle_speed": {"*": 1.30}, "skill_charge_mult": 1.3, "toughen": {"*": 0.35}, "haste": {"*": 0.30}, "lord_pct": 0.35})
+	var merge_add_ok: bool = is_equal_approx(float(m_add.income_mult), 1.60) and is_equal_approx(float(m_add.cycle_speed["*"]), 1.45) and is_equal_approx(float(m_add.skill_charge_mult), 1.50) and is_equal_approx(float(m_add.toughen["*"]), 0.70) and is_equal_approx(float(m_add.haste["*"]), 0.55) and is_equal_approx(float(m_add.lord_pct), 0.65)
+	var ab := quiet(88)
+	ab.apply_domestic(0, "farm", {"toughen": {"*": 0.35}, "haste": {"*": 0.25}})
+	ab.card_upgrades[0]["militia"] = {"hp": 2, "speed": 2, "interval": 2}
+	ab.decks[0][0] = "militia"
+	ab.hand_cd[0][0] = 0.0
+	ab.ink[0] = 50.0
+	var played_mu := ab.play(0, 0, L.cell_center(Vector2i(0, 2)))
+	var mu: Dictionary = ab.units[0] if not ab.units.is_empty() else {}
+	var unit_add_ok: bool = played_mu and not mu.is_empty() and is_equal_approx(mu.max_hp, roundf(float(B.CARDS.militia.hp) * 1.85)) and is_equal_approx(ab.movement_speed(mu), float(B.CARDS.militia.speed) * 1.55) and is_equal_approx(ab.attack_interval(mu), float(B.CARDS.militia.interval) / 1.55)
+	check(is_equal_approx(float(last.lord_mod(1, "gold_gain_mult", 1.0)), 2.0) and is_equal_approx(float(last.lord_mod(1, "cd_speed_mult", 1.0)), 2.0) and boss_lord_ok and foe_lord_ok and merge_add_ok and unit_add_ok, "final floor doubles enemy gold/cd; roguelike bonuses & upgrades stack additively by percentage; enemy lords scale +5%% per card cleared (boss %s foe %s merge %s unit %s)" % [boss_lord_ok, foe_lord_ok, merge_add_ok, unit_add_ok])
 	var broken: Array = []
 	for boss_k: String in B.LORDS:
 		var sim := Battle.new(900 + hash(boss_k) % 100, B.DEFAULT_DECK, RCatalog.BOSSES[boss_k], "mage", boss_k)
@@ -899,6 +1021,77 @@ func new_card_checks() -> void:
 	if not is_equal_approx(wg_ally.slow_left, 0.0) or float(wg_ally.get("expansion_haste_until", 0.0)) <= wg.elapsed or not is_equal_approx(wg_ground.pos.x - wg_gx0, 236.0) or not is_equal_approx(float(wg_ground.get("stun_left", 0.0)), 1.0) or not is_equal_approx(wg_ground.max_hp - wg_ground.hp, 55.0) or not is_equal_approx(wg_fly.pos.x - wg_fx0, 236.0) or not is_equal_approx(float(wg_fly.get("stun_left", 0.0)), 2.0) or not is_equal_approx(wg_fly.max_hp - wg_fly.hp, 110.0):
 		rework_fails.append("wing_gust")
 
+	var mg := quiet(71)
+	mg.add_building(0, Vector2i(1, 2), "mass_grave")
+	for i: int in range(1350): mg.step(1.0 / 30.0)
+	var mg_no_timer := mg.units.is_empty()
+	var mg_sk0 := ready_unit(mg, 0, 2, "skeleton", L.cell_center(Vector2i(3, 2)))
+	var mg_sk1 := ready_unit(mg, 1, 0, "skeleton", L.cell_center(Vector2i(5, 0)))
+	mg.damage(mg_sk0, 9999.0, 1, "fire")
+	mg.damage(mg_sk1, 9999.0, 0, "fire")
+	mg.resolve_deaths()
+	var mg_skip_skel: bool = mg.units.filter(func(u: Dictionary) -> bool: return u.hp > 0 and u.get("card", "") == "mass_grave").is_empty()
+	var mg_f0 := ready_unit(mg, 1, 0, "militia", L.cell_center(Vector2i(5, 0)))
+	var mg_a4 := ready_unit(mg, 0, 4, "militia", L.cell_center(Vector2i(3, 4)))
+	mg.damage(mg_f0, 9999.0, 0, "fire")
+	mg.damage(mg_a4, 9999.0, 1, "fire")
+	mg.resolve_deaths()
+	var mg_spawned: Array = mg.units.filter(func(u: Dictionary) -> bool: return u.hp > 0 and u.team == 0 and u.lane == 2 and u.kind == "skeleton" and u.get("card", "") == "mass_grave")
+	if not mg_no_timer or not mg_skip_skel or mg_spawned.size() != 2:
+		rework_fails.append("mass_grave")
+
+	var g_up = preload("res://card_upgrades.gd")
+	var g_grid = preload("res://grid_rules.gd")
+	var g_cat = preload("res://roguelike_catalog.gd")
+	var sss_ok: bool = is_equal_approx(B.tier_value("hp", "SSS"), 6666.0) and is_equal_approx(g_up.shifted("hp", 6666.0, 1), 6666.0) and DS.pool().all(func(k: String) -> bool: return not B.CARDS[k].get("boss_only", false))
+	for sbk: String in g_cat.SEASON_BOSSES:
+		var gk := String(g_cat.SEASON_BOSSES[sbk].giant)
+		sss_ok = sss_ok and is_equal_approx(B.CARDS[gk].hp, 6666.0) and gk in g_cat.season_boss_deck(sbk)
+	var gb := quiet(72)
+	gb.decks[0][0] = "giant_arcane_golem"
+	gb.hand_cd[0][0] = 0.0
+	gb.ink[0] = 50.0
+	var fp_ok: bool = gb.play_check(0, 0, L.cell_center(Vector2i(0, 1))) == Battle.Refusal.FOOTPRINT and gb.play_check(0, 0, L.cell_center(Vector2i(1, 4))) == Battle.Refusal.FOOTPRINT and gb.play_check(0, 0, L.cell_center(Vector2i(1, 2))) == Battle.Refusal.OK and gb.play(0, 0, L.cell_center(Vector2i(1, 2)))
+	var gunit: Dictionary = gb.units[0] if gb.units.size() == 1 else {}
+	var spawn_ok: bool = not gunit.is_empty() and gunit.get("lanes", []) == [2, 3] and is_equal_approx(gunit.hp, 6666.0) and is_equal_approx(gunit.pos.y, (L.cell_center(Vector2i(0, 2)).y + L.cell_center(Vector2i(0, 3)).y) * 0.5)
+	var g_twr := gb.add_building(1, Vector2i(3, 3), "tower")
+	gb.build_lookups()
+	var twr_pick_ok: bool = is_same(g_grid.pick(gb, g_twr, gb.foe_units[1]), gunit)
+	var g_m2 := ready_unit(gb, 1, 2, "militia", Vector2(gunit.pos.x + 125.0, L.cell_center(Vector2i(0, 2)).y))
+	var g_m3 := ready_unit(gb, 1, 3, "militia", Vector2(gunit.pos.x + 125.0, L.cell_center(Vector2i(0, 3)).y))
+	var gfarm := gb.add_building(1, Vector2i(2, 3), "farm")
+	gb.build_lookups()
+	var both_hit_ok: bool = not gunit.is_empty() and is_same(gb.choose_target(g_m2, B.CARDS.militia), gunit) and is_same(gb.choose_target(g_m3, B.CARDS.militia), gunit)
+	var g_hp0: float = gunit.hp if not gunit.is_empty() else 0.0
+	if not gunit.is_empty(): gb.cast_spell({"kind": "rain", "team": 1, "pos": gunit.pos})
+	var aoe_once_ok: bool = not gunit.is_empty() and is_equal_approx(g_hp0 - gunit.hp, B.CARDS.rain.damage)
+	if not gunit.is_empty(): gb.attack(gunit, g_m2)
+	var sweep_ok: bool = g_m2.hp < g_m2.max_hp and g_m3.hp < g_m3.max_hp and gfarm.hp < gfarm.max_hp
+	var gg := quiet(73)
+	ready_unit(gg, 0, 2, "giant_arcane_golem", Vector2(L.gate_stop(1) - B.kind_radius("giant_arcane_golem") - 2.0, L.cell_center(Vector2i(0, 2)).y))
+	for _i: int in range(60): gg.step(1.0 / 30.0)
+	var dual_gate_ok: bool = gg.gates[1][2] < B.GATE_HP and is_equal_approx(gg.gates[1][2], gg.gates[1][3])
+	var g3_mid: float = gg.gates[1][3]
+	gg.gates[1][2] = 0.0
+	for _i: int in range(60): gg.step(1.0 / 30.0)
+	dual_gate_ok = dual_gate_ok and not gg.ended and gg.gates[1][3] < g3_mid
+	gg.gates[1][3] = 0.0
+	for _i: int in range(90): gg.step(1.0 / 10.0)
+	dual_gate_ok = dual_gate_ok and gg.ended and gg.winner == 0
+	var gc := quiet(74)
+	var gcat := ready_unit(gc, 0, 2, "giant_catapult", L.cell_center(Vector2i(3, 2)))
+	var cat_foe3 := ready_unit(gc, 1, 3, "militia", L.cell_center(Vector2i(7, 3)))
+	gc.build_lookups()
+	var cat_ok: bool = is_same(gc.catapult_target(gcat), cat_foe3)
+	gc.units.erase(cat_foe3)
+	gcat.pos.x = L.cell_center(Vector2i(5, 2)).x
+	gc.build_lookups()
+	cat_ok = cat_ok and gc.catapult_target(gcat).get("kind", "") == "gate"
+	for _i: int in range(90): gc.step(1.0 / 30.0)
+	cat_ok = cat_ok and gc.gates[1][2] < B.GATE_HP and gc.gates[1][3] < B.GATE_HP
+	if not sss_ok or not fp_ok or not spawn_ok or not twr_pick_ok or not both_hit_ok or not aoe_once_ok or not sweep_ok or not dual_gate_ok or not cat_ok:
+		rework_fails.append("giant_2x2[sss=%s fp=%s sp=%s twr=%s hit=%s aoe=%s swp=%s gate=%s cat=%s]" % [sss_ok, fp_ok, spawn_ok, twr_pick_ok, both_hit_ok, aoe_once_ok, sweep_ok, dual_gate_ok, cat_ok])
+
 	check(rework_fails.is_empty(), "low-cost card mechanic reworks: " + str(rework_fails))
 
 # ---------------- presentation (3) ----------------
@@ -938,6 +1131,17 @@ func presentation_checks() -> void:
 	for sfx_name: String in SB.CUES.values():
 		if not ResourceLoader.exists("res://assets/audio/" + sfx_name + ".ogg") and not sfx_name in missing_sfx:
 			missing_sfx.append(sfx_name)
+	var MP = preload("res://music_player.gd")
+	var MM = preload("res://music_mood.gd")
+	var missing_music: Array = []
+	for t_name: String in MP.THEMES:
+		for l_name: String in MP.LAYERS:
+			var mpath := "%sbattle_%s_%s.ogg" % [MP.DIR, t_name, l_name]
+			if not ResourceLoader.exists(mpath): missing_music.append(mpath)
+	var adv_m := preload("res://adventure.gd").new()
+	adv_m.progress_path = "user://quick_test_music_unused.json"
+	var m_conv: Battle = adv_m.make_battle(9, adv_m.STAGES[9].deck.duplicate(), "adventure")
+	var mood_ok: bool = MM.theme(m_conv, 0) == "conveyor" and (MM.theme(champ, 0) in MP.THEMES)
 	var polish = preload("res://ui_polish.gd").new()
-	check(peak <= cd.MAX_IMPULSE + 0.01 and cd.impulse.length() < 0.5 and sort_ok and missing_sfx.is_empty() and is_equal_approx(polish.screen_enter_t, 1.0), "camera shake stays bounded and settles under stacked events and frame spikes; CardSort, SoundBank (%s) and UiPolish are valid" % str(missing_sfx))
+	check(peak <= cd.MAX_IMPULSE + 0.01 and cd.impulse.length() < 0.5 and sort_ok and missing_sfx.is_empty() and missing_music.is_empty() and mood_ok and is_equal_approx(polish.screen_enter_t, 1.0), "camera shake stays bounded and settles under stacked events and frame spikes; CardSort, SoundBank (%s), Music (%s) and UiPolish are valid" % [str(missing_sfx), str(missing_music)])
 	preload("res://tools/test_art_palette.gd").run(self)

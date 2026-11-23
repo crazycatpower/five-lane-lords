@@ -40,12 +40,18 @@ static func update(m, dt: float) -> void:
 		var b: Dictionary = m.buildings[i]
 		if b.get("has_expansion_tick",false): _update_actor(m,b,dt*Faction.building_factor(m,b))
 
+static func support_radius(m, actor: Dictionary, d: Dictionary) -> float:
+	if d.get("support","") == "heal" and d.get("type","") == "unit":
+		return float(m.unit_heal_radius(actor))
+	return float(d.get("radius",0.0))
+
 static func support(m, actor: Dictionary, d: Dictionary) -> void:
 	if ExpansionMore.support(m,actor,d): return
+	var rad: float = support_radius(m,actor,d)
 	var allies: Array = m.buildings if d.support == "repair" else m.units
 	var active := false
 	for u: Dictionary in allies:
-		if u.hp <= 0 or u.team != actor.team or u.get("spawn_delay",0.0) > 0 or B.edge_distance(actor,u) > d.radius: continue
+		if u.hp <= 0 or u.team != actor.team or u.get("spawn_delay",0.0) > 0 or B.edge_distance(actor,u) > rad: continue
 		match d.support:
 			"heal":
 				var poisoned: bool = int(u.get("hex_stacks",0)) > 0 or int(u.get("poison_stacks",0)) > 0
@@ -88,7 +94,7 @@ static func support(m, actor: Dictionary, d: Dictionary) -> void:
 				if m.record_events: active = active or B.CARDS.get(u.kind,{}).get("projectile",false)
 				u.expansion_range_until = m.elapsed+d.duration
 	if m.record_events and active:
-		m.event("support_pulse",actor.pos,actor.team,{"style":d.support,"radius":d.radius})
+		m.event("support_pulse",actor.pos,actor.team,{"style":d.support,"radius":rad,"source_radius":B.actor_radius(actor)})
 
 static func absorb(_m, _target: Dictionary, amount: float, _source: Dictionary) -> float:
 	return amount

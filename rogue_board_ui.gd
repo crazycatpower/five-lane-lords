@@ -16,9 +16,9 @@ const SLASH_TIME := 0.7
 const UNFURL_TIME := 0.6
 const DECK_PANEL := Rect2(260,190,1080,520)
 const DECK_ORIGIN := Vector2(300,270)
-const CLOTH := {"battle":Color("7d2e22"),"elite":Color("3f1d47"),"boss":Color("2a1414"),"camp":Color("a8642a"),"shrine":Color("2f5a7a"),"event":Color("4b6043")}
-const SEAL_TEXT := {"battle":"戰","elite":"精","boss":"王","camp":"營","shrine":"祠","event":"遇"}
-const KIND_NAME := {"battle":"一般遭遇","elite":"精英討伐","boss":"魔王決戰","camp":"戰地營火","shrine":"秘寶古祠","event":"手抄本奇遇"}
+const CLOTH := {"battle":Color("7d2e22"),"elite":Color("3f1d47"),"boss":Color("2a1414"),"sboss":Color("1d3a2e"),"camp":Color("a8642a"),"shrine":Color("2f5a7a"),"event":Color("4b6043")}
+const SEAL_TEXT := {"battle":"戰","elite":"精","boss":"王","sboss":"首","camp":"營","shrine":"祠","event":"遇"}
+const KIND_NAME := {"battle":"一般遭遇","elite":"精英討伐","boss":"魔王決戰","sboss":"季節 BOSS","camp":"戰地營火","shrine":"秘寶古祠","event":"手抄本奇遇"}
 
 static func banner_rect(i: int) -> Rect2:
 	var total := BANNER_W*4+BANNER_GAP*3
@@ -46,7 +46,7 @@ static func header(g, rogue) -> void:
 	var Catalog = rogue.Catalog
 	var run: Dictionary = rogue.run
 	var standing: int = run.get("gates",[]).filter(func(hp: float) -> bool: return hp > 0).size()
-	var line := "第 %d / %d 層 · 金幣 %d · 城牆 %d / 5 · 領主 %d / %d · 支援行動 %d" % [run.floor+1,Catalog.FLOORS,int(run.gold),standing,int(run.get("lord_hp",0)),int(rogue.lord_max_hp()),int(run.get("march_steps",2))]
+	var line := "%s · 過牌 %d（敵主 +%d%%） · 金幣 %d · 遺物 %d · 城牆 %d / 5 · 領主 %d / %d · 支援行動 %d" % [rogue.season_label(),int(run.get("cards_cleared",0)),roundi(rogue.enemy_lord_card_bonus()*100.0),int(run.gold),run.get("relics",[]).size(),standing,int(run.get("lord_hp",0)),int(rogue.lord_max_hp()),int(run.get("march_steps",2))]
 	g.draw_string(g.font,Vector2(90,124),line,HORIZONTAL_ALIGNMENT_LEFT,-1,18,Color("5a3818"))
 	if not str(run.get("board_notice","")).is_empty():
 		g.draw_string(g.font,Vector2(90,146),str(run.board_notice),HORIZONTAL_ALIGNMENT_LEFT,1420,14,Color("6f5a3e"))
@@ -67,20 +67,56 @@ static func battle_lines(rogue, slot: Dictionary) -> Array:
 	var k: String = slot.get("kind","battle")
 	var f: String = slot.get("foe",rogue.foe())
 	var lines: Array = []
-	if B.is_minion(f): lines.append(["被動",B.minion_text(f)])
+	if B.is_minion(f):
+		lines.append(["被動",B.minion_text(f)])
+		var m_shot: Dictionary = Catalog.minion_shot(f)
+		if not m_shot.is_empty(): lines.append(["領主射擊",shot_text(m_shot)])
 	if k == "elite":
 		var elite_mod: Array = Catalog.Terrain.elite_trait(f)
 		if not elite_mod.is_empty(): lines.append(["精英：%s" % elite_mod[0],elite_mod[1]])
+	if k == "sboss":
+		var sb_key: String = rogue.run.sbosses[int(rogue.run.season)]
+		var sb: Dictionary = Catalog.SEASON_BOSSES[sb_key]
+		lines.append(["技能",Catalog.season_boss_skill_text(sb_key)])
+		var sb_pct := roundi(Catalog.SEASON_BOSS_LORD_PCT*100.0)
+		var sb_total_pct := roundi((Catalog.SEASON_BOSS_LORD_PCT+rogue.enemy_lord_card_bonus())*100.0)
+		lines.append(["首領之力","牌組中的 1 張代表卡強化為 2×2 單體巨獸【%s】（生命 %s）；本人生命與傷害 +%d%%（含過牌共 +%d%%）" % [B.CARDS[sb.giant].name,B.number(B.CARDS[sb.giant].hp),sb_pct,sb_total_pct]])
+		var sb_shot: Dictionary = Catalog.minion_shot(f)
+		lines.append(["BOSS 射擊",shot_text(sb_shot if not sb_shot.is_empty() else Catalog.SEASON_BOSS_SHOT)])
 	if k == "boss":
 		var mut: Dictionary = Catalog.mutator_data(slot)
 		if not mut.is_empty(): lines.append([String(mut.get("name","")),String(mut.get("desc",""))])
+		var b_pct := roundi(Catalog.BOSS_LORD_PCT*100.0)
+		var b_total_pct := roundi((Catalog.BOSS_LORD_PCT+rogue.enemy_lord_card_bonus())*100.0)
+		lines.append(["魔王之力","本人生命與傷害 +%d%%（含過牌加成共 +%d%%）" % [b_pct,b_total_pct]])
 		lines.append(["技能",B.skill_text(f)])
+		var shot: Dictionary = Catalog.BOSS_SHOTS.get(f,{})
+		if not shot.is_empty():
+			lines.append(["魔王射擊",shot_text(shot)])
+		lines.append(ups_line(rogue,f,k))
 		return lines
-	var plan: Dictionary = Catalog.Terrain.plan(f,k,{})
+	var cleared := int(rogue.run.get("cards_cleared",0))
+	if k != "sboss" and cleared > 0:
+		lines.append(["敵主強度","已過 %d 張牌：敵方領主生命與傷害 +%d%%" % [cleared,roundi(rogue.enemy_lord_card_bonus()*100.0)]])
+	var plan: Dictionary = rogue.seasonal(Catalog.Terrain.plan(f,"elite" if k == "sboss" else k,{}))
 	if not plan.is_empty():
 		lines.append(["戰場",String(plan.name)+" · %d 路" % plan.lanes.size()+((" · "+Season.label(String(plan.season),bool(plan.season_rule))) if not String(plan.season).is_empty() else "")])
 		for rule: Array in plan.rules: lines.append([String(rule[0]),String(rule[1])])
+	lines.append(ups_line(rogue,f,k))
 	return lines
+
+# 魔王／小怪領主的帶屬性射擊（roguelike_catalog.BOSS_SHOTS、minion_shot）。
+static func shot_text(shot: Dictionary) -> String:
+	var reach := "，爆炸直徑約 %.1f 格" % (float(shot.radius)*2.0/118.0) if shot.has("radius") else ""
+	return "%s：%s%s，每 %s 秒一發，射程 %s 格" % [shot.name,shot.desc,reach,B.number(float(shot.interval)),B.number(float(shot.range)/118.0)]
+
+# 敵方卡牌這一戰的隨機強化（戰前就定好）。
+static func ups_line(rogue, f: String, k: String) -> Array:
+	var span: Array = rogue.Catalog.enemy_ups_range(int(rogue.run.get("floor",0)),k)
+	var ups: Dictionary = rogue.enemy_upgrades(f,k)
+	if ups.is_empty(): return ["敵牌強化","本層敵方卡牌沒有強化"]
+	var head := ("每張牌 +%d 級：" % int(span[0])) if int(span[0]) == int(span[1]) else ("每張牌 +%d～+%d 級：" % [int(span[0]),int(span[1])])
+	return ["敵牌強化",head+"、".join(ups.keys().map(func(ck: String) -> String: return "%s+%d" % [B.CARDS[ck].name,rogue.Upgrades.level(ups[ck])]))]
 
 static func paragraph(g, text: String, pos: Vector2, width: float, size: int, color: Color, max_lines: int) -> float:
 	var para := TextParagraph.new()
@@ -102,27 +138,27 @@ static func face(g, rogue, i: int, r: Rect2, selected: bool, detail: bool) -> vo
 	g.draw_rect(inner,Color(Hud.GOLD.darkened(0.3),0.8),false,1.5)
 	var c := Vector2(r.position.x+r.size.x*0.5,r.position.y+36)
 	g.draw_circle(c+Vector2(0,2),24,Color(0,0,0,0.3))
-	g.draw_circle(c,24,Color("9b2f2f") if k in ["battle","elite","boss"] else Hud.GOLD.darkened(0.25))
+	g.draw_circle(c,24,Color("9b2f2f") if k in ["battle","elite","boss","sboss"] else Hud.GOLD.darkened(0.25))
 	g.draw_arc(c,19,0,TAU,28,Color(1,0.9,0.7,0.4),1.4,true)
 	g.draw_string(g.font,c+Vector2(-20,8),SEAL_TEXT.get(k,"?"),HORIZONTAL_ALIGNMENT_CENTER,40,22,Color("fff0ca"))
 	g.draw_string(g.font,Vector2(r.position.x+14,r.position.y+30),KIND_NAME.get(k,""),HORIZONTAL_ALIGNMENT_LEFT,110,14,Color("ffe7b0"))
 	var bounty := int(slot.get("bounty",0))
 	if bounty > 0: g.draw_string(g.font,Vector2(r.end.x-124,r.position.y+30),"懸賞 +%d" % bounty,HORIZONTAL_ALIGNMENT_RIGHT,110,14,Color("ffd97d"))
-	var art := Rect2(inner.position+Vector2(inner.size.x*0.5-55,6),Vector2(110,96)) if k in ["battle","elite","boss"] else Rect2(inner.position+Vector2(inner.size.x*0.5-60,8),Vector2(120,124))
+	var art := Rect2(inner.position+Vector2(inner.size.x*0.5-55,6),Vector2(110,96)) if k in ["battle","elite","boss","sboss"] else Rect2(inner.position+Vector2(inner.size.x*0.5-60,8),Vector2(120,124))
 	var title := ""
-	if k in ["battle","elite","boss"]:
+	if k in ["battle","elite","boss","sboss"]:
 		var f: String = slot.get("foe",rogue.foe())
 		g.draw_fitted(g.lord_art(f,1),art,Color.WHITE,true)
-		title = B.lord_name(f)
+		title = rogue.foe_name(slot)
 	else:
 		var ev: Dictionary = Catalog.EVENTS.get(slot.get("event_id","wandering_smith"),Catalog.EVENTS.wandering_smith)
 		g.draw_fitted(g.art("field_smithy" if k == "camp" else ("blood_altar" if k == "shrine" else str(ev.art))),art,Color.WHITE,true)
 		title = rogue.slot_title(slot)
 	g.draw_string(g.font,Vector2(inner.position.x,art.end.y+30),title,HORIZONTAL_ALIGNMENT_CENTER,inner.size.x,24,g.INK)
 	var y: float = art.end.y+44
-	if k in ["battle","elite","boss"]:
+	if k in ["battle","elite","boss","sboss"]:
 		var f2: String = slot.get("foe",rogue.foe())
-		var ai_lv := clampi(Catalog.AI_LEVEL[run.floor]+int(Catalog.CONTRACTS[clampi(int(run.get("contract",0)),0,Catalog.CONTRACTS.size()-1)].get("ai_boost",0)),0,2)
+		var ai_lv := 2 if k == "sboss" else clampi(Catalog.AI_LEVEL[run.floor]+int(Catalog.CONTRACTS[clampi(int(run.get("contract",0)),0,Catalog.CONTRACTS.size()-1)].get("ai_boost",0)),0,2)
 		g.draw_string(g.font,Vector2(inner.position.x,y+8),"%s · AI %s" % [B.lord_data(f2).role,["簡單","普通","困難"][ai_lv]],HORIZONTAL_ALIGNMENT_CENTER,inner.size.x,14,Color("6f5a3e"))
 		y += 22
 		if detail:
@@ -136,11 +172,11 @@ static func face(g, rogue, i: int, r: Rect2, selected: bool, detail: bool) -> vo
 	elif detail:
 		var body := ""
 		if k == "event": body = str(Catalog.EVENTS.get(slot.get("event_id","wandering_smith"),Catalog.EVENTS.wandering_smith).story)
-		elif k == "camp": body = "休整築牆：修 45% 城牆、領主回 50%\n名匠鍛造：1 張卡 +1 階\n軍資徵集：120 金並強化 1 張卡"
-		elif k == "shrine": body = "聖物匣：免費 1 件遺物\n精煉主力：1 張卡 +1 階並得 70 金\n鮮血奉獻：損 25% 領主生命換 200 金"
+		elif k == "camp": body = "休整築牆：修 45% 城牆、領主回 50%\n名匠鍛造：自選 1 張卡與屬性百分比強化\n軍資徵集：120 金並強化 1 張卡"
+		elif k == "shrine": body = "聖物匣：免費 1 件遺物\n精煉主力：自選 1 張卡與屬性百分比強化並得 70 金\n鮮血奉獻：損 25% 領主生命換 200 金"
 		paragraph(g,body,Vector2(inner.position.x+10,y+6),inner.size.x-20,14,g.INK,9)
 	# Reward under the vellum, the hint on the tail.
-	var reward: String = rogue.slot_subtitle(slot) if k in ["battle","elite","boss"] else ""
+	var reward: String = rogue.slot_subtitle(slot) if k in ["battle","elite","boss","sboss"] else ""
 	if not reward.is_empty(): g.draw_string(g.font,Vector2(r.position.x,inner.end.y+26),reward,HORIZONTAL_ALIGNMENT_CENTER,r.size.x,14,Color("ffe7b0"))
 	var hint := "再點一次：進入" if selected else "點選此旗"
 	g.draw_string(g.font,Vector2(r.position.x,inner.end.y+50),hint,HORIZONTAL_ALIGNMENT_CENTER,r.size.x,15 if selected else 13,Color("ffd97d") if selected else Color(1,0.92,0.75,0.6))
