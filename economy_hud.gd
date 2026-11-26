@@ -18,14 +18,14 @@ static func draw(g, pop: float = 0.0) -> void:
 	g.label_at(Vector2(232,842),"每秒 +%.1f" % m.production_rate(g.me),18,muted)
 	g.label_at(Vector2(232,866),"%s %d" % [B.CARDS[home].name,m.count_buildings(g.me,home)],18,muted)
 
-# Gold purse (producer 2026-11-03): every 2 gold is one coin that drops onto the heap in front of the
+# Gold purse (producer 2026-11-03): every 4 gold (2 before the 100 cap) is one coin that drops onto the heap in front of the
 # money bag. Hovering or selecting a card whitens the coins it would spend (the top of the heap);
 # coins it still lacks show as pale outlines. No numbers on the purse itself.
 const ART = preload("res://manuscript_art.gd")
 const PLATE := Rect2(40,712,362,166)
-const COIN_GOLD := 2.0
+const COIN_GOLD := 4.0 # 金幣上限 100（2026-11-24）：一枚 4 金，25 枚剛好裝滿
 const COIN := 24.0 # drawn coin size
-const ROWS := [7,6,5,4,3] # bottom row first: a pyramid of 25 coins = 50 gold
+const ROWS := [7,6,5,4,3] # bottom row first: a pyramid of 25 coins = 100 gold
 const PURSE := Rect2(48,706,166,166) # money bag art
 const HEAP_X := 131.0
 const HEAP_BOTTOM := 872.0
@@ -85,8 +85,10 @@ static func draw_purse(g, ink: float, need: float, id: int, alarm: float = 0.0, 
 		g.draw_circle(mouth, 16.0 + pf * 14.0, Color(1.0, 0.90, 0.45, 0.25 * pa))
 		g.draw_arc(mouth, 10.0 + pf * 24.0, 0.0, TAU, 24, Color(1.0, 0.94, 0.65, 0.72 * pa), 2.2, true)
 	var tex := coin_texture()
-	var spend := ceili(need/COIN_GOLD)
-	for i: int in range(maxi(coins,mini(spend,total))):
+	var affordable: bool = need <= 0.0 or ink + 0.001 >= need
+	var spend: int = 0 if need <= 0.0 else (mini(coins, maxi(1, ceili(need / COIN_GOLD))) if affordable else ceili(need / COIN_GOLD))
+	var shortfall: int = 0 if affordable else maxi(1, spend - coins)
+	for i: int in range(mini(total, coins + shortfall)):
 		var slot := coin_slot(i)+shake
 		var lit := spend > 0 and i >= coins-spend
 		if i >= coins:

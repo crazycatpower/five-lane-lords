@@ -105,7 +105,7 @@ static func story(g) -> String:
 
 # The match ran out the day (battle.gd dawn_verdict) instead of ending at a gate.
 static func dawn(m) -> bool:
-	return m.ended and m.night_decay and m.elapsed >= B.DAWN-0.001 and m.winner != -2
+	return m.ended and m.night_decay and m.day_clock() >= m.dawn_time()-0.001 and m.winner != -2
 
 # The hero card who breached a wall and/or entered the enemy base ("" when none).
 static func champion(m, team: int) -> String:

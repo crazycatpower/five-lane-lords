@@ -1,6 +1,8 @@
 extends RefCounted
 const B = preload("res://balance.gd")
 const L = preload("res://layout.gd")
+const GluttonNest = preload("res://glutton_nest.gd")
+const LargeBody = preload("res://large_body.gd")
 
 # Patrol one contiguous owned stretch. Lost territory is crossed only to return home.
 static func patrol(m, u: Dictionary, dt: float) -> void:
@@ -14,7 +16,7 @@ static func patrol(m, u: Dictionary, dt: float) -> void:
 		for candidate: int in owned:
 			if absf(L.cell_center(Vector2i(candidate,u.lane)).x-u.pos.x) < absf(L.cell_center(Vector2i(nearest_col,u.lane)).x-u.pos.x): nearest_col = candidate
 		var destination: float = L.cell_center(Vector2i(nearest_col,u.lane)).x
-		u.face = signf(destination-u.pos.x)
+		if not is_zero_approx(destination-u.pos.x): u.face = signf(destination-u.pos.x)
 		u.pos.x = move_toward(u.pos.x,destination,m.movement_speed(u)*dt)
 		return
 	var left := col
@@ -49,16 +51,20 @@ static func roll(m, stone: Dictionary, dt: float) -> void:
 	stone.pos.x = move_toward(stone.pos.x,stop,data.roll_speed*dt)
 	stone.angle += (stone.pos.x-start.x)/data.radius
 	# Swept collision prevents tunnelling at fast-forward / large simulation steps.
-	for group: Array in [m.units, m.buildings, m.lords]:
+	for group: Array in [m.units.duplicate(), m.buildings.duplicate(), m.lords]:
 		for i: int in range(group.size()):
 			var actor: Dictionary = group[i]
 			if actor.hp <= 0 or actor.get("spawn_delay",0.0) > 0: continue
 			if actor.kind == "lord" and not m.lord_active[actor.team]: continue
+			if actor.has("cell") and (B.CARDS[actor.kind].has("trap") or GluttonNest.hidden(actor)): continue
 			var id: String = "lord:%d" % actor.team if actor.kind == "lord" else "actor:%d" % actor.id
 			if id in stone.hit_ids: continue
 			var closest := Vector2(clampf(actor.pos.x,minf(start.x,stone.pos.x),maxf(start.x,stone.pos.x)),start.y)
 			if B.point_edge_distance(closest,actor) > data.radius: continue
 			stone.hit_ids.append(id)
+			if actor.has("cell"):
+				var twin: Dictionary = LargeBody.twin(m,actor)
+				if not twin.is_empty(): stone.hit_ids.append("actor:%d" % twin.id)
 			m.damage(actor,data.building_damage if actor.has("cell") else data.damage,stone.team,stone.kind)
 	if is_equal_approx(stone.pos.x,stop):
 		m.hit_gate(1-stone.team,stone.lane,data.gate_damage,stone.kind)

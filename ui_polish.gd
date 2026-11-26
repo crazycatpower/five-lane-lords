@@ -192,8 +192,9 @@ static func pop(b: Button, to: float) -> void:
 func get_pause_fade(g) -> float:
 	if g.model == null or g.model.ended:
 		return 0.0
+	var open_ui: bool = g.battle_overlay_open() if g.has_method("battle_overlay_open") else g.model.paused
 	if not g.is_processing() or DisplayServer.get_name() == "headless":
-		return 1.0 if g.model.paused else 0.0
+		return 1.0 if open_ui else 0.0
 	return pause_fade
 
 func hover_val(key: String, hovered: bool, processing: bool = true) -> float:
@@ -224,7 +225,8 @@ func observe_battle(g, real_dt: float, sim_dt: float) -> void:
 		reset_battle()
 		prev_model_id = mid
 
-	var target_pause := 1.0 if (m.paused and not m.ended) else 0.0
+	var paused_ui: bool = g.battle_overlay_open() if g.has_method("battle_overlay_open") else (m.paused and not m.ended)
+	var target_pause := 1.0 if paused_ui else 0.0
 	pause_fade = move_toward(pause_fade, target_pause, real_dt / 0.16)
 	purse_flash = maxf(0.0, purse_flash - real_dt)
 	skill_ready_flash = maxf(0.0, skill_ready_flash - real_dt)

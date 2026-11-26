@@ -25,7 +25,7 @@ static func stats(kind: String) -> Array:
 		for key: String in ["hp","interval","range","speed"]: result.append([key,key])
 		if lead.has("area_damage"): result.append(["area_damage","area_damage"])
 		else: result.append(["damage","damage"])
-		result = result.filter(func(p: Array) -> bool: return B.TIERS[p[1]].has(lead.get(p[0],-1.0)))
+		result = result.filter(func(p: Array) -> bool: return B.TIERS[p[1]].has(lead.get(p[0],-1.0)) and (p[0] != "range" or float(lead.get("range",0.0)) > 0.0))
 		result.append(["cycle","cycle"])
 		return result
 	if d.type == "building":

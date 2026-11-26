@@ -64,8 +64,8 @@ static func toggle(g, i: int, on: bool, action: Callable) -> Button:
 static func build(g) -> void:
 	g.screen = "settings"
 	g.clear_ui()
-	slider(g,0,g.music_volume,func(v: float): g.music_volume = v; g.apply_audio_settings())
-	slider(g,1,g.sfx_volume,func(v: float): g.sfx_volume = v; g.apply_audio_settings())
+	slider(g,0,g.music_volume,func(v: float): g.music_volume = v; g.apply_audio_settings(); g.queue_redraw())
+	slider(g,1,g.sfx_volume,func(v: float): g.sfx_volume = v; g.apply_audio_settings(); g.queue_redraw())
 	toggle(g,2,g.fullscreen,func(): g.set_fullscreen(not g.fullscreen); build(g))
 	toggle(g,3,g.fx_enabled,func(): g.fx_enabled = not g.fx_enabled; g.effects.clear(); g.save_settings(); build(g))
 	toggle(g,4,g.shake_enabled,func(): g.shake_enabled = not g.shake_enabled; g.save_settings(); build(g))
@@ -99,5 +99,5 @@ static func paint(g) -> void:
 	g.label_at(Vector2(CONTROL_X+170,row_y(3)),"光效、飛行金幣與落葉",17,Color("6f5a3e"))
 	g.label_at(Vector2(CONTROL_X+170,row_y(4)),"重擊與破門時的畫面晃動",17,Color("6f5a3e"))
 	g.label_at(Vector2(CONTROL_X+170,row_y(5)),"大招特寫、終結慢動作（F9 隱UI）",17,Color("6f5a3e"))
-	g.label_at(Vector2(CONTROL_X+170,row_y(6)),"瀏覽器端暫不開放本機 MP4 輸出" if OS.has_feature("web") else "自動保存重播、剪輯筆記與輸出 MP4",17,Color("6f5a3e"))
+	g.label_at(Vector2(CONTROL_X+170,row_y(6)),"瀏覽器端暫不開放本機 MP4 輸出" if OS.has_feature("web") else "自動保存重播、剪輯筆記與輸出 MP4",16,Color("6f5a3e"))
 	g.draw_string(g.font,Vector2(PANEL.position.x,PANEL.end.y-24),"羊皮紙戰記 %s" % g.VERSION,HORIZONTAL_ALIGNMENT_CENTER,PANEL.size.x,15,Color(g.INK,0.55))

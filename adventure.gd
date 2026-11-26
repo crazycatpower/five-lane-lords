@@ -342,6 +342,8 @@ func deck_tip() -> String:
 	return "本關新卡「%s」會在出征時自動放進牌組。" % "、".join(feat.map(func(k: String) -> String: return B.CARDS[k].name))
 
 func open_adventure_deck(game) -> void:
+	if not game.adventure_deck_mode:
+		game.adventure_deck_stash = {"deck":game.player_deck.duplicate(),"lord":game.player_lord,"tab":game.deck_tab}
 	game.adventure_deck_mode = true
 	game.player_lord = lord
 	if custom_deck_valid(): game.player_deck = custom_deck.duplicate()
@@ -600,7 +602,7 @@ func paint(g) -> void:
 	paint_world_tabs_badges(g)
 	paint_world_road(g)
 	paint_side(g)
-	g.label_at(Vector2(315,846),"當前出征領主：%s（%d 位已解鎖） · 牌組 %d 張" % [B.lord_name(lord), unlocked_lords().size(), stage_deck(g, selected).size()], 18, Color("5a4632"))
+	g.label_at(Vector2(315,846),"當前出征領主：%s（%d 位已解鎖） · 牌組 %d 張" % [B.lord_name(stage_lord(g, selected) if selected >= 0 else lord), unlocked_lords().size(), stage_deck(g, selected).size()], 18, Color("5a4632"))
 	if show_decrees: paint_decrees_modal(g)
 
 func paint_world_tabs_badges(g) -> void:
@@ -740,7 +742,12 @@ func paint_side(g) -> void:
 	var rule_bd := Color("a62b20") if is_boss else (Color("6b3fa0") if is_special else Color("b8862b"))
 	g.panel(rule_r, Color("f8e5d8") if is_boss else (Color("efe6fa") if is_special else Color("f7ebd0")), rule_bd)
 	g.label_at(rule_r.position + Vector2(12, 24), "【本關教學】" + d.rule_tag, 17, rule_bd.darkened(0.25))
-	g.draw_multiline_string(g.font, rule_r.position + Vector2(12, 48), d.rule_desc, HORIZONTAL_ALIGNMENT_LEFT, rule_r.size.x - 24, 15, 4, g.INK)
+	var rule_para := TextParagraph.new()
+	rule_para.width = rule_r.size.x - 24.0
+	rule_para.break_flags = TextServer.BREAK_MANDATORY | TextServer.BREAK_WORD_BOUND | TextServer.BREAK_ADAPTIVE
+	rule_para.max_lines_visible = 4
+	rule_para.add_string(d.rule_desc, g.font, 14)
+	rule_para.draw(g.get_canvas_item(), rule_r.position + Vector2(12, 32), g.INK)
 	# Two chips: the new enemy you meet here, and the new card you play here.
 	var foe_kind := String(d.get("new_enemy",""))
 	paint_chip(g, chip_rect(0), "新敵人", foe_kind, g.BLUE, ("敵方領主技能" if foe_kind == "skill" else ""))
@@ -775,8 +782,9 @@ func paint_side(g) -> void:
 	var cfg: Dictionary = Catalog.DIFFICULTIES[difficulty]
 	var passives := difficulty_passives(selected)
 	var diff_line := ("極難被動：" + "、".join(passives.map(func(p: Dictionary) -> String: return "%s（%s）" % [p.name,p.desc]))) if not passives.is_empty() else ("難度　%s：%s" % [cfg.name,cfg.desc])
-	g.draw_string(g.font,Vector2(x+22,y+452),diff_line,HORIZONTAL_ALIGNMENT_LEFT,w-44,14,Color("8c271d") if not passives.is_empty() else Color("6f5a3e"))
-	g.draw_string(g.font,Vector2(x+22,y+474),keep_line,HORIZONTAL_ALIGNMENT_LEFT,w-44,16,Color("6f5a3e") if got_ever else g.RED)
+	var Lib = preload("res://card_library.gd")
+	g.draw_string(g.font,Vector2(x+22,y+452),Lib.clip_line(g.font,diff_line,14,w-44.0),HORIZONTAL_ALIGNMENT_LEFT,w-44,14,Color("8c271d") if not passives.is_empty() else Color("6f5a3e"))
+	g.draw_string(g.font,Vector2(x+22,y+474),Lib.clip_line(g.font,keep_line,16,w-44.0),HORIZONTAL_ALIGNMENT_LEFT,w-44,16,Color("6f5a3e") if got_ever else g.RED)
 	if not unlocked(selected):
 		var prev: Dictionary = STAGES[maxi(0, selected - 1)]
 		g.draw_string(g.font,Vector2(x,SIDE.end.y-34),"先通過上一關「%s %s」" % [prev.code, prev.name],HORIZONTAL_ALIGNMENT_CENTER,w,20,Color(g.INK,0.62))

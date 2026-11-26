@@ -62,6 +62,20 @@ static func offsets_set(kind: String, bonus: int = 0) -> Dictionary:
 	_offsets_set_cache[key] = set
 	return set
 
+# A reach shape given inline ({"square":n, "cut_corners":bool}) rather than by a building kind (攻城塔's archers).
+static var _shape_cache: Dictionary = {}
+static func shape_set(r: Dictionary, bonus: int = 0) -> Dictionary:
+	var key := "%s:%d" % [str(r),bonus]
+	if _shape_cache.has(key): return _shape_cache[key]
+	var n: int = int(r.get("square",1))+bonus
+	var set := {}
+	for dx: int in range(-n,n+1):
+		for dy: int in range(-n,n+1):
+			if r.get("cut_corners",false) and absi(dx) == n and absi(dy) == n: continue
+			set[Vector2i(dx,dy)] = true
+	_shape_cache[key] = set
+	return set
+
 static func bonus(m, b: Dictionary) -> int:
 	return 1 if not b.is_empty() and String(b.get("kind","")) == "tower" and m != null and b.has("pos") and m.Faction.watched(m,b) else 0
 
@@ -189,6 +203,24 @@ static func footprint_cells(kind: String, cell: Vector2i, team: int, active_lane
 			if c.y > max_y: max_y = c.y
 		var span_y := max_y-min_y+1
 		if _max_contiguous_lanes(active_lanes) < span_y:
+			if d.get("giant",false) or d.get("type","") == "building":
+				var target_lane := cell.y if cell.y in active_lanes else int(active_lanes[0])
+				if not cell.y in active_lanes and active_lanes.size() > 1:
+					var best_dist := 999
+					for al in active_lanes:
+						var ly := int(al)
+						var dist := absi(ly-cell.y)
+						if dist < best_dist or (dist == best_dist and ly < target_lane):
+							best_dist = dist
+							target_lane = ly
+				var single_lane: Array = []
+				var seen := {}
+				for c: Vector2i in raw:
+					var mc := Vector2i(c.x,target_lane)
+					if not seen.has(mc):
+						seen[mc] = true
+						single_lane.append(mc)
+				return single_lane
 			var collapsed: Array = []
 			var seen := {}
 			for c: Vector2i in raw:
@@ -264,19 +296,120 @@ static func spawn_preview(m, team: int, kind: String, cell: Vector2i) -> Array:
 
 static func footprint_text(kind: String) -> String:
 	if B.CARDS.get(kind,{}).get("giant",false):
-		return "佔 2×2 格單體巨獸（2 欄 × 2 路）；每一格都必須是我方領地才能放。橫跨相鄰兩路行軍，兩路敵軍、防禦塔與法術皆可命中，近戰橫掃兩路敵軍與建築，攻城時同時攻擊兩扇城門。"
+		return "佔 2×2 格單體巨獸（2 欄 × 2 路）；每一格都必須是我方領地才能放，並視為在所佔每一格打出。橫跨相鄰兩路行軍，兩路敵軍、防禦塔與法術皆可命中，近戰橫掃兩路敵軍與建築，攻城時同時攻擊兩扇城門。"
 	var fm: String = B.CARDS.get(kind,{}).get("formation","")
 	match fm:
-		"t_front": return "佔 1+1×3 格（T字陣：後排中路 1 格＋前排三路 3 格，共 4 格）；每一格都必須是我方領地才能放。"
-		"t_back": return "佔 1×3+1 格（倒T陣：前排中路 1 格＋後排三路 3 格，共 4 格）；每一格都必須是我方領地才能放。"
-		"v_wide": return "佔 1+2 格（雁形陣：前排中路 1 格＋後排上下兩翼 2 格，共 3 格）；每一格都必須是我方領地才能放。"
-		"u_front": return "佔 1+2 格（鶴翼陣：後排中路 1 格＋前排上下兩翼 2 格，共 3 格）；每一格都必須是我方領地才能放。"
-		"u_five": return "佔 2+1×3 格（雁群陣：後排上下兩翼 2 格＋前排三路 3 格，共 5 格）；每一格都必須是我方領地才能放。"
-		"v_front": return "佔 1+1×2 格（三角前鋒陣：後排 1 格＋前排雙路 2 格，共 3 格）；每一格都必須是我方領地才能放。"
-		"wedge": return "佔 1+2 格（楔形陣：前排 1 格＋後排雙路 2 格，共 3 格）；每一格都必須是我方領地才能放。"
+		"t_front": return "佔 1+1×3 格（T字陣：後排中路 1 格＋前排三路 3 格，共 4 格）；每一格都必須是我方領地才能放，並視為在所佔每一格打出。"
+		"t_back": return "佔 1×3+1 格（倒T陣：前排中路 1 格＋後排三路 3 格，共 4 格）；每一格都必須是我方領地才能放，並視為在所佔每一格打出。"
+		"v_wide": return "佔 1+2 格（雁形陣：前排中路 1 格＋後排上下兩翼 2 格，共 3 格）；每一格都必須是我方領地才能放，並視為在所佔每一格打出。"
+		"u_front": return "佔 1+2 格（鶴翼陣：後排中路 1 格＋前排上下兩翼 2 格，共 3 格）；每一格都必須是我方領地才能放，並視為在所佔每一格打出。"
+		"u_five": return "佔 2+1×3 格（雁群陣：後排上下兩翼 2 格＋前排三路 3 格，共 5 格）；每一格都必須是我方領地才能放，並視為在所佔每一格打出。"
+		"v_front": return "佔 1+1×2 格（三角前鋒陣：後排 1 格＋前排雙路 2 格，共 3 格）；每一格都必須是我方領地才能放，並視為在所佔每一格打出。"
+		"wedge": return "佔 1+2 格（楔形陣：前排 1 格＋後排雙路 2 格，共 3 格）；每一格都必須是我方領地才能放，並視為在所佔每一格打出。"
 	var f := footprint(kind)
 	if f == Vector2i(1,1): return ""
-	return "佔 %d×%d 格（%d 欄 × %d 路）；每一格都必須是我方領地才能放。" % [f.x,f.y,f.x,f.y]
+	return "佔 %d×%d 格（%d 欄 × %d 路）；每一格都必須是我方領地才能放，並視為在所佔每一格打出。" % [f.x,f.y,f.x,f.y]
+
+# Every board cell that playing `kind` at `cell`/`pos` occupies (for multi-cell formations, 1×2 walls, spread troops, and area spells).
+static func played_cells(m, team: int, kind: String, cell: Vector2i, pos: Vector2 = Vector2.ZERO) -> Array[Vector2i]:
+	var d: Dictionary = B.CARDS.get(kind,{})
+	var out: Array[Vector2i] = []
+	var seen := {}
+	var add_cell := func(c: Vector2i) -> void:
+		if not seen.has(c):
+			seen[c] = true
+			out.append(c)
+	var ctype: String = String(d.get("type",""))
+	if ctype == "building":
+		var LB = preload("res://large_body.gd")
+		if LB.is_tall(kind):
+			for tc: Vector2i in LB.cells(m,team,kind,cell): add_cell.call(tc)
+		else:
+			add_cell.call(cell)
+		return out
+	if ctype == "unit":
+		if footprint(kind) != Vector2i(1,1):
+			for fc: Vector2i in footprint_cells(kind,cell,team,m.active_lanes): add_cell.call(fc)
+		elif d.get("spread",false):
+			var middle := clampi(cell.y,1,maxi(1,L.GRID_ROWS-2))
+			for lane: int in [middle-1,middle,middle+1]:
+				if not lane in m.active_lanes: continue
+				var col: int = m.deployment_column(team,lane,cell.x)
+				if col >= 0: add_cell.call(Vector2i(col,lane))
+		if out.is_empty(): add_cell.call(cell)
+		return out
+	if d.get("rolling",false):
+		for c_x: int in range(L.GRID_COLUMNS): add_cell.call(Vector2i(c_x,cell.y))
+		return out
+	var p: Vector2 = pos if pos != Vector2.ZERO else L.cell_center(cell)
+	var rect: Rect2 = B.spell_rect(p,d)
+	for cy: int in m.active_lanes:
+		for cx: int in range(L.GRID_COLUMNS):
+			var cr := Rect2(L.GRID_ORIGIN+Vector2(cx,cy)*L.CELL_SIZE,L.CELL_SIZE)
+			if cr.intersects(rect): add_cell.call(Vector2i(cx,cy))
+	if out.is_empty(): add_cell.call(cell)
+	return out
+
+static func played_lanes(cells: Array[Vector2i]) -> Array[int]:
+	var out: Array[int] = []
+	for c: Vector2i in cells:
+		if not c.y in out: out.append(c.y)
+	out.sort()
+	return out
+
+static func is_lane_play_building(kind: String) -> bool:
+	var d: Dictionary = B.CARDS.get(kind,{})
+	return d.has("play_buff") or d.has("depot_refund")
+
+static func lane_play_color(kind: String) -> Color:
+	match kind:
+		"field_smithy": return Color("c4a75f")
+		"war_lodge": return Color("f0ad32")
+		"observatory": return Color("5d9cb8")
+		"blood_cauldron": return Color("d93848")
+		"supply_depot": return Color("e8af30")
+	return Color("d2ad58")
+
+static func card_has_ranged_member(kind: String) -> bool:
+	var d: Dictionary = B.CARDS.get(kind,{})
+	if d.get("projectile",false): return true
+	for g: Array in d.get("members",[]):
+		if B.CARDS.get(String(g[0]),{}).get("projectile",false): return true
+	return false
+
+static func draw_lane_play_reach(g, kind: String, cell: Vector2i, b: Dictionary = {}) -> void:
+	var col := lane_play_color(kind)
+	var lane_rect := Rect2(L.GRID_ORIGIN.x,L.GRID_ORIGIN.y+float(cell.y)*L.CELL_SIZE.y,L.GRID_SIZE.x,L.CELL_SIZE.y)
+	g.draw_rect(lane_rect,Color(col,0.14))
+	g.draw_rect(lane_rect.grow(-1.5),Color(col,0.78),false,2.2)
+	var d: Dictionary = B.CARDS.get(kind,{})
+	if d.has("reveal_radius"):
+		var center: Vector2 = b.pos if b.has("pos") else L.cell_center(cell)
+		var rr: float = float(d.reveal_radius)+(B.actor_radius(b) if not b.is_empty() else B.kind_radius(kind))
+		draw_dashed_ring(g,center,rr,Color("38b89c"),0.06,1.8)
+
+static func draw_play_triggers(g, kind: String, cell: Vector2i, team: int) -> void:
+	if B.CARDS.get(kind,{}).get("type","") != "unit": return
+	var cells := played_cells(g.model,team,kind,cell)
+	var lanes := played_lanes(cells)
+	var ranged := card_has_ranged_member(kind)
+	for b: Dictionary in g.model.buildings:
+		if b.hp <= 0 or b.team != team or not b.cell.y in lanes or not is_lane_play_building(b.kind): continue
+		if String(B.CARDS.get(b.kind,{}).get("play_buff","")) == "range" and not ranged: continue
+		var col := lane_play_color(b.kind)
+		g.draw_circle(b.pos,34.0,Color(col,0.18))
+		g.draw_arc(b.pos,34.0,0,TAU,32,Color(col,0.92),3.0,true)
+		var best_c: Vector2i = cells[0]
+		var best_d := INF
+		for c: Vector2i in cells:
+			if c.y != b.cell.y: continue
+			var dist := absf(float(c.x-b.cell.x))
+			if dist < best_d:
+				best_d = dist
+				best_c = c
+		var dst: Vector2 = L.cell_center(best_c)
+		if dst.distance_to(b.pos) > 8.0:
+			g.draw_line(b.pos,dst,Color(col,0.55),2.2,true)
 
 # ---------------- drawing ----------------
 static func draw_cells(g, cells: Array, fill: Color, stroke: Color) -> void:
@@ -291,7 +424,7 @@ static func is_heal_unit_kind(kind: String) -> bool:
 	return kind == "healer" or (d.get("type","") == "unit" and d.get("support","") == "heal")
 
 static func is_heal_building_kind(kind: String) -> bool:
-	return kind in ["soul_well","blood_cauldron","sleepless_belfry","blood_tower"]
+	return kind in ["soul_well","sleepless_belfry","blood_tower"]
 
 static func draw_dashed_ring(g, center: Vector2, r: float, color: Color, fill_alpha: float = 0.08, width: float = 2.0) -> void:
 	g.draw_circle(center,r,Color(color,fill_alpha))
@@ -303,7 +436,7 @@ static func draw_heal_building_reach(g, kind: String, cell: Vector2i, b: Diction
 		var lane_rect := Rect2(L.GRID_ORIGIN.x,L.GRID_ORIGIN.y+float(cell.y)*L.CELL_SIZE.y,L.GRID_SIZE.x,L.CELL_SIZE.y)
 		g.draw_rect(lane_rect,Color("5ce675",0.14))
 		g.draw_rect(lane_rect.grow(-1.5),Color("5ce675",0.75),false,2.2)
-	elif kind in ["soul_well","blood_cauldron","sleepless_belfry"]:
+	elif kind in ["soul_well","sleepless_belfry"]:
 		var center: Vector2 = b.pos if b.has("pos") else L.cell_center(cell)
 		var r: float = float(B.CARDS[kind].radius)+(B.actor_radius(b) if not b.is_empty() else B.kind_radius(kind))
 		var col := Color("dbd5ac") if kind == "sleepless_belfry" else Color("5ce675")
@@ -335,6 +468,10 @@ static func draw_hover(g, mouse: Vector2) -> void:
 	for b: Dictionary in g.model.buildings:
 		if b.hp > 0 and b.pos.distance_to(mouse) <= 44.0 and is_heal_building_kind(b.kind):
 			draw_heal_building_reach(g,b.kind,b.cell,b)
+			return
+	for b: Dictionary in g.model.buildings:
+		if b.hp > 0 and b.pos.distance_to(mouse) <= 44.0 and is_lane_play_building(b.kind):
+			draw_lane_play_reach(g,b.kind,b.cell,b)
 			return
 	for u: Dictionary in g.model.units:
 		if u.hp > 0 and u.get("spawn_delay",0.0) <= 0 and is_heal_unit_kind(u.kind):

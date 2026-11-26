@@ -1,0 +1,65 @@
+{
+  "date": "2026-11-24",
+  "generator": "built-in image_gen",
+  "transparent": true,
+  "note": "大體積卡（1×2 牆、2×1 器械、2×2 巨獸）的原圖需求。檔名即 assets/manuscript-v1/<name>.png；牆與攻城槌、投石車為替換舊圖。",
+  "style": "Consistent medieval illuminated manuscript marginal illustration: uneven dark-brown ink contours, simplified charming flat forms, hand-painted tempera/gouache, muted ochre, umber, olive, ivory and parchment tones, sparse hatching, dry pigment texture contained inside the shapes. NOT photorealistic, NOT 3D rendering, no glossy modern cartoon, no soft glow, no drop shadow. TRUE transparent background with clean alpha: no background paper, ground patch, scenery, text, border or watermark. The whole subject inside 6-8% clear margins.",
+  "team_color": "Team color: exactly one broad contiguous muted VERMILION RED area as described (about 20-25% of the silhouette); use no red anywhere else, so the game can recolor it blue for the other side. No alternate blue version.",
+  "images": {
+    "barricade": {
+      "size": "1024x1536 portrait (1:2)",
+      "replaces": true,
+      "team": "none (neutral, same as the old barricade)",
+      "prompt": "Create ONE production game sprite: a LONG medieval wooden cheval-de-frise barricade seen from a high three-quarter view, its long crossbeam running from the TOP of the image down to the BOTTOM (the barricade stretches away across two battle lanes, so its long axis is vertical in the picture), carried by three sturdy X-shaped trestles, with about ten clearly separated sharpened timber stakes pointing diagonally toward the RIGHT, rope lashings at the joints. Complete structure and every stake tip visible. NO people, wheels, bones, shields, flags or scenery. Readable when scaled to 110x220 pixels. Portrait 1:2 framing."
+    },
+    "bramble_wall": {
+      "size": "1024x1536 portrait (1:2)",
+      "replaces": true,
+      "team": "red leaves",
+      "prompt": "Create ONE production game sprite: a LONG wall of three to four twisted bramble trunks with huge ivory thorns, woven together into one hedge, seen from a high three-quarter view so the hedge runs from the TOP of the image down to the BOTTOM (it stretches across two battle lanes, long axis vertical). Gnarled umber-brown wood, pale ivory thorns pointing outward. Team color: a scattering of broad leaves in muted VERMILION RED across the hedge; no other red. NO animals, people or scenery. Readable when scaled to 110x220 pixels. Portrait 1:2 framing."
+    },
+    "bonewall": {
+      "size": "1024x1536 portrait (1:2)",
+      "replaces": true,
+      "team": "red cloth ribbons",
+      "prompt": "Create ONE production game sprite: a LONG necromancer's wall of crossed ivory bones and grinning skulls lashed between rough wooden posts, seen from a high three-quarter view so the wall runs from the TOP of the image down to the BOTTOM (it stretches across two battle lanes, long axis vertical). Four posts along its length, five or six skulls spaced along the top. Team color: tattered muted VERMILION RED cloth ribbons tied to each post; no other red. NO people, blood or scenery. Readable when scaled to 110x220 pixels. Portrait 1:2 framing."
+    },
+    "ram": {
+      "size": "1536x768 landscape (2:1)",
+      "replaces": true,
+      "team": "red cloth roof covering",
+      "prompt": "Create ONE production game sprite: a LONG medieval covered battering ram, side view facing RIGHT, a heavy iron ram-head on a long tree-trunk beam slung on chains under a pitched timber gallery roof, the gallery long enough for six wheels in a row (twice as long as it is tall). Weathered ochre-brown timber, dark iron fittings. Team color: a broad cloth or hide covering on the roof in muted VERMILION RED; no other red. NO soldiers, flags or scenery. Readable when scaled to 230x115 pixels. Landscape 2:1 framing."
+    },
+    "catapult": {
+      "size": "1536x768 landscape (2:1)",
+      "replaces": true,
+      "optional": true,
+      "team": "red pennant or cloth (same idea as the current catapult)",
+      "prompt": "Create ONE production game sprite: a LARGE medieval siege catapult (mangonel) on a long four-wheeled timber chassis, side view facing RIGHT, throwing arm cocked back with a stone in the cup, winch and rope at the rear, chassis twice as long as it is tall. Ochre-brown timber, dark iron straps. Team color: one muted VERMILION RED pennant or cloth on the frame; no other red. NO crew or scenery. Readable when scaled to 230x115 pixels. Landscape 2:1 framing."
+    },
+    "siege_tower": {
+      "size": "1024x1024 or 1280x1024 (1:1 to 1.25:1)",
+      "new_card": "攻城塔 (classic, 2x2 giant)",
+      "team": "red hides on the front",
+      "prompt": "Create ONE production game sprite: a medieval wooden SIEGE TOWER on four big wheels, three storeys tall, seen in three-quarter side view facing RIGHT, a drawbridge folded up at the top front, a fighting platform on top with three small archers in muted brown tunics drawing bows toward the right, plank walls with arrow slits. Team color: wet ox-hides hung down the front face in muted VERMILION RED; no other red. NO scenery or ground. Readable when scaled to 230x200 pixels. Square-ish framing."
+    },
+    "crystal_colossus": {
+      "size": "1024x1280 portrait (about 1:1.2)",
+      "new_card": "水晶巨像 (magic, 2x2 giant)",
+      "team": "red sash",
+      "prompt": "Create ONE complete isolated right-facing game creature: a towering CRYSTAL COLOSSUS, a heavy humanoid giant built from faceted pale violet-white crystal blocks held together by bronze bands, small head, massive shoulders, one arm raised with a glowing gem in its palm aimed to the RIGHT as if about to fire a beam (glow painted flat, no soft bloom). Medieval naive anatomy, coherent joints. Team color: a broad cloth sash across its chest and waist in muted VERMILION RED; no other red and no blue. NO scenery or ground. Readable when scaled to 200x230 pixels."
+    },
+    "flesh_abomination": {
+      "size": "1280x1024 (about 1.25:1)",
+      "new_card": "縫屍巨怪 (dark, 2x2 giant)",
+      "team": "red apron / rag",
+      "prompt": "Create ONE complete isolated right-facing game creature: a hulking FLESH ABOMINATION stitched together from many corpses, a hunched mountain of pale grey-green flesh with thick black crude sutures, four arms of different sizes (two clutching a rusty cleaver and a meat hook), a small sewn head sunk between the shoulders, stubby legs, lumbering toward the RIGHT. Grotesque but in the naive charming manuscript style: no gore, no blood, no exposed organs. Team color: a broad tattered butcher's apron and rag in muted VERMILION RED; no other red. NO scenery or ground. Readable when scaled to 230x200 pixels."
+    },
+    "bone_dragon": {
+      "size": "1536x1024 landscape (about 1.5:1)",
+      "new_card": "骸骨巨龍 (dark, 2x2 giant)",
+      "team": "red wing rags / banner",
+      "prompt": "Create ONE complete isolated right-facing game creature: a SKELETAL BONE DRAGON walking on four bony legs toward the RIGHT, long skull with open jaws breathing a thin flat-painted plume of grey-violet ghost smoke, ivory ribs, spine and long whip tail, two skeletal wings half raised. Coherent medieval naive anatomy, every limb connected. Team color: tattered remnants of wing membrane and a torn banner hanging from the spine in muted VERMILION RED; no other red. NO rider or scenery. Readable when scaled to 300x200 pixels. Landscape 3:2 framing."
+    }
+  }
+}

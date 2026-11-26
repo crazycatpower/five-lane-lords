@@ -45,9 +45,20 @@ static func cast(m, s: Dictionary) -> bool:
 		"levy":
 			var forward := 1.0 if s.team == 0 else -1.0
 			for foe: Dictionary in intruders(m,s.team):
-				# One militia per intruder, just on our side of it.
-				var x := clampf(foe.pos.x-45*forward,L.GRID_ORIGIN.x+8,L.GRID_ORIGIN.x+L.GRID_SIZE.x-8)
-				var u: Dictionary = m.spawn_unit(s.team,foe.lane,"militia",Vector2(x,L.cell_center(Vector2i(0,foe.lane)).y))
+				# One militia per intruder, inside our territory on a lane the foe occupies.
+				var spawn_lane: int = int(foe.lane)
+				var fallback_x: float = foe.pos.x
+				if Giant.is_giant(foe):
+					for gc: Vector2i in Giant.cells(foe):
+						if m.territory_owner(gc) == s.team:
+							spawn_lane = gc.y
+							fallback_x = L.cell_center(gc).x
+							break
+				var x := clampf(foe.pos.x-45.0*forward,L.GRID_ORIGIN.x+8.0,L.GRID_ORIGIN.x+L.GRID_SIZE.x-8.0)
+				var y := L.cell_center(Vector2i(0,spawn_lane)).y
+				if m.territory_owner(m.cell_at(Vector2(x,y))) != s.team:
+					x = clampf(fallback_x,L.GRID_ORIGIN.x+8.0,L.GRID_ORIGIN.x+L.GRID_SIZE.x-8.0)
+				var u: Dictionary = m.spawn_unit(s.team,spawn_lane,"militia",Vector2(x,y))
 				u.card = "levy"
 				u.levy = true
 				m.has_levy = true
@@ -98,7 +109,10 @@ static func lane_of(pos: Vector2) -> int:
 
 # Enemy ground troops standing on our territory.
 static func intruders(m, team: int) -> Array:
-	return m.units.filter(func(u: Dictionary) -> bool: return u.hp > 0 and u.team != team and not u.get("flying",false) and u.get("spawn_delay",0.0) <= 0 and m.territory_owner(m.cell_at(u.pos)) == team)
+	return m.units.filter(func(u: Dictionary) -> bool:
+		if u.hp <= 0 or u.team == team or u.get("flying",false) or u.get("spawn_delay",0.0) > 0: return false
+		if Giant.is_giant(u): return Giant.cells(u).any(func(c: Vector2i) -> bool: return m.territory_owner(c) == team)
+		return m.territory_owner(m.cell_at(u.pos)) == team)
 
 static func crystals_in(m, team: int, pos: Vector2, data: Dictionary) -> Array:
 	var rect: Rect2 = B.spell_rect(pos,data)
@@ -110,7 +124,7 @@ static func chain(m, s: Dictionary, data: Dictionary, rect: Rect2 = Rect2()) -> 
 	for u: Dictionary in m.units:
 		if u.hp > 0 and u.team != s.team and u.get("spawn_delay",0.0) <= 0: pool.append(u)
 	for b: Dictionary in m.buildings:
-		if b.hp > 0 and b.team != s.team: pool.append(b)
+		if b.hp > 0 and b.team != s.team and not B.CARDS[b.kind].has("trap") and not GluttonNest.hidden(b): pool.append(b)
 	var use_rect: Rect2 = rect if rect.size != Vector2.ZERO else B.spell_rect(s.pos,data)
 	var at: Vector2 = s.pos
 	var reach: float = data.radius
@@ -130,6 +144,9 @@ static func chain(m, s: Dictionary, data: Dictionary, rect: Rect2 = Rect2()) -> 
 				best_d = d
 		if best.is_empty(): break
 		hit.append(best)
+		if best.has("twin_id"):
+			var twin_b: Dictionary = preload("res://large_body.gd").twin(m,best)
+			if not twin_b.is_empty(): hit.append(twin_b)
 		m.link(at,best.pos,s.team,"lightning")
 		var dmg: float = float(B.TIERS.damage[mini(tier+i,B.TIERS.damage.size()-1)]) if tier >= 0 else (roundf(float(B.TIERS.damage[mini(base_tier+i,B.TIERS.damage.size()-1)])*hop_mult) if base_tier >= 0 else roundf(float(data.bolt_damage)*pow(0.65,i)))
 		m.damage(best,dmg,s.team,s.kind)
@@ -168,7 +185,15 @@ static func update(m, dt: float) -> void:
 				levy_left = true
 				break
 		if levy_left:
-			m.units = m.units.filter(func(u: Dictionary) -> bool: return not (u.get("levy",false) and u.hp > 0 and m.territory_owner(m.cell_at(u.pos)) != u.team))
+			m.units = m.units.filter(func(u: Dictionary) -> bool:
+				if u.get("levy",false) and u.hp > 0 and m.territory_owner(m.cell_at(u.pos)) != u.team:
+					u.hp = 0.0
+					if u.has("serial"):
+						m.serials_in_use.erase(u.serial)
+						u.serial = 0
+					return false
+				return true)
+			m.build_lookups()
 	if m.has_watchtower[0] or m.has_watchtower[1]:
 		for b: Dictionary in m.buildings:
 			if b.hp <= 0 or b.kind != "watchtower": continue
@@ -199,7 +224,7 @@ static func longer(r: float) -> float:
 	return minf(B.TIERS.range[0],roundf(r*1.25))
 
 static func unit_data(m, u: Dictionary, data: Dictionary) -> Dictionary:
-	if not data.get("projectile",false) or not watched(m,u): return data
+	if not B.is_ranged_unit(data) or not watched(m,u): return data
 	var d := data.duplicate()
 	d.range = longer(data.range)
 	return d
@@ -212,7 +237,8 @@ static func flee(m, u: Dictionary, dt: float) -> bool:
 	if u.get("fear_left",0.0) <= 0: return false
 	u.fear_left = maxf(0.0,u.fear_left-dt)
 	var home := L.gate_stop(u.team)
-	u.face = signf(home-u.pos.x)
+	var dir := signf(home-u.pos.x)
+	u.face = dir if dir != 0.0 else (-1.0 if u.team == 0 else 1.0)
 	u.pos.x = move_toward(u.pos.x,home,m.movement_speed(u)*0.85*dt)
 	if u.fear_left <= 0: u.face = 1.0 if u.team == 0 else -1.0 # fear over: turn back toward the enemy
 	return true
@@ -326,7 +352,7 @@ static func ai_score(c: Dictionary, s: Dictionary, covered: Dictionary = {}) -> 
 					foes += 1
 					if u.max_hp >= B.tier_value("hp","A") and in_box: heavy = true
 			for b: Dictionary in s.buildings:
-				if b.hp > 0 and b.team != team and (B.rect_hits_actor(rect,b) or b.pos.distance_to(c.pos) <= data.radius+data.hop_radius):
+				if b.hp > 0 and b.team != team and not B.CARDS[b.kind].has("trap") and not GluttonNest.hidden(b) and not b.get("twin_secondary",false) and (B.rect_hits_actor(rect,b) or b.pos.distance_to(c.pos) <= data.radius+data.hop_radius):
 					foes += 1
 			if foes >= 3 or heavy: return 700.0+foes*15
 		"arcane_shield":
@@ -352,9 +378,17 @@ static func ai_score(c: Dictionary, s: Dictionary, covered: Dictionary = {}) -> 
 				if u.hp > 0 and u.team == team and u.lane == lane: marching += 1
 			if marching >= 3 and c.cell.x == (0 if team == 0 else 8): return 670.0+marching*8 # one candidate per lane
 		"levy":
+			var forward := 1.0 if team == 0 else -1.0
+			var gate_x := L.gate_stop(team)
 			var n := 0
-			for u: Dictionary in s.units:
-				if u.hp > 0 and u.team != team and not covered.has(u.get("id",-1)) and not u.get("flying",false) and u.lane == c.cell.y and (u.pos.x-c.pos.x)*(1.0 if team == 0 else -1.0) >= 0: n += 1
+			var first_c := Vector2i(999,999)
+			for cand: Dictionary in s.get("candidates",[]):
+				if cand.kind == "levy" and (cand.cell.x < first_c.x or (cand.cell.x == first_c.x and cand.cell.y < first_c.y)):
+					first_c = cand.cell
+			if c.cell == first_c:
+				for u: Dictionary in s.units:
+					if u.hp <= 0 or u.team == team or covered.has(u.get("id",-1)) or u.get("flying",false): continue
+					if (u.pos.x-gate_x)*forward <= L.CELL_SIZE.x*4.5: n += 1
 			if n >= 3: return 720.0+n*10
 		"sacrifice":
 			var cap: float = float(data.get("bite_cap",500.0))
@@ -417,7 +451,7 @@ static func ai_score(c: Dictionary, s: Dictionary, covered: Dictionary = {}) -> 
 				var sneaky := false
 				for u: Dictionary in s.units:
 					if u.hp <= 0 or u.lane != c.cell.y: continue
-					if u.team == team and B.CARDS[u.kind].get("projectile",false): shooters += 1
+					if u.team == team and B.is_ranged_unit(B.CARDS.get(u.kind,{})): shooters += 1
 					if u.team != team and not covered.has(u.get("id",-1)) and B.CARDS[u.kind].get("stealth",false): sneaky = true
 				if shooters >= 2 or sneaky: return 650.0+col*4
 				if col >= 1 and int(s.get("owned_cells",0)) < 28: return 625.0+col*10
@@ -452,7 +486,7 @@ static func draw_watchtowers(g) -> void:
 
 static func draw_heal_auras(g) -> void:
 	for b: Dictionary in g.model.buildings:
-		if b.hp <= 0 or not b.kind in ["soul_well","blood_cauldron","sleepless_belfry"]: continue
+		if b.hp <= 0 or not b.kind in ["soul_well","sleepless_belfry"]: continue
 		var r: float = float(B.CARDS[b.kind].radius)+B.actor_radius(b)
 		var col := Color("dbd5ac",0.30) if b.kind == "sleepless_belfry" else Color("5ce675",0.30)
 		var c: Vector2 = b.pos

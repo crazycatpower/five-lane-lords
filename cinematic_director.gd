@@ -665,7 +665,9 @@ func paint_cutin(g, field: Rect2) -> void:
 	var tx := r.position.x + (104.0 if left_side else 22.0)
 	var tw := band_w - 126.0
 	var align := HORIZONTAL_ALIGNMENT_LEFT if left_side else HORIZONTAL_ALIGNMENT_RIGHT
-	g.draw_string(g.font, Vector2(tx, r.position.y + 27.0), "%s發動領主大招 · %s" % ["★ 玩家（紅方）" if cutin.team == 0 else "◆ 敵軍（藍方）", B.lord_name(lord)], align, tw, 16, Color(team_col.lightened(0.45), alpha))
+	var side_col_name: String = "紅方" if cutin.team == 0 else "藍方"
+	var side_label: String = ("★ 紅方" if cutin.team == 0 else "◆ 藍方") if bool(g.get("spectating")) else (("★ 玩家（%s）" % side_col_name) if cutin.team == int(g.get("me")) else ("◆ 敵軍（%s）" % side_col_name))
+	g.draw_string(g.font, Vector2(tx, r.position.y + 27.0), "%s發動領主大招 · %s" % [side_label, B.lord_name(lord)], align, tw, 16, Color(team_col.lightened(0.45), alpha))
 	g.draw_string(g.font, Vector2(tx, r.position.y + 57.0), "「%s」" % lord_data.get("skill", "領主技"), align, tw, 26, Color(0.99, 0.91, 0.70, alpha))
 
 func paint_showcase_overlays(g, field: Rect2) -> void:

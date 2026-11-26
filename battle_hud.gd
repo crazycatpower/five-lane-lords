@@ -164,7 +164,7 @@ static func day_hour(g) -> float:
 		keys.append([m.dawn_time(),NEXT_DAWN_H])
 	else:
 		keys.append([DayCycle.day_end(g),SET_H])
-	var t: float = m.elapsed
+	var t: float = m.day_clock() # stands still during 時空凝滯
 	var last: Array = keys[0]
 	for k: Array in keys.slice(1):
 		if k[0] <= last[0]: continue
@@ -205,6 +205,8 @@ static func landscape(g) -> void:
 	var hour := day_hour(g)
 	var sky := sky_at(hour)
 	var night := night_amount(hour)
+	var blood: float = preload("res://fx_polish.gd").blood_moon_k(g.model) # 血月蔽日 reddens the whole sky
+	if blood > 0.0: sky = [Color(sky[0]).lerp(Color("2a0508"),blood),Color(sky[1]).lerp(Color("8a1a1c"),blood)]
 	var bands := 14
 	for i: int in range(bands):
 		var y0 := lerpf(r.position.y,r.end.y,i/float(bands))
@@ -219,8 +221,14 @@ static func landscape(g) -> void:
 	if hour > SET_H-0.3:
 		var mp := arc_point((hour-SET_H)/(NEXT_DAWN_H-SET_H))
 		moon(g,mp,t,night,Color(sky[0]).lerp(sky[1],(mp.y-r.position.y)/r.size.y))
+	if blood > 0.0:
+		# 蔽日: the sun (or night moon) goes dark under the red sky...
+		var body := arc_point((hour-DAWN_H)/(SET_H-DAWN_H)) if hour < SET_H else arc_point((hour-SET_H)/(NEXT_DAWN_H-SET_H))
+		g.draw_circle(body,19.0,Color(0.30,0.02,0.04,0.85*blood))
+		# ...and the blood moon rises into the open sky between our purse and the 戰報 seal, always in view.
+		preload("res://fx_polish.gd").eclipse(g,Vector2(1002.0 if has_stage_pills(g.model) else 592.0,STRIP.position.y+39.0+(1.0-blood)*14.0),blood,t)
 	# Flocks cross by day only.
-	var day := 1.0-night
+	var day := (1.0-night)*(1.0-blood)
 	for f: int in range(3):
 		var lap := 26.0+f*11.0
 		var k := fposmod(t/lap+g.scenery_noise(f,741),1.0)
@@ -348,6 +356,9 @@ static func tower(g, r: Rect2, team: int, lane: int, col: Color) -> void:
 	var tip := pole+Vector2(9.0 if team == g.me else -9.0,-8.0+sin(tt*6.0+lane*1.7)*1.5)
 	g.draw_colored_polygon(PackedVector2Array([pole+Vector2(0,-11),tip,pole+Vector2(0,-5)]),col)
 
+static func has_stage_pills(m) -> bool:
+	return m.day_phase() < 3 and (not m.field_mutators.is_empty() or not m.stage_rule_tag.is_empty() or not preload("res://season.gd").label(m.season,m.season_rule).is_empty())
+
 static func stage_pills(g) -> void:
 	var m = g.model
 	if m.day_phase() >= 3: return
@@ -388,7 +399,7 @@ static func dial(g, single_lane: bool) -> void:
 			var band: Color = DayCycle.BANDS[3] if night else DayCycle.BANDS[mini(i,DayCycle.BANDS.size()-2)]
 			g.draw_arc(DIAL,RING_R,a0,a1,24,band,7.0,true)
 			g.draw_line(DIAL+Vector2.from_angle(a0)*(RING_R-5),DIAL+Vector2.from_angle(a0)*(RING_R+5),Color("2a1b10"),2.0,true)
-		var now_a := -PI*0.5+TAU*clampf(m.elapsed/end,0.0,1.0)
+		var now_a := -PI*0.5+TAU*clampf(m.day_clock()/end,0.0,1.0)
 		if now_a > -PI*0.5+0.01: g.draw_arc(DIAL,RING_R,-PI*0.5,now_a,48,Color(0.10,0.06,0.03,0.45),7.5,true)
 		var at := DIAL+Vector2.from_angle(now_a)*RING_R
 		if m.day_phase() == 3: DayCycle.moon(g,at,8.0)
@@ -401,7 +412,7 @@ static func dial(g, single_lane: bool) -> void:
 	g.draw_arc(DIAL,DIAL_R-4,0,TAU,48,Color(g.INK,0.35),1.0,true)
 	var survive: bool = m.survive_time > 0.0
 	if survive:
-		var left_t := ceili(maxf(0.0,m.survive_time-m.elapsed))
+		var left_t := ceili(maxf(0.0,m.survive_time-m.day_clock()))
 		g.draw_string(g.font,DIAL+Vector2(-DIAL_R,-6),"守",HORIZONTAL_ALIGNMENT_CENTER,DIAL_R*2,14,g.RED)
 		g.draw_string(g.font,DIAL+Vector2(-DIAL_R,16),"%d:%02d" % [left_t/60,left_t%60],HORIZONTAL_ALIGNMENT_CENTER,DIAL_R*2,21,g.RED)
 	else:
@@ -446,7 +457,10 @@ static func pause_seal(g) -> void:
 	var r := L.PAUSE_RECT
 	var hv := seal(g,r,Color("8e3427"),"hud_pause")
 	var c := r.get_center()+Vector2(0,-2.0*hv)
-	if g.model.paused:
+	if g.net != null:
+		for dy: float in [-7.0, 0.0, 7.0]:
+			g.draw_rect(Rect2(c+Vector2(-9.0, dy-1.5), Vector2(18.0, 3.0)), CREAM)
+	elif g.model.paused:
 		g.draw_colored_polygon(PackedVector2Array([c+Vector2(-6,-10),c+Vector2(10,0),c+Vector2(-6,10)]),CREAM)
 	else:
 		g.draw_rect(Rect2(c+Vector2(-8,-10),Vector2(5,20)),CREAM)

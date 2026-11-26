@@ -7,6 +7,8 @@ const ExpansionMore = preload("res://expansion_more.gd")
 const GoldMonster = preload("res://gold_monster.gd")
 const SealAltar = preload("res://seal_altar.gd")
 const Giant = preload("res://giant_unit.gd")
+const LargeBody = preload("res://large_body.gd")
+const GridRules = preload("res://grid_rules.gd")
 const L = preload("res://layout.gd")
 const MapAI = preload("res://map_ai.gd") # 地圖機制：順風、水閘、泥沼、熔岩、符文、傳送門、落石、上坡
 
@@ -41,12 +43,12 @@ static func skill_plan(k: Dictionary) -> Dictionary:
 	var wanted := false
 	match k.lord:
 		"rune": wanted = k.get("rune_lanes",0) > 0 and k.elapsed >= 30
-		"vampire": wanted = k.get("troops",0) >= 2
+		"vampire": wanted = k.get("troops",0) >= 2 and k.get("enemy_troops",0) >= 1
 		"mage": wanted = k.get("enemy_troops",0) >= pr.get("mage_min_troops",4) # freezes only enemies (2026-11-19): cast when there are enemies to freeze
-		"underworld": wanted = k.get("graves",0) >= 2
+		"underworld": wanted = k.get("graves",0) >= 2 or k.elapsed >= pr.get("skill_after",45.0) # 亡者甦醒 works without graves too
 		"adventure": wanted = k.get("slash_targets",0) >= 2
 		"lion", "beast": wanted = k.elapsed >= pr.get("skill_after",45.0)
-		"harvest": wanted = k.elapsed >= pr.get("skill_after",45.0) and k.farms <= pr.get("harvest_max_farms",7.0)
+		"harvest": wanted = k.elapsed >= pr.get("skill_after",45.0) and k.farms <= pr.get("harvest_max_farms",12.0)
 		"iron": wanted = k.elapsed >= pr.get("iron_after",20.0) # 箭樓築城: towers pay off the earlier they stand
 		_:
 			if B.is_minion(k.lord):
@@ -63,6 +65,76 @@ static func skill_plan(k: Dictionary) -> Dictionary:
 	# The skill costs no gold since the charge meter (2026-11-19), so the AI never hoards for it.
 	return {"cast":wanted and k.get("charge",0.0) >= k.get("need",INF)-0.00001,"save":false}
 
+# Effective safe range for a ranged unit or mixed legion containing ranged members (0 = melee).
+static func ranged_unit_range(_kind: String, data: Dictionary) -> float:
+	if data.get("type","") != "unit": return 0.0
+	if data.has("members"):
+		var max_r := 0.0
+		var has_melee := false
+		for m in data.members:
+			var md: Dictionary = B.CARDS.get(String(m[0]),{})
+			if B.is_ranged_unit(md): max_r = maxf(max_r,float(md.get("range",0.0)))
+			else: has_melee = true
+		if max_r <= 0.0: return 0.0
+		return minf(max_r*0.65,220.0) if has_melee else max_r
+	return float(data.get("range",0.0)) if B.is_ranged_unit(data) else 0.0
+
+static func ranged_pos_adjust(cx: float, forward: float, r_range: float, nearest_foe_x: float, nearest_foe_bld_x: float, front_melee_x: float, is_defend: bool) -> float:
+	var ideal: float = clampf(r_range*0.85,160.0,maxf(160.0,r_range-12.0))
+	var safe_min: float = minf(r_range*0.55,145.0)
+	if nearest_foe_x < INF:
+		var d: float = (nearest_foe_x-cx)*forward
+		if d < -20.0: return -260.0
+		if d < safe_min: return (-140.0 if is_defend else -180.0)-(safe_min-d)*1.1
+		return (40.0 if is_defend else 28.0)-absf(d-ideal)*(0.42 if is_defend else 0.16)
+	elif not is_defend:
+		if nearest_foe_bld_x < INF:
+			var bd: float = (nearest_foe_bld_x-cx)*forward
+			if bd >= 0.0 and bd < safe_min: return -110.0-(safe_min-bd)*0.6
+			if bd >= safe_min: return 18.0-absf(bd-ideal)*0.10
+		if front_melee_x < INF:
+			var md: float = (front_melee_x-cx)*forward
+			if md >= 40.0: return 22.0-absf(md-130.0)*0.12
+			if md < 0.0: return -25.0+md*0.1
+	return 0.0
+
+static func _unit_lanes(c: Dictionary, data: Dictionary, team: int, active_lanes: Array) -> Array:
+	var lane: int = c.cell.y
+	if data.type != "unit": return [lane]
+	if data.get("giant",false): return [lane,lane+1] if (lane+1 < L.GRID_ROWS and (lane+1) in active_lanes) else [lane]
+	if GridRules.footprint(c.kind).y >= 2 or not String(data.get("formation","")).is_empty():
+		var out: Array = []
+		for fc: Vector2i in GridRules.footprint_cells(c.kind,c.cell,team,active_lanes):
+			if not fc.y in out: out.append(fc.y)
+		if not out.is_empty(): return out
+	return [lane]
+
+static func _lane_ranged_context(u_lanes: Array, home_x: float, forward: float, front_foe_x: Array, foe_bld_x: Array, my_front_melee_x: Array) -> Dictionary:
+	var fx := INF
+	var fx_d := INF
+	var bx := INF
+	var bx_d := INF
+	var mx := INF
+	var mx_d := -INF
+	for ul in u_lanes:
+		var uli := int(ul)
+		if uli < front_foe_x.size() and float(front_foe_x[uli]) < INF:
+			var fd: float = absf(float(front_foe_x[uli])-home_x)
+			if fd < fx_d:
+				fx_d = fd
+				fx = float(front_foe_x[uli])
+		if uli < foe_bld_x.size() and float(foe_bld_x[uli]) < INF:
+			var bd: float = absf(float(foe_bld_x[uli])-home_x)
+			if bd < bx_d:
+				bx_d = bd
+				bx = float(foe_bld_x[uli])
+		if uli < my_front_melee_x.size() and float(my_front_melee_x[uli]) < INF:
+			var md: float = (float(my_front_melee_x[uli])-home_x)*forward
+			if md > mx_d:
+				mx_d = md
+				mx = float(my_front_melee_x[uli])
+	return {"fx":fx,"bx":bx,"mx":mx}
+
 static func decide(s: Dictionary) -> Dictionary:
 	var pr: Dictionary = weights(s)
 	var night: bool = s.get("night_decay",true) and s.elapsed >= B.NIGHT_START
@@ -74,6 +146,15 @@ static func decide(s: Dictionary) -> Dictionary:
 	var urgency := L.per_lane(0.0)
 	var foe_x := L.per_lane(INF)
 	var foe_reach := L.per_lane(INF) # distance (px) of the closest enemy to our gate
+	var front_foe_x := L.per_lane(INF)
+	var front_foe_dist := L.per_lane(INF)
+	var lane_has_non_flyer := L.per_lane(false)
+	var my_front_melee_x := L.per_lane(INF)
+	var my_front_melee_d := L.per_lane(-INF)
+	var foe_bld_x := L.per_lane(INF)
+	var foe_bld_dist := L.per_lane(INF)
+	var lane_play_buffs := L.per_lane(0)
+	var lane_range_buffs := L.per_lane(0)
 	var my_farms := L.per_lane(0)
 	var their_farms := L.per_lane(0)
 	var their_guard := L.per_lane(0.0)
@@ -92,21 +173,33 @@ static func decide(s: Dictionary) -> Dictionary:
 	var nest_bait: Array = nest_plan.bait_lanes
 	for u: Dictionary in s.units:
 		if u.hp <= 0: continue
+		var u_card: Dictionary = B.CARDS.get(u.kind,{})
+		var is_melee_u: bool = ranged_unit_range(u.kind,u_card) <= 0.0
 		var u_lanes := Giant.lanes(u)
 		var share: float = u.hp/float(maxi(1,u_lanes.size()))
 		if u.team == team:
+			var adv: float = (u.pos.x-home_x)*forward
 			for ul in u_lanes:
 				var uli := int(ul)
 				ours[uli] += share
 				my_troops[uli] += share
 				my_troop_x[uli].append(u.pos.x)
+				if is_melee_u and adv > float(my_front_melee_d[uli]):
+					my_front_melee_d[uli] = adv
+					my_front_melee_x[uli] = u.pos.x
 			continue
 		var distance := absf(u.pos.x-home_x)
 		var closeness := clampf(1.0-distance/(6.0*L.CELL_SIZE.x),0,1)
 		var covered_foe: bool = nest_covered.has(u.get("id",-1))
+		var visible_foe: bool = not u.get("stealthed",false) and not u.get("phased",false)
+		var ground_foe: bool = not u.get("flying",false) and not u.get("phased",false)
 		for ul in u_lanes:
 			var uli := int(ul)
 			foes[uli] += share
+			if visible_foe and distance < float(front_foe_dist[uli]):
+				front_foe_dist[uli] = distance
+				front_foe_x[uli] = u.pos.x
+			if ground_foe: lane_has_non_flyer[uli] = true
 			if covered_foe: continue
 			urgency[uli] += share*(0.3+1.7*closeness)
 			if distance < foe_reach[uli]:
@@ -126,11 +219,20 @@ static func decide(s: Dictionary) -> Dictionary:
 			elif b.kind == "grave":
 				my_graves[b.cell.y] += 1
 				grave_total += 1
+			var bd: Dictionary = B.CARDS.get(b.kind,{})
+			if String(bd.get("play_buff","")) == "range": lane_range_buffs[b.cell.y] += 1
+			elif bd.has("play_buff") or bd.has("depot_refund"): lane_play_buffs[b.cell.y] += 1
 			if B.has_tag(b.kind,"guard"):
 				ours[b.cell.y] += b.hp
 				my_guard[b.cell.y] += 1
-		elif b.kind == "farm": their_farms[b.cell.y] += 1
-		elif B.has_tag(b.kind,"obstacle"): their_guard[b.cell.y] += b.hp
+		else:
+			if b.kind == "farm": their_farms[b.cell.y] += 1
+			elif B.has_tag(b.kind,"obstacle"): their_guard[b.cell.y] += b.hp
+			if B.has_tag(b.kind,"guard") or B.has_tag(b.kind,"obstacle"):
+				var bd_dist := absf(b.pos.x-home_x)
+				if bd_dist < float(foe_bld_dist[b.cell.y]):
+					foe_bld_dist[b.cell.y] = bd_dist
+					foe_bld_x[b.cell.y] = b.pos.x
 	var active_lanes: Array = s.get("active_lanes", range(L.GRID_ROWS))
 	# Defence: the lane whose approaching enemies most outweigh what we have there.
 	var danger := -1
@@ -170,12 +272,25 @@ static func decide(s: Dictionary) -> Dictionary:
 	for defend: int in ([danger,-1] if danger >= 0 else [-1]):
 		if defend < 0:
 			var g_cost: float = float(s.get("giant_ready_cost",0.0))
-			if g_cost > 0.0 and float(s.ink) < g_cost and float(s.ink) >= g_cost-8.0: break
+			var spend_at: float = float(pr.get("spend_at",SPEND_AT))
+			var hold_from: float = minf(g_cost-8.0,spend_at-3.0)
+			if g_cost > 0.0 and float(s.ink) < g_cost and float(s.ink) >= hold_from: break
 		for c: Dictionary in s.candidates:
 			var data: Dictionary = B.CARDS[c.kind]
 			var score := -INF
 			var lane: int = c.cell.y
 			var col: int = c.cell.x if team == 0 else 8-c.cell.x
+			var r_range: float = ranged_unit_range(c.kind,data)
+			var u_lanes: Array = _unit_lanes(c,data,team,active_lanes)
+			var pb_bonus := 0.0
+			if data.type == "unit":
+				var seen_pb := 0
+				var seen_rb := 0
+				for ul in u_lanes:
+					var uli := int(ul)
+					seen_pb += int(lane_play_buffs[uli])
+					if r_range > 0.0: seen_rb += int(lane_range_buffs[uli])
+				pb_bonus = minf(float(seen_pb)*26.0,52.0)+(22.0 if seen_rb > 0 else 0.0)
 			if has_own_nest and data.type == "unit" and not data.get("flying",false):
 				var eaten_on_spawn := false
 				var armed_hidden := false
@@ -195,7 +310,7 @@ static func decide(s: Dictionary) -> Dictionary:
 							best_score = fscore
 							best = c.duplicate()
 					continue
-			if GoldMonster.ai_wait(c.kind,s.ink,defend >= 0 and lane == defend): continue # 金幣怪物 waits for a real purse
+			if GoldMonster.ai_wait(c.kind,s.ink,defend >= 0 and lane == defend,pr): continue # 金幣怪物 waits for a real purse
 			if c.kind == "seal_altar": # 封印祭壇: back of the quietest lane, never while defending
 				var altar_score: float = SealAltar.ai_score(c,s,team,col)
 				if defend < 0 and altar_score > best_score:
@@ -234,7 +349,7 @@ static func decide(s: Dictionary) -> Dictionary:
 				continue
 			if defend < 0 or lane == defend:
 				var faction_score: float = maxf(Faction.ai_score(c,s,nest_covered),ExpansionMore.ai_score(c,s,nest_covered))
-				if defend >= 0 and c.kind in Faction.DEFENSIVE: faction_score += 400.0 # beats the plain defend plays (<= 1000)
+				if faction_score > -INF and defend >= 0 and (c.kind in Faction.DEFENSIVE or (data.get("expansion_spell",false) and B.has_tag(c.kind,"defend_spell")) or c.kind in ["borrowed_bones","sealed_coffin"]): faction_score += 400.0 # beats the plain defend plays (<= 1000)
 				if faction_score > best_score:
 					best_score = faction_score
 					best = c.duplicate()
@@ -264,21 +379,43 @@ static func decide(s: Dictionary) -> Dictionary:
 						best = c.duplicate()
 					continue
 				if data.get("giant",false):
-					var g_lanes: Array = [lane,lane+1] if lane+1 < L.GRID_ROWS else [lane]
-					if not defend in g_lanes: continue
+					if not defend in u_lanes: continue
 					var gfx: float = foe_x[defend]
-					if (gfx-c.pos.x)*forward >= -L.CELL_SIZE.x*0.5 and not B.has_tag(c.kind,"no_defend") and c.kind != "giant_catapult":
-						score = 920.0-absf(gfx-c.pos.x)*0.4
+					if (gfx-c.pos.x)*forward >= (-L.CELL_SIZE.x*0.25 if r_range > 0.0 else -L.CELL_SIZE.x*0.5) and not B.has_tag(c.kind,"no_defend") and c.kind != "giant_catapult":
+						if r_range > 0.0:
+							var rctx_dg: Dictionary = _lane_ranged_context(u_lanes,home_x,forward,front_foe_x,foe_bld_x,my_front_melee_x)
+							score = 920.0+ranged_pos_adjust(c.pos.x,forward,r_range,minf(float(rctx_dg.fx),gfx) if gfx < INF else float(rctx_dg.fx),INF,INF,true)+minf(pb_bonus*0.5,24.0)
+						else:
+							score = 920.0-absf(gfx-c.pos.x)*0.4
 					if score > best_score:
 						best_score = score
 						best = c.duplicate()
 					continue
-				if lane != defend: continue
-				var fx: float = foe_x[lane]
-				if data.type == "unit" and not B.has_tag(c.kind,"no_defend"):
-					# Troops never turn round, so spawn between the attacker and our gate.
-					if (fx-c.pos.x)*forward >= 0: score = 900-absf(fx-c.pos.x)*0.5-data.cost*3
-				elif B.has_tag(c.kind,"defend_building"): score = 950-absf(fx-c.pos.x)
+				if LargeBody.is_tall(c.kind) and B.has_tag(c.kind,"defend_building"):
+					var w_lanes: Array = [lane,lane+1] if (lane+1 < L.GRID_ROWS and (lane+1) in active_lanes) else [lane]
+					if not defend in w_lanes: continue
+					if bool(lane_has_non_flyer[defend]) and (foe_x[defend]-c.pos.x)*forward >= -20.0:
+						score = 950.0-absf(foe_x[defend]-c.pos.x)+(30.0 if (w_lanes.size() == 2 and urgency[w_lanes[0] if w_lanes[1] == defend else w_lanes[1]] > 0.0) else 0.0)
+				else:
+					var spans_defend: bool = defend in u_lanes
+					if not spans_defend: continue
+					var fx: float = foe_x[defend]
+					var def_cost: float = float(GoldMonster.price(s.ink)) if GoldMonster.pays_all(c.kind) else float(data.cost)
+					if data.type == "unit" and not B.has_tag(c.kind,"no_defend"):
+						# Troops never turn round, so spawn between the attacker and our gate; ranged units keep safe range.
+						if (fx-c.pos.x)*forward >= 0:
+							if r_range > 0.0:
+								var rctx_d: Dictionary = _lane_ranged_context(u_lanes,home_x,forward,front_foe_x,foe_bld_x,my_front_melee_x)
+								var use_fx: float = float(rctx_d.fx) if float(rctx_d.fx) < INF else fx
+								score = 900.0-def_cost*3.0+ranged_pos_adjust(c.pos.x,forward,r_range,use_fx,INF,INF,true)+minf(pb_bonus*0.5,24.0)
+							else:
+								score = 900-absf(fx-c.pos.x)*0.5-def_cost*3
+					elif B.has_tag(c.kind,"defend_building"):
+						if data.has("range") and data.has("damage"):
+							if absf(fx-c.pos.x) <= float(data.range) and (fx-c.pos.x)*forward >= -L.CELL_SIZE.x:
+								score = 950.0-absf((fx-c.pos.x)*forward-float(data.range)*0.5)*0.4
+						elif bool(lane_has_non_flyer[defend]) and (fx-c.pos.x)*forward >= -20.0:
+							score = 950.0-absf(fx-c.pos.x)
 			else:
 				if c.kind == "farm" and farm_total < farm_goal:
 					# Spread farms over the lanes, back row first, away from lanes under pressure.
@@ -323,12 +460,22 @@ static func decide(s: Dictionary) -> Dictionary:
 						var ahead: float = (x-c.pos.x)*forward
 						if ahead >= 0 and ahead <= B.HEAL_RADIUS and my_troops[lane] >= 200: score = maxf(score,pr.get("healer_score",690.0)-ahead*0.5)
 				elif data.get("giant",false) and c.kind != "giant_catapult":
-					var g_lanes: Array = [lane,lane+1] if lane+1 < L.GRID_ROWS else [lane]
 					if not nest_bait[lane] and not (lane+1 < nest_bait.size() and nest_bait[lane+1]):
-						score = 740.0+col*6.0+(20.0 if target_lane in g_lanes else 0.0)-(attack[target_lane]-attack[lane])*0.02
+						var g_atk: float = (attack[u_lanes[0]]+attack[u_lanes[u_lanes.size()-1]])*0.5
+						var rctx_og: Dictionary = _lane_ranged_context(u_lanes,home_x,forward,front_foe_x,foe_bld_x,my_front_melee_x)
+						var g_pos_adj: float = (ranged_pos_adjust(c.pos.x,forward,r_range,float(rctx_og.fx),float(rctx_og.bx),float(rctx_og.mx),false)-float(col)*1.5) if r_range > 0.0 else (float(col)*6.0)
+						score = 740.0+g_pos_adj+(20.0 if target_lane in u_lanes else 0.0)-(attack[target_lane]-g_atk)*0.02+pb_bonus
 				elif wave and data.type == "unit" and c.kind != "farmer" and not nest_bait[lane]:
-					# Front-most legal cell of the chosen lane; other lanes only as a weaker fallback.
-					score = pr.get("wave_score",600.0)+col*4-data.cost-(0 if lane == target_lane else 60+(attack[target_lane]-attack[lane])*0.05)
+					# Ranged waves keep safe range behind frontline; melee waves deploy at the front-most legal cell.
+					var wave_cost: float = float(GoldMonster.price(s.ink)) if GoldMonster.pays_all(c.kind) else float(data.cost)
+					var best_ul := lane
+					for ul in u_lanes:
+						if attack[int(ul)] > attack[best_ul]: best_ul = int(ul)
+					var w_pos_adj := float(col)*4.0
+					if r_range > 0.0:
+						var rctx_w: Dictionary = _lane_ranged_context(u_lanes,home_x,forward,front_foe_x,foe_bld_x,my_front_melee_x)
+						w_pos_adj = ranged_pos_adjust(c.pos.x,forward,r_range,float(rctx_w.fx),float(rctx_w.bx),float(rctx_w.mx),false)+minf(float(col),2.0)*2.0-maxf(0.0,float(col)-2.0)*3.0
+					score = pr.get("wave_score",600.0)+w_pos_adj-wave_cost-(0.0 if target_lane in u_lanes else 60.0+(attack[target_lane]-attack[best_ul])*0.05)+pb_bonus
 				elif wave and B.has_tag(c.kind,"wave_spell"):
 					var hit: Dictionary = area_value(c,s,data,-1,nest_covered)
 					if hit.value >= data.cost*pr.get("spell_value_per_gold",20.0): score = 600.0+minf(hit.value,2000)*0.1
@@ -340,7 +487,7 @@ static func decide(s: Dictionary) -> Dictionary:
 						if b.team == team and b.kind == "farm" and B.rect_hits_actor(hrect,b): count += 1
 					if count >= pr.get("harvest_min",2.0): score = pr.get("harvest_score",670.0)+count
 			if defend < 0 and score == -INF and s.ink >= pr.get("spend_at",SPEND_AT):
-				score = spend_score(c,s,team,lane,col,target_lane,foes,urgency,my_farms,s.get("owned_cells",15)-own_buildings,nest_covered,nest_bait[lane])
+				score = spend_score(c,s,team,lane,col,target_lane,foes,urgency,my_farms,s.get("owned_cells",15)-own_buildings,nest_covered,nest_bait[lane],front_foe_x,foe_bld_x,my_front_melee_x)
 			if night and B.is_home_card(c.kind,s.get("lord","lion")): score -= pr.get("night_economy_penalty",0.0)
 			if terrain and score > -INF: score += MapAI.cell_bonus(c,s,team,data)
 			if score > best_score:
@@ -365,7 +512,7 @@ static func area_value(c: Dictionary, s: Dictionary, data: Dictionary, defend: i
 		if Giant.occupies_lane(u,defend): reaches = true
 	if data.get("building_damage",0.0) > 0:
 		for b: Dictionary in s.buildings:
-			if b.hp > 0 and b.team != s.team and B.rect_hits_actor(rect,b): value += minf(b.hp,data.building_damage)*0.5
+			if b.hp > 0 and b.team != s.team and not B.CARDS[b.kind].has("trap") and not GluttonNest.hidden(b) and B.rect_hits_actor(rect,b): value += minf(b.hp,data.building_damage)*0.5
 	return {"value":value,"reaches":reaches}
 
 # Deterministic per-lane tie-breaker that changes every 8 seconds (0..80).
@@ -375,11 +522,12 @@ static func jitter(lane: int, elapsed: float) -> float:
 
 # Fallback value of a card when the AI has ink to burn (see SPEND_AT). All scores stay below the
 # deliberate plays (>= 600), so this only decides between otherwise unwanted cards.
-static func spend_score(c: Dictionary, s: Dictionary, team: int, lane: int, col: int, target_lane: int, foes: Array, urgency: Array, my_farms: Array, free_cells: int, covered: Dictionary = {}, baiting_lane: bool = false) -> float:
+static func spend_score(c: Dictionary, s: Dictionary, team: int, lane: int, col: int, target_lane: int, foes: Array, urgency: Array, my_farms: Array, free_cells: int, covered: Dictionary = {}, baiting_lane: bool = false, front_foe_x: Array = [], foe_bld_x: Array = [], my_front_melee_x: Array = []) -> float:
 	var data: Dictionary = B.CARDS[c.kind]
+	var hold_release: float = float(weights(s).get("hold_release",45.0)) # gold at which held cards (bait lane, ram, healer) go anyway
 	# Keep a few cells open, or every building card in the deck ends up stuck in hand.
 	if data.type == "building" and free_cells <= 3: return -INF
-	if baiting_lane and s.ink < 45.0 and data.type in ["unit","building"] and not c.kind in ["farm","crystal","mill"]: return -INF
+	if baiting_lane and s.ink < hold_release and data.type in ["unit","building"] and not c.kind in ["farm","crystal","mill"]: return -INF
 	match c.kind:
 		"tower": return 520.0+urgency[lane]*0.05+my_farms[lane]*10-absf(col-1)*6
 		"scarecrow": return 500.0+urgency[lane]*0.04+my_farms[lane]*10-absf(col-2)*6
@@ -391,14 +539,25 @@ static func spend_score(c: Dictionary, s: Dictionary, team: int, lane: int, col:
 			for u: Dictionary in s.units:
 				if u.team != team and u.hp > 0 and not covered.has(u.get("id",-1)) and B.rect_hits_actor(srect,u): value += 60.0
 			for b: Dictionary in s.buildings:
-				if b.hp <= 0 or not B.rect_hits_actor(srect,b): continue
+				if b.hp <= 0 or B.CARDS[b.kind].has("trap") or GluttonNest.hidden(b) or not B.rect_hits_actor(srect,b): continue
 				if c.kind == "harvest" and b.team == team and b.kind == "farm": value += 40.0
 				if c.kind == "fire" and b.team != team: value += 80.0
 			return 490.0+value if value > 0 else 300.0-data.cost
 	# Ram and healer have their own rules above; near the gold cap they may still go, or they would
 	# sit in hand forever and stop the deck rotating.
-	if B.has_tag(c.kind,"hold") and s.ink < 45.0: return -INF
-	if data.type == "unit": return 480.0+(30.0 if lane == target_lane else 0.0)+col*3-data.cost*0.5
+	if B.has_tag(c.kind,"hold") and s.ink < hold_release: return -INF
+	if data.type == "unit":
+		var spend_cost: float = float(GoldMonster.price(s.ink)) if GoldMonster.pays_all(c.kind) else float(data.cost)
+		var r_range: float = ranged_unit_range(c.kind,data)
+		var s_pos_adj: float = float(col)*3.0
+		if r_range > 0.0:
+			var forward := 1.0 if team == 0 else -1.0
+			var home_x := L.gate_stop(team)
+			var active_lanes: Array = s.get("active_lanes", range(L.GRID_ROWS))
+			var u_lanes: Array = _unit_lanes(c,data,team,active_lanes)
+			var rctx_s: Dictionary = _lane_ranged_context(u_lanes,home_x,forward,front_foe_x,foe_bld_x,my_front_melee_x)
+			s_pos_adj = ranged_pos_adjust(c.pos.x,forward,r_range,float(rctx_s.fx),float(rctx_s.bx),float(rctx_s.mx),false)-float(col)*2.0
+		return 480.0+(30.0 if lane == target_lane else 0.0)+s_pos_adj-spend_cost*0.5
 	# Any other building or spell (a new card without its own rule above): use it rather than let it
 	# sit in hand forever, which would stop the deck rotating.
 	if data.type == "building": return 495.0+my_farms[lane]*5-col*4
@@ -431,7 +590,7 @@ static func dark_card_score(c: Dictionary, s: Dictionary, ours: Array, foes: Arr
 				if distance < data.min_range: return -INF
 				if distance <= data.range: targets += 1
 			for b: Dictionary in s.buildings:
-				if b.hp <= 0 or b.team == s.team or not b.cell.y in g_lanes: continue
+				if b.hp <= 0 or b.team == s.team or B.CARDS[b.kind].has("trap") or GluttonNest.hidden(b) or not b.cell.y in g_lanes: continue
 				var distance: float = maxf(0.0,absf(b.pos.x-gx)-gr-B.actor_radius(b))
 				if distance < data.min_range: return -INF
 				if distance <= data.range: targets += 1
@@ -445,16 +604,19 @@ static func dark_card_score(c: Dictionary, s: Dictionary, ours: Array, foes: Arr
 			var data: Dictionary = B.CARDS[c.kind]
 			var targets := 0
 			for u: Dictionary in s.units:
-				if u.hp <= 0 or u.team == s.team or u.lane != lane or covered.has(u.get("id",-1)): continue
+				if u.hp <= 0 or u.team == s.team or covered.has(u.get("id",-1)) or not Giant.occupies_lane(u,lane): continue
 				var distance: float = c.pos.distance_to(u.pos)
 				if distance < data.min_range: return -INF
-				if distance <= data.range: targets += 1
+				if (u.pos.x-c.pos.x)*forward >= 0.0 and distance <= data.range: targets += 1
 			for b: Dictionary in s.buildings:
-				if b.hp <= 0 or b.team == s.team or b.cell.y != lane: continue
+				if b.hp <= 0 or b.team == s.team or B.CARDS[b.kind].has("trap") or GluttonNest.hidden(b) or b.cell.y != lane: continue
 				var distance: float = c.pos.distance_to(b.pos)
 				if distance < data.min_range: return -INF
-				if distance <= data.range: targets += 1
-			if targets > 0: return 700.0+targets*15
+				if (b.pos.x-c.pos.x)*forward >= 0.0 and distance <= data.range: targets += 1
+			var c_gd: float = absf(L.gate_stop(1-s.team)-c.pos.x)
+			if c_gd >= data.min_range and c_gd <= data.range and s.gates[1-s.team][lane] > 0: targets += 1
+			var c_col: int = c.cell.x if s.team == 0 else 8-c.cell.x
+			if targets > 0: return 700.0+targets*15.0-float(c_col)*6.0
 		"drummer":
 			var count := 0
 			for u: Dictionary in s.units:
@@ -488,11 +650,27 @@ static func dark_card_score(c: Dictionary, s: Dictionary, ours: Array, foes: Arr
 				if total_graves == 0:
 					return 580.0 - existing * 80.0 - col * 12.0
 				return 390.0 - existing * 80.0 - col * 12.0
-		"necromancer", "ghoul":
+		"necromancer":
 			var score := -INF
 			for x: float in troop_x[lane]:
 				var ahead: float = (x-c.pos.x)*forward
-				if ahead > 0 and ahead <= B.HEAL_RADIUS: score = maxf(score,710.0-ahead*0.3)
+				if ahead >= 80.0 and ahead <= 320.0: score = maxf(score,710.0-absf(ahead-180.0)*0.25)
+			if score > -INF:
+				for u: Dictionary in s.units:
+					if u.hp > 0 and u.team != s.team and u.lane == lane and not u.get("stealthed",false) and not u.get("phased",false):
+						var fd: float = (u.pos.x-c.pos.x)*forward
+						if fd >= -40.0 and fd < 160.0:
+							score -= 160.0
+							break
+			return score
+		"ghoul":
+			var score := -INF
+			for x: float in troop_x[lane]:
+				var ahead: float = (x-c.pos.x)*forward
+				if ahead > 0 and ahead <= 150.0: score = maxf(score,710.0-ahead*0.3)
+			if score == -INF and ours[lane] > 0.0 and foes[lane] > 0.0:
+				var gcol: int = c.cell.x if s.team == 0 else 8-c.cell.x
+				score = 670.0+float(gcol)*4.0
 			return score
 		"reaper":
 			# Its slash covers three lanes: worth it where enemies crowd this lane and its neighbours.

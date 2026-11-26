@@ -17,6 +17,19 @@ static func lanes(actor: Dictionary) -> Array:
 	if actor.has("lanes"): return actor.lanes
 	return [int(actor.get("lane",actor.get("cell",Vector2i(-1,-1)).y))]
 
+# Lanes a three-lane striker (三頭狂蜥) reaches: its own lane(s) plus one on each side. A 2×2 giant
+# keeps its top lane in u.lane, so measuring from u.lane alone would reach up but never down.
+static func reach_lanes(actor: Dictionary) -> Array[int]:
+	var ls := lanes(actor)
+	var lo := int(ls[0])
+	var hi := int(ls[0])
+	for l in ls:
+		lo = mini(lo,int(l))
+		hi = maxi(hi,int(l))
+	var out: Array[int] = []
+	for l: int in range(maxi(0,lo-1),mini(L.GRID_ROWS,hi+2)): out.append(l)
+	return out
+
 static func occupies_lane(actor: Dictionary, lane: int) -> bool:
 	if actor.has("lanes"): return lane in actor.lanes
 	return int(actor.get("lane",actor.get("cell",Vector2i(-1,-1)).y)) == lane
@@ -136,7 +149,8 @@ static func sweep_attack(m, u: Dictionary, target: Dictionary, amount: float) ->
 	var x: float = target.pos.x
 	var u_lanes := lanes(u)
 	var half_x: float = L.CELL_SIZE.x*0.65
-	for other: Dictionary in m.foe_units[u.team]:
+	var rams_only: bool = B.CARDS.get(u.kind,{}).get("hits","") == "buildings" # 攻城塔's ram never sweeps troops
+	for other: Dictionary in ([] if rams_only else m.foe_units[u.team]):
 		if other.hp <= 0 or is_same(other,target) or other.get("stealthed",false) or other.get("flying",false): continue
 		if not lanes_overlap(u,other): continue
 		if absf(other.pos.x-x) > half_x+B.actor_radius(other): continue
@@ -148,7 +162,10 @@ static func sweep_attack(m, u: Dictionary, target: Dictionary, amount: float) ->
 			if absf(b.pos.x-x) > half_x+B.actor_radius(b): continue
 			hit_b[b.id] = true
 			m.damage(b,amount,u.team,u.get("card",u.kind),u)
-	m.event("slash",Vector2(x,u.pos.y),u.team,{"lane":u.lane,"giant":true})
+	if B.CARDS.get(u.kind,{}).get("breath",false): # 骸骨巨龍 (使用者 2026-11-24): a ranged fire breath across both its lanes
+		var dir := 1.0 if u.team == 0 else -1.0
+		m.event("dragon_breath",Vector2(x,u.pos.y),u.team,{"lane":u.lane,"from":u.pos+Vector2(dir*(B.actor_radius(u)+10.0),-46.0)})
+	else: m.event("slash",Vector2(x,u.pos.y),u.team,{"lane":u.lane,"giant":true})
 
 static func hit_gates(m, u: Dictionary, enemy: int, amount: float) -> void:
 	var gs := standing_gates(m,enemy,u)

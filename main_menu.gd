@@ -17,7 +17,7 @@ const FLAGS := [
 	["watch",Rect2(FLAG_X,608,FLAG_W,90),Color("4c5032"),"觀戰模式","hunter"],
 ]
 const FLAG_NOTES := {
-	"rogue":"八場連戰、邊打邊換牌，輸一場就結束",
+	"rogue":"四季輪替、邊打邊換牌奪遺物，輸一場就結束",
 	"watch":"兩邊都交給 AI，看牌組怎麼打",
 }
 const DECK_HIT := Rect2(96,724,300,150)

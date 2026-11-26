@@ -63,7 +63,7 @@ func run() -> void:
 	var blue = b if red == a else a
 	check(red.local_team == 0 and blue.local_team == 1, "assigned red (0) and blue (1)")
 	check(not red.is_ai_match and not blue.is_ai_match, "human vs human match")
-	check(models[0].lords[0].lord == red.my_lord and models[1].lords[1].lord == blue.my_lord, "both battles hold both decks and lords")
+	check(models[0].lords[0].lord == red.my_lord and models[1].lords[1].lord == blue.my_lord and red.peer_name == B.lord_name(blue.my_lord) and blue.peer_name == B.lord_name(red.my_lord), "both battles hold both decks, lords and resolved opponent names")
 	for m in models: m.ink = [50.0, 50.0]
 	for t: int in range(1800):
 		red.poll(1.0 / 60.0)

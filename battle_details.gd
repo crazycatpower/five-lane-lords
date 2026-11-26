@@ -165,6 +165,36 @@ static func draw_spells(g) -> void:
 ## Richer projectiles: feathered arrows, spinning axe trails, smoky mortar arcs, and wizard trails.
 static func draw_projectile(g, arrow: Dictionary) -> void:
 	var dir: float = float(arrow.get("direction", 1.0))
+	if arrow.get("beam", false): # 水晶巨像: one thick flickering beam over both its lanes
+		var lanes: Array = arrow.lanes
+		var y0: float = L.cell_center(Vector2i(0, int(lanes[0]))).y - 34.0
+		var y1: float = L.cell_center(Vector2i(0, int(lanes[lanes.size() - 1]))).y - 8.0
+		var mid: float = (y0 + y1) * 0.5
+		var half: float = maxf(26.0, (y1 - y0) * 0.5 + 18.0)
+		var life: float = float(arrow.life)
+		var age: float = life - float(arrow.remaining)
+		var k: float = clampf(minf(age / 0.12, float(arrow.remaining) / 0.2), 0.0, 1.0)
+		var flick: float = 0.85 + 0.15 * sin(float(g.clock) * 47.0)
+		var x0: float = float(arrow.pos.x) + dir * 40.0
+		var x1: float = float(arrow.pos.x) + dir * float(arrow.reach)
+		var lo: float = minf(x0, x1)
+		var w: float = absf(x1 - x0)
+		g.draw_rect(Rect2(lo, mid - half, w, half * 2.0), Color(0.62, 0.45, 0.95, 0.16 * k))
+		g.draw_rect(Rect2(lo, mid - half * 0.62, w, half * 1.24), Color(0.74, 0.60, 1.0, 0.28 * k * flick))
+		g.draw_rect(Rect2(lo, mid - half * 0.28, w, half * 0.56), Color(0.93, 0.88, 1.0, 0.75 * k * flick))
+		g.draw_circle(Vector2(x0, mid), half * 0.8, Color(0.85, 0.75, 1.0, 0.45 * k))
+		if w > 8.0:
+			for i: int in range(5):
+				var sx: float = x0 + dir * fposmod(float(g.clock) * 900.0 + i * 97.0, w)
+				var a1: float = clampf(sx, lo, lo + w)
+				var b1: float = clampf(sx + dir * 30.0, lo, lo + w)
+				if absf(b1 - a1) >= 2.0:
+					g.draw_line(Vector2(a1, mid - half * 0.5), Vector2(b1, mid - half * 0.5), Color(1, 1, 1, 0.5 * k), 2.0, true)
+				var a2: float = clampf(sx + dir * 45.0, lo, lo + w)
+				var b2: float = clampf(sx + dir * 75.0, lo, lo + w)
+				if absf(b2 - a2) >= 2.0:
+					g.draw_line(Vector2(a2, mid + half * 0.45), Vector2(b2, mid + half * 0.45), Color(1, 1, 1, 0.4 * k), 2.0, true)
+		return
 	if arrow.get("rolling", false):
 		var stone_pos: Vector2 = arrow.pos - Vector2(0.0, 32.0 + absf(sin(float(arrow.angle) * 2.0)) * 4.0)
 		g.tf(arrow.pos + Vector2(0.0, 6.0), 0.0, Vector2(1.0, 0.25))
@@ -341,7 +371,9 @@ const ORB_COLOR := {
 static func shot_style(arrow: Dictionary) -> String:
 	var vk := String(arrow.get("visual_kind", ""))
 	if vk == "lord": return "arrow"
-	if SHOT_STYLE.has(vk): return SHOT_STYLE[vk] # a 小怪領主 firing its card's shot
+	if SHOT_STYLE.has(vk): return SHOT_STYLE[vk] # shooter kind (e.g. ward_phalanx's prism_mage) or 小怪領主
+	var sk := String(arrow.get("source", {}).get("kind", ""))
+	if SHOT_STYLE.has(sk): return SHOT_STYLE[sk]
 	return SHOT_STYLE.get(String(arrow.kind), "arrow")
 
 # 0..1 along the flight, the straight-line end point, and the arc lift for this style.
@@ -390,7 +422,9 @@ static func draw_shot(g, arrow: Dictionary, dir: float) -> void:
 			g.draw_circle(p, 3.0, Color("3b3633"))
 			g.draw_circle(p + Vector2(-0.8, -0.8), 1.1, Color(1, 1, 1, 0.5))
 		"orb", "dark_orb":
-			var col: Color = ORB_COLOR.get(String(arrow.kind), Color("c5a4eb"))
+			var ck := String(arrow.get("visual_kind", ""))
+			if not ORB_COLOR.has(ck): ck = String(arrow.get("source", {}).get("kind", arrow.kind))
+			var col: Color = ORB_COLOR.get(ck, ORB_COLOR.get(String(arrow.kind), Color("c5a4eb")))
 			for i: int in range(1, 6):
 				var trail := arc_at(path, maxf(0.0, k - float(i) * 0.035)) + Vector2(0.0, sin(t * 16.0 + float(i)) * 1.6)
 				g.draw_circle(trail, 5.0 - float(i) * 0.75, Color(col, 0.42 - float(i) * 0.07))

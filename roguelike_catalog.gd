@@ -2,6 +2,17 @@ extends RefCounted
 # 肉鴿模式 content (2026-11-06). Authoring data only: no battle, UI or save files.
 # A run is 8 battles: floors 1-7 against 小怪領主 (B.MINION_LORDS) of rising tier, floor 8 against a
 # normal lord as the boss. One loss ends the run. Each win offers 3 cards; the player swaps one in.
+# Cards whose 小怪領主 was folded into another one (使用者 2026-11-25：弓箭方陣「給弓手 boss 合併」；「召喚法陣和奇美拉合併，其他看著合併」).
+# card -> the minion lord that now carries it (its deck or its summons).
+const MERGED_MINIONS := {
+	"archer_phalanx":"card_enemy_archer",
+	"chimera":"card_enemy_summon_trap", # summoned by 召喚法陣
+	"plague_bishop":"card_enemy_seal_altar", "funeral_monk":"card_enemy_seal_altar", # both rise from 封印祭壇
+	"ward_guard":"card_enemy_ward_phalanx", # the shield wall of 結界方陣
+	"mana_spring":"card_enemy_crystal", # 7 of 8 deck cards were the same
+	"mass_grave":"card_enemy_grave",
+	"harvest":"card_enemy_farmer",
+}
 const B = preload("res://balance.gd")
 const Terrain = preload("res://rogue_terrain.gd") # 每個怪的戰場與精英名單
 const DeckStore = preload("res://deck_store.gd")
@@ -34,7 +45,7 @@ const SEASON_BOSSES := {
 	"sealed_thorn_mother":{"name":"甦醒的荊棘母獸","season":2,"base":"card_enemy_thorn_mother","replace":"thorn_mother","giant":"giant_thorn_mother"},
 	"sealed_hydra":{"name":"沼澤九頭蛇","season":2,"base":"card_enemy_dire_hydra","replace":"dire_hydra","giant":"giant_dire_hydra"},
 	"sealed_knight":{"name":"叛誓騎士團長","season":3,"base":"knight_commander","replace":"knight","giant":"giant_knight","skill":{"summon_count":2}},
-	"sealed_plague_bishop":{"name":"被封印的瘟疫祭司","season":3,"base":"card_enemy_plague_bishop","replace":"seal_altar","giant":"giant_plague_bishop","skill":{"summon_count":1,"skill_cost":35.0},"deck_swap":["plague","skeleton"]},
+	"sealed_plague_bishop":{"name":"被封印的瘟疫祭司","season":3,"base":"card_enemy_seal_altar","replace":"seal_altar","giant":"giant_plague_bishop","skill":{"summon_count":1,"skill_cost":35.0},"deck_swap":["plague","skeleton"]},
 }
 # 季節 BOSS 版的「親衛」技能與牌組：除 deck_swap 外，另將 replace 代表卡換成對應的 2×2 巨獸卡 giant。
 static func season_boss_deck(key: String) -> Array:
@@ -96,12 +107,9 @@ static func season_boss_slot(r: Dictionary) -> Dictionary:
 	var key: String = r.sbosses[clampi(int(r.get("season",0)),0,SEASONS.size()-1)]
 	return {"kind":"sboss","foe":SEASON_BOSSES[key].base,"sboss":key,"mutator":"","event_id":"","bounty":0,"age":0}
 
-# Once the season's boss card turns up, every flag on the board becomes that boss.
+# Reports whether the season's boss has appeared on the board (without wiping the other 3 flags).
 static func boss_takes_board(r: Dictionary) -> bool:
-	if not bool(r.get("boss_out",false)) or int(r.get("season",0)) >= SEASONS.size(): return false
-	var board: Array = r.get("board",[])
-	for i: int in range(board.size()): board[i] = season_boss_slot(r)
-	return true
+	return bool(r.get("boss_out",false)) and int(r.get("season",0)) < SEASONS.size()
 const FLOOR_TIER := [1,1,2,2,2,3,3] # floors 1-7; floor 8 is the boss
 const AI_LEVEL := [0,0,1,1,1,2,2,2] # 簡單／普通／困難 per floor; the final boss plays 困難 with upgraded cards & boss passives
 const OFFER_SIZE := 3
@@ -490,7 +498,6 @@ static func deck_allowed(deck: Array, lord: String) -> bool:
 # deck leans on the card the lord is named after.
 const MINIONS := {
 	"card_enemy_glutton_nest":{"tier":3,"deck":["fishbeak","fishbeak","bearded_imp","bearded_imp","belly_eye","hooknose_flyer","long_dragon","thorn_dragon"]},
-	"card_enemy_mana_spring":{"tier":1,"deck":["mana_spring","blink_blade","arcane_golem","rune_sentinel","arcane_archer","militia","militia","arcane_shield"]},
 	"card_enemy_chain_lightning":{"tier":2,"deck":["chain_lightning","chain_lightning","chronomancer","arcane_archer","arcane_golem","rune_sentinel","blink_blade","arcane_shield"]},
 	"card_enemy_arcane_shield":{"tier":2,"deck":["arcane_shield","arcane_shield","arcane_golem","blink_blade","militia","militia","artificer","hunter"]},
 	"card_enemy_time_field":{"tier":2,"deck":["time_field","time_field","arcane_archer","blink_blade","chronomancer","rune_sentinel","shieldguard","hunter"]},
@@ -499,12 +506,10 @@ const MINIONS := {
 	"card_enemy_watchtower":{"tier":1,"deck":["watchtower","watchtower","hunter","hunter","net_hunter","net_hunter","militia","militia"]},
 	"card_enemy_sacrifice":{"tier":1,"deck":["sacrifice","shroud_arbalist","skeleton","skeleton","skeleton","ghoul","mass_grave","dark_wizard"]},
 	"card_enemy_dread_howl":{"tier":2,"deck":["dread_howl","dread_howl","reaper","ghoul","ghoul","skeleton","raven","hunter"]},
-	"card_enemy_mass_grave":{"tier":2,"deck":["mass_grave","mass_grave","skeleton","reaper","necromancer","ghoul","dark_wizard","curse"]},
 	"card_enemy_manor_retainer":{"tier":1,"deck":["manor_retainer","manor_retainer","manor_retainer","hunter","hunter","watchtower","farmer","levy"]},
 	"card_enemy_rolling_boulder":{"tier":2,"deck":["rolling_boulder","rolling_boulder","catapult","catapult","hunter","hunter","knight","shieldguard"]},
 	"card_enemy_dark_wizard":{"tier":2,"deck":["dark_wizard","dark_wizard","skeleton","skeleton","skeleton","mass_grave","ghoul","curse"]},
 	"card_enemy_summon_trap":{"tier":3,"deck":["summon_trap","summon_trap","arcane_golem","artificer","hunter","hunter","militia","arcane_shield"]},
-	"card_enemy_chimera":{"tier":2,"deck":["summon_trap","summon_trap","arcane_golem","artificer","arcane_shield","hunter","hunter","militia"]},
 	"card_enemy_blink_blade":{"tier":3,"deck":["blink_blade","blink_blade","blink_blade","phase_rider","arcane_shield","hunter","hunter","time_field"]},
 	"card_enemy_arcane_archer":{"tier":3,"deck":["arcane_archer","arcane_archer","arcane_archer","shieldguard","shieldguard","time_field","artificer","arcane_golem"]},
 	"card_enemy_artificer":{"tier":1,"deck":["artificer","rune_sentinel","arcane_golem","arcane_golem","arcane_tower","arcane_shield","arcane_archer","hunter"]},
@@ -522,8 +527,7 @@ const MINIONS := {
 	"card_enemy_reaper":{"tier":3,"deck":["reaper","reaper","reaper","skeleton","skeleton","ghoul","dread_howl","plague"]},
 	"card_enemy_plague":{"tier":2,"deck":["plague","plague","corpse_giant","skeleton","skeleton","ghoul","ghoul","reaper"]},
 	"card_enemy_bonewall":{"tier":1,"deck":["bonewall","bonewall","necromancer","necromancer","skeleton","skeleton","hunter","curse"]},
-	"card_enemy_farmer":{"tier":1,"deck":["farmer","farmer","militia","militia","shieldguard","hunter","hunter","ox"]},
-	"card_enemy_harvest":{"tier":1,"deck":["harvest","farmer","farmer","militia","militia","hunter","ox","knight"]},
+	"card_enemy_farmer":{"tier":1,"deck":["farmer","farmer","harvest","militia","shieldguard","hunter","hunter","ox"]},
 	"card_enemy_scarecrow":{"tier":1,"deck":["scarecrow","ox","farmer","shieldguard","hunter","hunter","militia","militia"]},
 	"card_enemy_spearbow":{"tier":2,"deck":["spearbow","spearbow","spearbow","drummer","healer","hunter","militia","levy"]},
 	"card_enemy_farm":{"tier":1,"deck":["farmer","militia","militia","militia","hunter","hunter","spearbow","scarecrow"]},
@@ -540,10 +544,14 @@ const MINIONS := {
 	"blood_prior":{"tier":2,"deck":["blood_tower","ghoul","ghoul","dark_wizard","blood_attendant","skeleton","reaper","corpse_giant"]},
 	"clock_warden":{"tier":3,"deck":["chronomancer","chronomancer","chronomancer","arcane_archer","arcane_golem","time_field","teleport_trap","arcane_shield"]},
 	"ram_marshal":{"tier":3,"deck":["ram","ram","ram","shieldguard","shieldguard","healer","net_hunter","charge_horn"]},
+	"card_enemy_siege_tower":{"tier":3,"deck":["siege_tower","siege_tower","militia","shieldguard","archer","healer","ram","charge_horn"]},
+	"card_enemy_crystal_colossus":{"tier":3,"deck":["crystal_colossus","crystal_colossus","arcane_golem","rune_sentinel","artificer","prism_mage","arcane_shield","chain_lightning"]},
+	"card_enemy_flesh_abomination":{"tier":3,"deck":["flesh_abomination","flesh_abomination","ghoul","skeleton","corpse_stitcher","necromancer","plague","raven"]},
+	"card_enemy_bone_dragon":{"tier":3,"deck":["bone_dragon","bone_dragon","skeleton","skeleton","raven","reaper","curse","blood_tower"]},
 	"bandit_chief":{"tier":1,"deck":["bandit","bandit","bandit","bandit","militia","militia","hunter","hunter"]},
 	"militia_captain":{"tier":2,"deck":["militia","militia","militia","militia","militia","hunter","hunter","rain"]},
 	"hunter_master":{"tier":2,"deck":["hunter","hunter","hunter","hunter","militia","militia","barricade","barricade"]},
-	"card_enemy_archer":{"tier":2,"deck":["archer","archer","archer","militia","militia","shieldguard","barricade","farmer"]},
+	"card_enemy_archer":{"tier":2,"deck":["archer","archer","archer_phalanx","militia","militia","shieldguard","barricade","farmer"]}, # 弓箭方陣併入弓手教頭（使用者 2026-11-25）
 	"raven_mother":{"tier":3,"deck":["raven","raven","raven","bandit","bandit","bandit","skeleton","skeleton"]},
 	"card_enemy_pouch_beast":{"tier":3,"deck":["pouch_beast","pouch_beast","pouch_beast","fishbeak","fishbeak","bearded_imp","net_hunter","monster_hatchery"]},
 	"fishbeak_boss":{"tier":3,"deck":["fishbeak","fishbeak","fishbeak","fishbeak","bearded_imp","bearded_imp","militia","militia"]},
@@ -562,9 +570,7 @@ const MINIONS := {
 	"card_enemy_mule_cart":{"tier":3,"deck":["mule_cart","mule_cart","manor_retainer","halberdier","hunter","healer","watchtower","rain"]},
 	"card_enemy_hook_collector":{"tier":3,"deck":["hook_collector","hook_collector","charge_horn","ox","militia","arquebusier","rain","drummer"]},
 	"card_enemy_twin_gambler":{"tier":3,"deck":["twin_gambler","twin_gambler","drummer","healer","shieldguard","hunter","counter_charge","rain"]},
-	"card_enemy_seal_altar":{"tier":1,"deck":["seal_altar","skeleton","skeleton","sacrifice","mass_grave","ghoul","necromancer","bellbearer"]},
-	"card_enemy_plague_bishop":{"tier":3,"deck":["seal_altar","plague","plague","skeleton","mourning_maid","bellbearer","funeral_cottage","ossuary"]},
-	"card_enemy_funeral_monk":{"tier":1,"deck":["seal_altar","bellbearer","ghoul","mourning_maid","pallbearer","skeleton","raven","sealed_coffin"]},
+	"card_enemy_seal_altar":{"tier":1,"deck":["seal_altar","skeleton","plague","sacrifice","mass_grave","ghoul","necromancer","bellbearer"]},
 	"card_enemy_gold_monster":{"tier":3,"deck":["gold_monster","gold_monster","farmer","shieldguard","hunter","harvest","rain","drummer"]},
 	"card_enemy_spell_tide_magus":{"tier":3,"deck":["spell_tide_magus","spell_tide_magus","arcane_shield","phase_shift","gravity_well","time_field","rune_sentinel","chain_lightning"]},
 	"card_enemy_thorn_mother":{"tier":3,"deck":["thorn_mother","thorn_mother","thorn_hound","thorn_hound","bramble_wall","pouch_beast","halberdier","thorn_dragon"]},
@@ -619,7 +625,6 @@ const MINIONS := {
 	"card_enemy_counter_charge":{"tier":1,"deck":["counter_charge","counter_charge","knight","halberdier","arquebusier","healer","ox","barricade"]},
 	"card_enemy_flaming_pitch":{"tier":1,"deck":["flaming_pitch","flaming_pitch","scarecrow","shieldguard","net_hunter","hunter","barricade","militia"]},
 	"card_enemy_rune_sentinel":{"tier":2,"deck":["rune_sentinel","rune_sentinel","arcane_shield","chronomancer","prism_mage","sigil_weaver","mana_spring","arcane_tower"]},
-	"card_enemy_ward_guard":{"tier":2,"deck":["ward_phalanx","spell_tide_magus","rune_sentinel","arcane_shield","prism_mage","sigil_weaver","mana_spring","arcane_tower"]},
 	"card_enemy_ward_phalanx":{"tier":3,"deck":["ward_phalanx","ward_phalanx","arcane_archer","seal_bearer","arcane_shield","time_field","chronomancer","artificer"]},
 	"card_enemy_prism_mage":{"tier":3,"deck":["prism_mage","prism_mage","observatory","arcane_golem","arcane_shield","time_field","chronomancer","artificer"]},
 	"card_enemy_aether_hound":{"tier":3,"deck":["aether_hound","aether_hound","arcane_shield","phase_shift","blink_blade","chronomancer","prism_mage","time_field"]},
@@ -786,6 +791,13 @@ static func merge_mods(base: Dictionary, extra: Dictionary) -> Dictionary:
 				if not result[key].any(func(o: Array) -> bool: return o[0] == b[0] and str(o[1]) == str(b[1])): result[key].append(b)
 		elif key == "field_mutators":
 			result[key].append_array(value.duplicate(true))
+		elif key == "gate_fall_spell":
+			var existing: Array = result[key].duplicate(true) if result[key] is Array else [result[key].duplicate(true)]
+			if value is Array:
+				for item: Dictionary in value: existing.append(item.duplicate(true))
+			elif value is Dictionary:
+				existing.append(value.duplicate(true))
+			result[key] = existing
 	return result
 
 static func side_mods(lord: String, relics: Array) -> Dictionary:
@@ -961,7 +973,7 @@ static func boss_board(r: Dictionary) -> Array:
 	return [make_slot("boss",r,1),make_slot("camp",r,2),make_slot("shrine",r,3),make_slot("event",r,4)]
 
 # The next flag from the season's pile (the final throne keeps offering the 魔王). Drawing the boss card
-# marks the season's boss as out: the caller then turns the whole board over (boss_takes_board).
+# marks the season's boss as out and places it in that slot only; other flags on the board remain intact.
 static func draw_replacement_slot(r: Dictionary, slot_index: int) -> Dictionary:
 	r.draws = int(r.get("draws",0))+1
 	if int(r.get("floor",0)) >= FLOORS-1:
@@ -1021,6 +1033,9 @@ static func validate() -> Array[String]:
 	for card: String in B.CARDS:
 		if B.CARDS[card].get("boss_only",false):
 			if not card in used_giants: problems.append("unused boss_only card: "+card)
+			continue
+		if MERGED_MINIONS.has(card):
+			if not MINIONS.has(MERGED_MINIONS[card]): problems.append("merged card %s points at a missing minion lord" % card)
 			continue
 		var matching: Array = MINIONS.keys().filter(func(k: String) -> bool: return B.MINION_LORDS.has(k) and B.MINION_LORDS[k].card == card)
 		if matching.size() != 1: problems.append("card needs exactly one enemy: "+card)

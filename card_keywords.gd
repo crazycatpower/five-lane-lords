@@ -34,8 +34,8 @@ const KEYWORDS := {
 		"color": Color("9e1c28"),
 		"fill": Color("f2c9cd"),
 		"fx": Color("d93848"),
-		"desc": "攻擊造成傷害或獻血時汲取生命，轉化為自身續航或戰力。",
-		"terms": ["吸血","回復自身生命","鮮血盟約","儲血","獻血","換血"]
+		"desc": "攻擊造成傷害或獻血時汲取生命，轉化為自身續航或戰力（對建築與城牆無效）。",
+		"terms": ["吸血","回復自身生命","血月蔽日","鮮血盟約","儲血","獻血","換血"]
 	},
 	"灼燒": {
 		"color": Color("c24214"),
@@ -276,7 +276,7 @@ const CARD_OVERRIDES := {
 	"leech_vine": ["吸血","遲緩"],
 	"blood_altar": ["吸血","產金","加速"],
 	"berserk_blood": ["吸血","加速"],
-	"blood_cauldron": ["治療","獵殺"],
+	"blood_cauldron": ["重裝","獵殺"],
 	"fire": ["灼燒","擊退"],
 	"flaming_pitch": ["灼燒","爆破"],
 	"long_dragon": ["灼燒","貫穿"],
@@ -284,7 +284,7 @@ const CARD_OVERRIDES := {
 	"sigil_weaver": ["護盾"],
 	"spellbreaker": ["護盾","獵殺"],
 	"rune_sentinel": ["護盾","巡邏"],
-	"arcane_golem": ["護盾","爆破"],
+	"arcane_golem": ["護盾","爆破","橫掃"],
 	"shieldguard": ["護甲"],
 	"field_smithy": ["護甲"],
 	"barricade": ["護甲"],
@@ -295,7 +295,7 @@ const CARD_OVERRIDES := {
 	"axe_thrower": ["破甲","遠射"],
 	"ballista_tower": ["破甲","遠射"],
 	"thorn_hound": ["反傷","衝鋒"],
-	"thorn_dragon": ["反傷","重裝"],
+	"thorn_dragon": ["反傷","重裝","橫掃"],
 	"bramble_wall": ["反傷","護甲"],
 	"spell_mirror": ["反傷","遠射"],
 	"chronomancer": ["暈眩","爆破"],
@@ -309,7 +309,7 @@ const CARD_OVERRIDES := {
 	"mourning_maid": ["遲緩"],
 	"time_field": ["遲緩"],
 	"dread_howl": ["恐懼","遲緩","加速","召喚"],
-	"eyewing_dragon": ["恐懼","重裝"],
+	"eyewing_dragon": ["恐懼","重裝","橫掃"],
 	"sleepless_belfry": ["淨化","加速","治療","召喚"],
 	"counter_charge": ["擊退","暈眩","加速"],
 	"wing_gust": ["擊退","暈眩","加速","爆破"],
@@ -341,7 +341,7 @@ const CARD_OVERRIDES := {
 	"necromancer": ["召喚","遠射"],
 	"pallbearer": ["召喚","重裝"],
 	"corpse_stitcher": ["召喚","治療"],
-	"corpse_giant": ["召喚","重裝"],
+	"corpse_giant": ["召喚","重裝","橫掃"],
 	"mass_grave": ["召喚"],
 	"ossuary": ["召喚"],
 	"borrowed_bones": ["召喚"],
@@ -402,7 +402,7 @@ const CARD_OVERRIDES := {
 	"plague_bishop": ["遲緩","毒蝕","恐懼","重裝"],
 	"funeral_monk": ["治療"],
 	"spell_tide_magus": ["遠射"],
-	"thorn_mother": ["反傷","重裝"],
+	"thorn_mother": ["反傷","重裝","橫掃"],
 	"gold_monster": ["重裝","人海","產金"],
 	"feral_mutation": ["重裝","獵殺"],
 	"ram": ["攻城","重裝"],
@@ -413,6 +413,7 @@ const CARD_OVERRIDES := {
 	"pouch_beast": ["重裝"],
 	"hunter": ["遠射"],
 	"archer": ["遠射"],
+	"archer_phalanx": ["遠射","人海"],
 	"arquebusier": ["遠射"],
 	"shroud_arbalist": ["遠射"],
 	"tower": ["遠射"],
@@ -425,7 +426,11 @@ const CARD_OVERRIDES := {
 	"giant_thorn_mother": ["反傷","召喚","橫掃","重裝"],
 	"giant_dire_hydra": ["再生","橫掃","重裝"],
 	"giant_knight": ["衝鋒","護甲","橫掃","重裝"],
-	"giant_plague_bishop": ["遲緩","毒蝕","恐懼","橫掃","重裝"]
+	"giant_plague_bishop": ["遲緩","毒蝕","恐懼","橫掃","重裝"],
+	"siege_tower": ["遠射","攻城","召喚","重裝"],
+	"crystal_colossus": ["遠射","橫掃","重裝"],
+	"flesh_abomination": ["召喚","橫掃","重裝"],
+	"bone_dragon": ["遠射","橫掃","重裝"]
 }
 
 const LORD_KEYWORDS := {

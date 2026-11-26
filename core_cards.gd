@@ -20,12 +20,12 @@ static func on_card_played(m, team: int, kind: String) -> void:
 		else: u.interval = faster_or_stronger("interval",float(u.get("interval",d.interval)))
 		m.link(u.pos,u.pos,team,"mana")
 
-# One tier stronger (damage) or faster (interval), never past S. Both tables list the strongest first.
+# One tier stronger (damage, never past S) or faster (interval, never past SSS). Both tables list the strongest first.
 static func faster_or_stronger(stat: String, value: float) -> float:
 	var at: int = B.TIERS[stat].find(value)
 	if at < 0:
 		return roundf(value*1.35) if stat == "damage" else (snappedf(value/1.3,0.01) if stat == "interval" else value)
-	return B.TIERS[stat][maxi(B.tier_index("S"),at-1)]
+	return B.TIERS[stat][maxi(B.buff_cap(stat),at-1)]
 
 # 荊棘母獸 aura, read by monster_cards.on_hit for the troop or building that was hit.
 static func thorns(m, target: Dictionary, base: float) -> float:
@@ -34,7 +34,7 @@ static func thorns(m, target: Dictionary, base: float) -> float:
 		if u.hp <= 0 or u.team != target.team or not u.get("has_thorns_aura",false) or u.get("spawn_delay",0.0) > 0: continue
 		var d: Dictionary = B.CARDS[u.kind]
 		if not d.has("thorns_aura") or edge(u,target) > float(d.radius): continue
-		if is_same(u,target): return base
+		if is_same(u,target): continue
 		if base > 0.0:
 			var at: int = B.TIERS.damage.find(base)
 			return B.TIERS.damage[maxi(B.tier_index("S"),at-2)] if at >= 0 else base*2.0
@@ -48,7 +48,7 @@ static func describe(kind: String) -> Array[String]:
 	var lines: Array[String] = []
 	var d: Dictionary = B.CARDS[kind]
 	if d.has("spell_stacks"):
-		lines.append("我方每施放一張法術，獲得 1 層咒潮（最多 %d 層，直到陣亡）：第 1–3 層傷害各升一檔，第 4–5 層攻速各升一檔，最高 S。" % int(d.spell_stacks))
+		lines.append("我方每施放一張法術，獲得 1 層咒潮（最多 %d 層，直到陣亡）：第 1–3 層傷害各升一檔（最高 S），第 4–5 層攻速各升一檔（最高 SSS）。" % int(d.spell_stacks))
 	if d.has("thorns_aura"):
 		lines.append("半徑 %s 內的友軍被近戰打中時也會反刺：本來有反傷的升兩檔，沒有的得到 %s 反傷；她本身反傷 %s。" % [B.number(d.radius),B.number(d.thorns_aura),B.number(d.thorns)])
 	return lines

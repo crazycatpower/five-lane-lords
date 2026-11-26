@@ -8,6 +8,10 @@ extends SceneTree
 #                                          twice, the candidate once as red and once as blue
 #   --difficulty=0|1|2                     AI difficulty (default 1; 2 = 困難, the evolved weights
 #                                          when a side's params are empty)
+#   --sweep=FILE                           cost sweep for tools/balance_sweep.py: {"targets":{card:[cost,...]}}.
+#                                          Seed s tests targets[s % n]: that card is put in one side's deck (a lord
+#                                          that may field it), the other side never has it, and the very same match
+#                                          (seed, decks, lords) is played once per cost. Lines carry "sweep".
 const Battle = preload("res://battle.gd")
 const B = preload("res://balance.gd")
 const DeckStore = preload("res://deck_store.gd")
@@ -56,6 +60,7 @@ func _initialize() -> void:
 		elif arg.begins_with("--base="): paths.base = value
 		elif arg.begins_with("--difficulty="): difficulty = clampi(int(value),0,2)
 		elif arg.begins_with("--hz="): step_dt = 1.0 / maxf(1.0, float(value))
+		elif arg.begins_with("--sweep="): paths["sweep"] = value
 	var cand := read_params(paths.cand)
 	var base := read_params(paths.base)
 	var file := FileAccess.open(out,FileAccess.WRITE)
@@ -65,6 +70,11 @@ func _initialize() -> void:
 		quit()
 		return
 	var lords: Array = B.LORDS.keys()
+	if paths.has("sweep"):
+		run_sweep(file,read_params(paths.sweep),start,count,cap,lords)
+		file.close()
+		quit()
+		return
 	for seed_value: int in range(start,start+count):
 		var rng := RandomNumberGenerator.new()
 		rng.seed = seed_value
@@ -116,6 +126,39 @@ func _initialize() -> void:
 		file.flush()
 	file.close()
 	quit()
+
+# Paired cost sweep (see header). Same decks, lords and seed for every cost, so luck cancels out between them.
+func run_sweep(file: FileAccess, spec: Dictionary, start: int, count: int, cap: float, lords: Array) -> void:
+	var targets: Dictionary = spec.get("targets",{})
+	var names: Array = targets.keys()
+	names.sort()
+	if names.is_empty(): return
+	for seed_value: int in range(start,start+count):
+		var card: String = names[seed_value % names.size()]
+		var rng := RandomNumberGenerator.new()
+		rng.seed = seed_value*7919+17
+		var holder := rng.randi_range(0,1)
+		var eligible: Array = lords.filter(func(l: String) -> bool: return B.card_allowed(card,l))
+		if eligible.is_empty(): continue
+		var picks: Array = ["",""]
+		picks[holder] = eligible[rng.randi_range(0,eligible.size()-1)]
+		picks[1-holder] = lords[rng.randi_range(0,lords.size()-1)]
+		var decks: Array = [DeckStore.random_deck(rng,picks[0]),DeckStore.random_deck(rng,picks[1])]
+		var other: Array = decks[1-holder]
+		for _try: int in range(20):
+			if not card in other: break
+			other = DeckStore.random_deck(rng,picks[1-holder])
+		decks[1-holder] = other
+		if not card in decks[holder]: decks[holder][rng.randi_range(0,decks[holder].size()-1)] = card
+		for cost in targets[card]:
+			B.override_costs({card:int(cost)})
+			var r := play(seed_value,decks,picks,[{},{}],cap)
+			r.sweep = {"card":card,"cost":int(cost),"side":holder}
+			r.erase("card_stats")
+			r.erase("damage_by_kind")
+			file.store_line(JSON.stringify(r))
+		B.override_costs({})
+		file.flush()
 
 func play(seed_value: int, decks: Array, picks: Array, params: Array, cap: float) -> Dictionary:
 	var m := Battle.new(seed_value,decks[0].duplicate(),decks[1].duplicate(),picks[0],picks[1])

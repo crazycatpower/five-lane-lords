@@ -17,6 +17,7 @@ extends RefCounted
 #   fog_drift    true             濃霧邊界在三格之間來回飄動
 const B = preload("res://balance.gd")
 const L = preload("res://layout.gd")
+const Giant = preload("res://giant_unit.gd")
 
 const SLOPE_SLOW := 0.8
 const MUD_SLOW := 0.7
@@ -76,6 +77,11 @@ static func cell_of(pos: Vector2) -> Vector2i:
 static func ground(u: Dictionary) -> bool:
 	return u.hp > 0 and not u.get("flying",false)
 
+static func unit_cells(u: Dictionary) -> Array[Vector2i]:
+	if Giant.is_giant(u): return Giant.cells(u)
+	var out: Array[Vector2i] = [cell_of(u.pos)]
+	return out
+
 # Lava cells and freshly struck rock cannot be built on.
 static func no_build(m, cell: Vector2i) -> bool:
 	var s: Dictionary = m.mech
@@ -92,7 +98,7 @@ static func speed_mult(m, u: Dictionary) -> float:
 	if s.is_empty() or u.get("flying",false): return 1.0
 	var mult := 1.0
 	if s.has("slope_high") and int(u.team) != int(s.slope_high): mult *= SLOPE_SLOW
-	if s.has("mud_cells") and cell_of(u.pos) in s.mud_cells: mult *= MUD_SLOW
+	if s.has("mud_cells") and unit_cells(u).any(func(c: Vector2i) -> bool: return c in s.mud_cells): mult *= MUD_SLOW
 	if s.has("blizzard") and float(s.blizzard.left) > 0.0: mult *= BLIZZARD_SLOW
 	return mult
 
@@ -101,9 +107,10 @@ static func range_steps(m, u: Dictionary) -> int:
 	var s: Dictionary = m.mech
 	if s.is_empty(): return 0
 	var steps := 0
-	var c := cell_of(u.pos)
-	if c in s.get("rune_cells",[]): steps += 1
+	var uc := unit_cells(u)
+	if uc.any(func(c: Vector2i) -> bool: return c in s.get("rune_cells",[])): steps += 1
 	if s.has("slope_high") and int(u.team) == int(s.slope_high):
+		var c := cell_of(u.pos)
 		var own_half: bool = c.x >= 5 if int(u.team) == 1 else c.x <= 3
 		if own_half: steps += 1
 	return mini(steps,1)
@@ -121,7 +128,7 @@ static func update(m, dt: float) -> void:
 			flood(m,int(sl.lanes[sl.index]))
 	if s.has("portals"):
 		for u: Dictionary in m.units:
-			if not ground(u): continue
+			if not ground(u) or Giant.is_giant(u): continue
 			if float(u.get("portal_cd",0.0)) > 0.0:
 				u.portal_cd = float(u.portal_cd)-dt
 				continue
@@ -141,8 +148,8 @@ static func update(m, dt: float) -> void:
 		s.lava_timer = float(s.lava_timer)-dt
 		if s.lava_timer <= 0.0:
 			s.lava_timer += LAVA_TICK
-			for u: Dictionary in m.units:
-				if ground(u) and cell_of(u.pos) in s.lava_cells: m.damage(u,LAVA_DPS*LAVA_TICK,1-int(u.team),"lava")
+			for u: Dictionary in m.units.duplicate():
+				if ground(u) and unit_cells(u).any(func(c: Vector2i) -> bool: return c in s.lava_cells): m.damage(u,LAVA_DPS*LAVA_TICK,1-int(u.team),"lava")
 	if s.has("eruption"):
 		var er: Dictionary = s.eruption
 		er.timer -= dt
@@ -209,8 +216,8 @@ static func weather(m, s: Dictionary, dt: float) -> void:
 				still.append(f)
 				continue
 			var rect := Rect2(L.GRID_ORIGIN+Vector2(f.cell)*L.CELL_SIZE,L.CELL_SIZE)
-			for u: Dictionary in m.units:
-				if ground(u) and rect.has_point(u.pos): m.damage(u,STORM_DAMAGE,1-int(u.team),"storm")
+			for u: Dictionary in m.units.duplicate():
+				if ground(u) and (rect.has_point(u.pos) or f.cell in unit_cells(u)): m.damage(u,STORM_DAMAGE,1-int(u.team),"storm")
 			for b: Dictionary in m.buildings:
 				if b.hp > 0 and b.cell == f.cell: m.damage(b,STORM_DAMAGE,1-int(b.team),"storm")
 			st.flash.append({"cell":f.cell,"left":0.4})
@@ -243,8 +250,8 @@ static func flood(m, lane: int) -> void:
 
 static func strike(m, cell: Vector2i) -> void:
 	var rect := Rect2(L.GRID_ORIGIN+Vector2(cell)*L.CELL_SIZE,L.CELL_SIZE)
-	for u: Dictionary in m.units:
-		if ground(u) and rect.has_point(u.pos): m.damage(u,ROCK_DAMAGE,1-int(u.team),"eruption")
+	for u: Dictionary in m.units.duplicate():
+		if ground(u) and (rect.has_point(u.pos) or cell in unit_cells(u)): m.damage(u,ROCK_DAMAGE,1-int(u.team),"eruption")
 	for b: Dictionary in m.buildings:
 		if b.hp > 0 and b.cell == cell: m.damage(b,ROCK_DAMAGE,1-int(b.team),"eruption")
 	m.mech.eruption.blocked.append({"cell":cell,"left":ROCK_BLOCK})

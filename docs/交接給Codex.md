@@ -25,6 +25,7 @@
 | 金幣怪物（花光金幣、階段表 `B.GOLD_MONSTER_STAGES`） | `gold_monster.gd` |
 | 封印祭壇、瘟疫主教（收魂、封印、腐土） | `seal_altar.gd` |
 | 陣營核心收益卡：咒潮法師、荊棘母獸 | `core_cards.gd` |
+| 兩格建築（`"footprint":[1,2]`：木拒馬、荊棘高牆）：兩路各一段、共用血量、同一擊只算一次 | `large_body.gd`（`battle.gd` 的 `play_check`、`add_building`、`damage`、`step` 各一行掛鉤） |
 
 ## 規則與陷阱
 

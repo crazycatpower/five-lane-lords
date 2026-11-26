@@ -1,6 +1,7 @@
 extends RefCounted
 const B = preload("res://balance.gd")
 const L = preload("res://layout.gd")
+const Giant = preload("res://giant_unit.gd")
 var log: Array[String] = []
 var breakthrough := ""
 var break_lane := -1
@@ -18,14 +19,20 @@ func clear() -> void:
 	lost_farms = [0,0]
 	breakthrough = ""
 	break_lane = -1
+static func _home_kind(model, team: int) -> String:
+	if team < model.home_cards.size():
+		var k := String(model.home_cards[team])
+		if B.CARDS.has(k): return k
+	return "farm"
+
 func observe(model) -> void:
-	# Record observed economy changes; disappearing farms may be destroyed or expire.
-	var farms := [model.count_buildings(0,"farm"),model.count_buildings(1,"farm")]
+	# Record observed economy changes; disappearing home buildings may be destroyed or expire.
+	var farms := [model.count_buildings(0,_home_kind(model,0)),model.count_buildings(1,_home_kind(model,1))]
 	for team: int in range(2):
 		if previous_farms[team] >= 0 and farms[team] < previous_farms[team]:
 			var loss: int = previous_farms[team]-farms[team]
 			lost_farms[team] += loss
-			log.append("%02d:%02d　%s農田減少 %d 座，剩餘 %d 座（摧毀或到期）" % [int(model.elapsed)/60,int(model.elapsed)%60,["紅方","藍方"][team],loss,farms[team]])
+			log.append("%02d:%02d　%s%s減少 %d 座，剩餘 %d 座（摧毀或到期）" % [int(model.elapsed)/60,int(model.elapsed)%60,["紅方","藍方"][team],B.CARDS[_home_kind(model,team)].name,loss,farms[team]])
 			if log.size() > 200: log.pop_front()
 		previous_farms[team] = farms[team]
 	if economy_samples.is_empty() or model.elapsed-last_sample >= 30.0 or economy_samples[-1].farms != farms:
@@ -48,7 +55,7 @@ func observe(model) -> void:
 static func pressure(model, team: int, lane: int) -> int:
 	var nearby := false
 	for u: Dictionary in model.units:
-		if u.hp <= 0 or u.team == team or u.lane != lane or u.get("spawn_delay",0) > 0: continue
+		if u.hp <= 0 or u.team == team or not Giant.occupies_lane(u,lane) or u.get("spawn_delay",0) > 0: continue
 		if (u.pos.x < L.GRID_ORIGIN.x+L.CELL_SIZE.x*2 if team == 0 else u.pos.x > L.GRID_ORIGIN.x+L.GRID_SIZE.x-L.CELL_SIZE.x*2): nearby = true
 	if nearby: return 2 if model.gates[team][lane] <= 0 else 1
 	return 0
@@ -68,7 +75,8 @@ func draw_pressure(game) -> void:
 		var red := Color(0.82,0.12,0.08,alpha)
 		var clear := Color(0.82,0.12,0.08,0.0)
 		game.draw_polygon(PackedVector2Array([Vector2(x0,y),Vector2(x1,y),Vector2(x1,y+L.CELL_SIZE.y),Vector2(x0,y+L.CELL_SIZE.y)]),PackedColorArray([red,clear,clear,red]))
-func report(model, names: Array = []) -> String:
+func report(model, names: Array = [], player_team: int = 0) -> String:
+	var foe_team := 1-player_team
 	var result := "突破紀錄："+(breakthrough if not breakthrough.is_empty() else "本局沒有部隊入城紀錄。")+"\n\n"
 	for team: int in range(2):
 		var s: Dictionary = model.stats[team]
@@ -81,17 +89,20 @@ func report(model, names: Array = []) -> String:
 		var side_label: String = "%s（%s）" % [["紅方","藍方"][team],names[team] if names.size() > team else B.lord_name(model.lords[team].lord)]
 		result += "%s傷害前三：%s\n" % [side_label,"、".join(ranked.slice(0,3).map(func(k: String) -> String: return "%s %d" % [B.CARDS[k].name,model.stats[team].damage[k]]))]
 	result += "\n下局可嘗試："
-	if model.winner < 0 or (model.night_decay and model.elapsed >= B.DAWN-0.001): result += "入夜後城牆會自己倒下：趁對方領主在別路時，從空門那一路送兵進去，別等到天亮比領地。"
-	elif model.stats[0].wasted >= 10: result += "金幣接近上限時提早部署，減少產出溢出。"
-	elif model.winner == 1 and model.stats[1].produced > model.stats[0].produced*1.25 and lost_farms[0] > 0: result += "本局產金落後，且農田曾減少。先保留安全的經濟後方，再擴張前線；補兵之外也要恢復產能。"
-	elif model.winner == 1: result += "先查看突破路線，在敵兵抵達殘垣前補兵；破門後仍有回防機會。"
-	else: result += "比較兩軍技能時機，看看能否在進攻前保留足夠金幣。"
+	if model.winner < 0 or (model.night_decay and model.day_clock() >= model.dawn_time()-0.001): result += "入夜後城牆會自己倒下：趁對方領主在別路時，從空門那一路送兵進去，別等到天亮比領地。"
+	elif model.stats[player_team].wasted >= 10: result += "金幣接近上限時提早部署，減少產出溢出。"
+	elif model.winner == foe_team and model.stats[foe_team].produced > model.stats[player_team].produced*1.25 and lost_farms[player_team] > 0: result += "本局產金落後，且%s曾減少。先保留安全的經濟後方，再擴張前線；補兵之外也要恢復產能。" % B.CARDS[_home_kind(model,player_team)].name
+	elif model.winner == foe_team: result += "先查看突破路線，在敵兵穿過破門前補兵；破門後仍有回防機會。"
+	else: result += "比較兩軍技能時機，看看能否在關鍵交鋒前集滿充能。"
 	result += "\n\n關鍵事件（依時間，最多保留最近 200 筆）\n"
 	return result+("\n".join(log) if not log.is_empty() else "沒有記錄到破門、技能或突破事件。")
 
 func draw_charts(g) -> void:
+	var h0 := _home_kind(g.model,0)
+	var h1 := _home_kind(g.model,1)
+	var home_title := "農田數量（座）" if (h0 == "farm" and h1 == "farm") else ("%s數量（座）" % B.CARDS[h0].name if h0 == h1 else "經濟建築（座）")
 	var points: Array = economy_samples.duplicate()
-	points.append({"time":g.model.elapsed,"gold":[float(g.model.stats[0].produced),float(g.model.stats[1].produced)],"farms":[g.model.count_buildings(0,"farm"),g.model.count_buildings(1,"farm")]})
+	points.append({"time":g.model.elapsed,"gold":[float(g.model.stats[0].produced),float(g.model.stats[1].produced)],"farms":[g.model.count_buildings(0,h0),g.model.count_buildings(1,h1)]})
 	g.label_at(Vector2(1080,125),"紅方 ━",20,g.RED)
 	g.label_at(Vector2(1176,125),"藍方 ┄",20,g.BLUE)
 	preload("res://interface_ornament.gd").rule(g,Vector2(140,468),Vector2(1460,468),g.INK)
@@ -99,7 +110,7 @@ func draw_charts(g) -> void:
 		var key: String = "gold" if index == 0 else "farms"
 		var r := Rect2(195+index*675,210,540,215)
 		g.panel(Rect2(r.position-Vector2(58,18),Vector2(r.size.x+78,r.size.y+54)),Color("f5ebd2"),Color("8a6f4a"))
-		g.label_at(Vector2(r.position.x-45,178),"累計產金（所有來源）" if index == 0 else "農田數量（座）",24)
+		g.label_at(Vector2(r.position.x-45,178),"累計產金（所有來源）" if index == 0 else home_title,24)
 		var ceiling := 1.0
 		for point: Dictionary in points:
 			for value: float in point[key]: ceiling = maxf(ceiling,value)

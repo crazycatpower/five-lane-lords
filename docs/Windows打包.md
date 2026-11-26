@@ -1,11 +1,17 @@
 # Windows 玩家版
 
-目前版本 0.5.0，Godot 4.7.1。輸出於專案旁 `release/FiveLaneLords-0.5.0/FiveLaneLords.exe`，分享包為 `release/FiveLaneLords-Windows-0.5.0.zip`，更新說明在 `release/release-notes-0.5.0.md`。單一 x86_64 EXE，資源內嵌，保留所有舊版。
+目前版本 0.6.0，Godot 4.7.1。輸出於專案旁 `release/FiveLaneLords-0.6.0/FiveLaneLords.exe`，分享包為 `release/FiveLaneLords-Windows-0.6.0.zip`，更新說明在 `release/release-notes-0.6.0.md`。單一 x86_64 EXE，資源內嵌，保留所有舊版。
 
 ## 重建
 
 新增中文字先執行 `python tools/build_font.py`，改圖先執行 `godot_console --headless --path . -s tools/prepare_assets.gd`，再 `godot_console --headless --path . --import`。
-執行 `tools/build_windows.ps1 -Version 0.5.0`。模板在 `.runtime/windows-templates/windows_release_x86_64.exe`。圖示及檔案版本由 export_presets.cfg 設定。
+執行 `tools/build_windows.ps1 -Version 0.6.0`。模板在 `.runtime/windows-templates/windows_release_x86_64.exe`。圖示及檔案版本由 export_presets.cfg 設定。
+
+## 2026-11-27 驗收（0.6.0）
+
+- `quick_test.gd`：50 項、0 失敗；`test_startup.gd` 通過（2717 ms，7 筆預處理調色盤參照）；`test_net_match.gd`：22 項、0 失敗。
+- 獨立 EXE 以隔離 APPDATA 啟動 120 幀，結束碼 0，無錯誤日誌；檔案／產品版本 0.6.0；EXE SHA256 `84F38AA98A9F97D65AA342526889DD7E066C14B45AB58F61B480F5EEA7406C5E`，403.7 MB，ZIP 332.5 MB（完整性檢查無誤）。
+- 字型子集已重切（2009 字元）並完成 `--import`；匯出設定已排除 `recordings/*`。
 
 ## 2026-11-24 驗收（0.5.0）
 

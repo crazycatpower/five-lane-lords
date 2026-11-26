@@ -255,8 +255,9 @@ func draw_catalog() -> void:
 
 func show_battle_info(entering: bool = true) -> void:
 	if entering:
-		was_paused = game.model.paused
-		game.model.paused = true
+		if game.net == null:
+			was_paused = game.model.paused
+			game.model.paused = true
 		game.dragging = false
 	game.screen = "battle_info"
 	game.clear_ui()
@@ -269,7 +270,7 @@ func show_battle_info(entering: bool = true) -> void:
 			if kind.is_empty(): continue
 			var hit = game.button(deck_rect(team,i,kinds.size()),"",func(): open(kind,"battle_info"))
 			hit.modulate.a = 0.01
-			hit.tooltip_text = game.card_description(kind)+"\n\n（點擊開啟完整圖鑑）"
+			hit.tooltip_text = game.card_description(kind,team)+"\n\n（點擊開啟完整圖鑑）"
 		var raw_lord: String = game.model.lords[team].lord
 		var is_camp: bool = team == 1 and game.adventure.index >= 0 and game.adventure.STAGES[game.adventure.index].enemy_camp
 		var target_entry: String = "bandit" if is_camp else (B.MINION_LORDS[raw_lord].card if B.is_minion(raw_lord) else "lord_"+raw_lord)
@@ -281,7 +282,8 @@ func show_battle_info(entering: bool = true) -> void:
 func close_battle_info() -> void:
 	game.clear_ui()
 	game.screen = "battle"
-	game.model.paused = was_paused
+	if game.net == null:
+		game.model.paused = was_paused
 	game.queue_redraw()
 
 func battle_info_kinds(team: int) -> Array:
@@ -304,6 +306,19 @@ func composition(team: int) -> String:
 	for kind: String in game.model.decks[team]: counts[B.CARDS[kind].type] += 1
 	return "八張輪轉牌：部隊 %d · 建築 %d · 法術 %d" % [counts.unit,counts.building,counts.spell]
 
+static func clip_line(font: Font, text: String, size: int, max_width: float) -> String:
+	if font == null or text.is_empty() or font.get_string_size(text,HORIZONTAL_ALIGNMENT_LEFT,-1,size).x <= max_width:
+		return text
+	var lo := 0
+	var hi := text.length()
+	while lo < hi:
+		var mid := int((lo+hi+1)/2)
+		if font.get_string_size(text.substr(0,mid)+"…",HORIZONTAL_ALIGNMENT_LEFT,-1,size).x <= max_width:
+			lo = mid
+		else:
+			hi = mid-1
+	return text.substr(0,lo)+"…"
+
 func draw_battle_info() -> void:
 	game.panel(Rect2(62,62,1476,712))
 	game.label_at(Vector2(90,111),"戰局資料",38)
@@ -314,7 +329,7 @@ func draw_battle_info() -> void:
 		var st: Dictionary = game.adventure.STAGES[game.adventure.index]
 		mode_line = "遠征 %s · %s（%s）" % [st.get("code",""), st.name, ["簡單","普通","困難"][game.model.difficulty]]
 	game.label_at(Vector2(310,107),mode_line,24)
-	game.label_at(Vector2(1120,107),"閱讀中暫停 · 點卡牌查看趣聞",19)
+	game.label_at(Vector2(1120,107),"連線對戰持續進行 · 點卡牌查看趣聞" if game.net != null else "閱讀中暫停 · 點卡牌查看趣聞",19)
 	for team: int in range(2):
 		var y := 175+team*285
 		var lord: String = game.model.lords[team].lord
@@ -330,14 +345,14 @@ func draw_battle_info() -> void:
 				var mut: Dictionary = game.rogue.Catalog.mutator_data(game.rogue.active_slot())
 				var m_line: String = (" · 異變【%s】%s" % [String(mut.name),String(mut.desc)]) if not mut.is_empty() else ""
 				sub_note = (("敵方被動："+B.minion_text(lord)) if B.is_minion(lord) else ("敵方技能："+B.skill_text(lord)))+m_line
-			game.label_at(Vector2(248,y+28),sub_note,16,Color("5a4632"))
+			game.label_at(Vector2(248,y+28),clip_line(game.font,sub_note,16,1270.0),16,Color("5a4632"))
 		elif game.adventure.index >= 0 and team == 1 and not game.adventure.STAGES[game.adventure.index].enemy_camp:
 			var adv_note: String = ("守將特性："+B.minion_text(lord)) if B.is_minion(lord) else ("守將技能："+B.skill_text(lord))
-			game.label_at(Vector2(248,y+28),adv_note,16,Color("5a4632"))
+			game.label_at(Vector2(248,y+28),clip_line(game.font,adv_note,16,1270.0),16,Color("5a4632"))
 		game.draw_fitted(game.Ceremony.side_portrait(game,team),Rect2(95,y+40,132,170))
 		var kinds: Array = battle_info_kinds(team)
 		for i: int in range(kinds.size()):
-			if not kinds[i].is_empty(): game.draw_card(kinds[i],deck_rect(team,i,kinds.size())) # a lord without farms has no home card
+			if not kinds[i].is_empty(): game.draw_card(kinds[i],deck_rect(team,i,kinds.size()),-1,team) # a lord without farms has no home card
 		if game.model.is_conveyor(team):
 			game.label_at(Vector2(248,y+241),"補給池內卡牌免費由傳送帶隨機送出（同時最多存 8 張）",16)
 		elif not game.model.home_cards[team].is_empty():

@@ -4,6 +4,7 @@ extends RefCounted
 # Every particle is placed by a hash of the event position, so an effect looks the same each frame
 # and never touches the battle's random numbers.
 
+const B = preload("res://balance.gd")
 const SPELL_STYLE := {
 	"rain":"volley","fire":"fire","flaming_pitch":"fire","rolling_boulder":"boulder_launch",
 	"chain_lightning":"storm","mana_drain":"drain","phase_shift":"rift","mirror_clone":"rift",
@@ -522,9 +523,9 @@ static func hit_spark(g, e: Dictionary, p: float) -> void:
 	var a := 1.0 - p
 	var attacker: String = String(e.get("attacker", ""))
 	var target: String = String(e.get("target", ""))
-	var is_shield := target in ["shieldguard", "barricade", "bonewall"]
+	var is_shield := target in ["shieldguard", "barricade", "bonewall", "ward_guard", "ward_phalanx", "bramble_wall"]
 	var is_magic := attacker in ["dark_wizard", "prism_mage", "spell_tide_magus", "arcane_archer", "arcane_tower", "chronomancer", "orrery_walker", "old_witch", "seal_bearer", "plague_bishop", "lord_mage", "lord_rune", "lord_underworld"]
-	var is_heavy := attacker.begins_with("giant_") or attacker in ["corpse_giant", "arcane_golem", "bog_troll", "thorn_dragon", "dire_hydra", "tusk_boar", "gold_monster", "thorn_mother", "knight", "reaper", "ram", "lord_iron", "lord_beast", "lord_lion", "lord_vampire", "lord_adventure"]
+	var is_heavy: bool = attacker.begins_with("giant_") or bool(B.CARDS.get(attacker, {}).get("giant", false)) or attacker in ["tusk_boar", "gold_monster", "knight", "reaper", "ram", "lord_iron", "lord_beast", "lord_lion", "lord_vampire", "lord_adventure", "lord_harvest"]
 	if is_shield:
 		var r := 10.0 + p * 14.0
 		g.draw_arc(at, r, -PI * 0.55, PI * 0.55, 14, Color("e8d294", a * 0.9), 2.6, true)
@@ -564,3 +565,109 @@ static func wall_chip(g, e: Dictionary, p: float) -> void:
 		var pt: Vector2 = e.pos + Vector2(vx * p, vy * p + 65.0 * p * p - 12.0 + (h(s, i + 13) - 0.5) * 32.0)
 		g.draw_circle(pt, 2.2 + h(s, i + 19) * 1.8, Color(0.55, 0.48, 0.36, a * 0.85))
 	ground_ring(g, e.pos + Vector2(dir * 10.0, 12.0), 10.0 + p * 18.0, Color(DUST, a * 0.55), 2.0)
+
+# 骸骨巨龍's breath (使用者 2026-11-24): a jet from the jaws to the target column, then a wall of fire
+# standing across both lanes the dragon straddles (e.lane = its top lane).
+static func dragon_breath(g, e: Dictionary, p: float) -> void:
+	var L = preload("res://layout.gd")
+	var s := seed_of(e)
+	var lane: int = clampi(int(e.get("lane",0)),0,L.GRID_ROWS-2)
+	var top: float = L.GRID_ORIGIN.y+lane*L.CELL_SIZE.y+14.0
+	var bottom: float = L.GRID_ORIGIN.y+(lane+2)*L.CELL_SIZE.y-10.0
+	var from: Vector2 = e.get("from",e.pos)
+	var to := Vector2(e.pos.x,(top+bottom)*0.5-20.0)
+	var jet := clampf(p/0.35,0.0,1.0) # the jet reaches the column in the first third
+	var fade := 1.0-p
+	var tip: Vector2 = from.lerp(to,jet)
+	g.draw_line(from,tip,Color(FLAME,0.55*fade),18.0*(1.0-0.4*p),true)
+	g.draw_line(from,tip,Color(FLAME_CORE,0.75*fade),7.0,true)
+	for i: int in range(6):
+		var t := h(s,i)*jet
+		g.draw_circle(from.lerp(to,t)+Vector2(0,(h(s,i+7)-0.5)*14.0),5.0+7.0*h(s,i+3),Color(FLAME,0.5*fade))
+	if jet < 1.0: return
+	var wall := 1.0-clampf((p-0.35)/0.65,0.0,1.0)
+	ground_disc(g,Vector2(e.pos.x,bottom-6.0),40.0,Color(0.15,0.07,0.02,0.35*wall))
+	var steps := 13
+	for i: int in range(steps):
+		var y := lerpf(top+26.0,bottom,float(i)/float(steps-1))
+		var b := Vector2(e.pos.x+(h(s,i+11)-0.5)*58.0,y)
+		var flicker := 0.75+0.25*sin(p*60.0+i*1.7)
+		flame(g,b,(36.0+26.0*h(s,i+2))*wall*flicker,12.0,sin(p*28.0+i)*6.0,0.85*wall)
+		g.draw_circle(b+Vector2(0,-8),4.0*wall,Color(FLAME_CORE,0.8*wall))
+
+# 血月蔽日 (使用者 2026-11-25「全場暗紅特效」「血月肯定是浮現在天空上」): while a 吸血領主's blood moon is up the
+# field sinks into dark red (here) and the moon eclipses the sun in the sky strip (battle_hud.landscape).
+# 0..1: fades in over 0.8 s and out over the last 1.2 s.
+static func blood_moon_k(m) -> float:
+	var left := 0.0
+	for t: int in range(2): left = maxf(left,float(m.vampire_until[t])-float(m.elapsed))
+	if left <= 0.0: return 0.0
+	var dur: float = float(preload("res://balance.gd").LORDS.vampire.blood_duration)
+	return clampf(minf((dur-left)/0.8,left/1.2),0.0,1.0)
+
+static func blood_moon(g, rect: Rect2) -> void:
+	var k := blood_moon_k(g.model)
+	if k <= 0.0: return
+	g.draw_rect(rect,Color(0.24,0.0,0.03,0.30*k)) # darken first
+	g.draw_rect(rect,Color(0.62,0.04,0.08,0.26*k)) # then the red wash
+	for i: int in range(6): g.draw_rect(rect.grow(-9.0-i*18.0),Color(0.14,0.0,0.03,0.06*k),false,18.0)
+
+# The blood moon sliding over the sun (or the night moon): a dark red disc with a red corona.
+static func eclipse(g, at: Vector2, k: float, t: float) -> void:
+	var pulse := 0.5+0.5*sin(t*2.2)
+	for r: float in [38.0,30.0,24.0]: g.draw_circle(at,r+3.0*pulse,Color(1.0,0.22,0.12,(0.08 if r > 34.0 else 0.16)*k))
+	g.draw_circle(at,19.0,Color(0.86,0.12,0.09,k)) # the bright blood-red disc stands out on the dark red sky
+	g.draw_circle(at+Vector2(6,-4),15.0,Color(0.60,0.05,0.06,0.55*k)) # its shadowed side
+	g.draw_circle(at+Vector2(-6,-6),5.0,Color(1.0,0.55,0.45,0.35*k))
+	g.draw_arc(at,19.0,0,TAU,40,Color(1.0,0.62,0.48,0.9*k),2.0,true)
+
+# 箭樓築城: earth bursts and dust billows where a tower climbs out of the ground (drawn over the rising tower).
+static func tower_rise(g, e: Dictionary, p: float) -> void:
+	var base: Vector2 = e.pos+Vector2(0,28)
+	var a := 1.0-p
+	for i: int in range(9):
+		var side := -1.0 if i % 2 == 0 else 1.0
+		var spread: float = g.scenery_noise(i,int(e.pos.x)+901)
+		var at := base+Vector2(side*(14.0+spread*46.0)*(0.4+p),-p*(10.0+spread*26.0))
+		g.draw_circle(at,10.0+spread*10.0+p*8.0,Color(0.55,0.45,0.32,0.45*a))
+	for i: int in range(6):
+		var d := Vector2.from_angle(PI+0.25+i*0.5)
+		g.draw_rect(Rect2(base+d*(10.0+p*55.0)+Vector2(0,p*p*40.0)-Vector2(3,3),Vector2(6,6)),Color(0.40,0.32,0.22,a))
+	g.draw_line(base+Vector2(-40,0),base+Vector2(40,0),Color(g.INK,0.5*a),2.0,true)
+
+# 亡者甦醒: the ground cracks and a bony hand reaches up before the skeleton climbs out.
+static func grave_rise(g, e: Dictionary, p: float) -> void:
+	var c: Vector2 = e.pos+Vector2(0,18)
+	var a := clampf(2.0-p*2.0,0.0,1.0)
+	g.draw_circle(c,18.0+p*6.0,Color(0.20,0.14,0.08,0.55*a))
+	for i: int in range(5):
+		var d := Vector2.from_angle(PI*(0.1+i*0.2))
+		g.draw_line(c,c-d*(14.0+p*14.0),Color(g.INK,0.7*a),1.6,true)
+	var reach := minf(p*2.2,1.0)
+	var wrist := c+Vector2(0,-reach*26.0)
+	g.draw_line(c,wrist,Color(0.92,0.88,0.78,a),4.0,true)
+	for f: int in range(4):
+		var fd := Vector2.from_angle(-PI*0.5+(f-1.5)*0.35)
+		g.draw_line(wrist,wrist+fd*9.0*reach,Color(0.92,0.88,0.78,a),2.0,true)
+	g.draw_circle(c+Vector2(0,-4),24.0*p,Color(0.45,0.85,0.55,0.18*a))
+
+# 符文落雨: a glowing rune stone streaks down from the sky, then a ring of light where the trap appears.
+static func rune_fall(g, e: Dictionary, p: float) -> void:
+	var land: Vector2 = e.pos
+	var fall := clampf(p/0.45,0.0,1.0)
+	var col := Color(0.72,0.52,1.0)
+	if fall < 1.0:
+		var start := land+Vector2(-60,-420)
+		var at := start.lerp(land,fall*fall)
+		g.draw_line(start.lerp(land,maxf(0.0,fall*fall-0.18)),at,Color(col,0.45),6.0,true)
+		g.draw_circle(at,11.0,Color(0.30,0.22,0.45))
+		g.draw_arc(at,11.0,0,TAU,20,Color(col,0.9),2.0,true)
+		g.draw_line(at+Vector2(-4,-5),at+Vector2(4,5),col,2.0,true)
+		g.draw_line(at+Vector2(4,-5),at+Vector2(-4,5),col,2.0,true)
+	else:
+		var q := (p-0.45)/0.55
+		g.draw_arc(land,12.0+q*44.0,0,TAU,32,Color(col,1.0-q),3.0,true)
+		for i: int in range(8):
+			var d := Vector2.from_angle(i*TAU/8.0)
+			g.draw_line(land+d*(10.0+q*30.0),land+d*(18.0+q*40.0),Color(col,1.0-q),2.0,true)
+

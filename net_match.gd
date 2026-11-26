@@ -49,7 +49,12 @@ var stalled_for := 0.0 # seconds the peer's frame has been missing
 
 static func version() -> String:
 	# Both clients must run identical rules, or lockstep simulations will diverge.
-	return FileAccess.get_md5("res://balance.gd")+FileAccess.get_md5("res://battle.gd")
+	var ctx := HashingContext.new()
+	ctx.start(HashingContext.HASH_SHA256)
+	for fname: String in ["arcane_mechanics.gd","attack_windup.gd","balance.gd","battle.gd","boss_traits.gd","card_upgrades.gd","closed_lanes.gd","conveyor.gd","core_cards.gd","dark_sorcery.gd","day_cycle.gd","expansion_cards.gd","expansion_more.gd","faction_cards.gd","farm_opening.gd","frontier_cards.gd","giant_unit.gd","glutton_nest.gd","gold_monster.gd","grid_rules.gd","hero_slash.gd","large_body.gd","layout.gd","lord.gd","lord_expansion.gd","map_mech.gd","monster_cards.gd","relic_triggers.gd","seal_altar.gd","season.gd","spell_lead.gd","ward_rules.gd"]:
+		ctx.update(fname.to_utf8_buffer())
+		ctx.update(FileAccess.get_file_as_bytes("res://"+fname))
+	return ctx.finish().hex_encode()
 
 static func default_url() -> String:
 	var env_url := OS.get_environment("MATCHMAKER_URL").strip_edges()
@@ -246,7 +251,6 @@ func _pump_ws() -> void:
 			_fail("無法連線到配對伺服器（%s）" % server_url)
 
 func _receive(msg: Dictionary) -> void:
-	var other := 1-local_team
 	match str(msg.get("t","")):
 		"stats":
 			online_count = int(msg.get("online",online_count))
@@ -268,6 +272,7 @@ func _receive(msg: Dictionary) -> void:
 				message = "對手已離線"
 		"matched":
 			local_team = int(msg.get("team",0))
+			var other := 1-local_team
 			is_ai_match = false
 			var raw_names: Array = Array(msg.get("names",[]))
 			peer_name = str(raw_names[other]) if raw_names.size() > other else ""
@@ -278,9 +283,9 @@ func _receive(msg: Dictionary) -> void:
 			}
 			_begin()
 		"f":
-			frames[other][int(msg.k)] = msg.c
+			frames[1-local_team][int(msg.k)] = msg.c
 		"h":
-			checks[other][int(msg.k)] = str(msg.v)
+			checks[1-local_team][int(msg.k)] = str(msg.v)
 			_compare(int(msg.k))
 
 func _begin() -> void:

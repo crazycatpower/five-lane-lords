@@ -112,7 +112,7 @@ static func shot_text(shot: Dictionary) -> String:
 
 # 敵方卡牌這一戰的隨機強化（戰前就定好）。
 static func ups_line(rogue, f: String, k: String) -> Array:
-	var span: Array = rogue.Catalog.enemy_ups_range(int(rogue.run.get("floor",0)),k)
+	var span: Array = rogue.enemy_ups_span(k)
 	var ups: Dictionary = rogue.enemy_upgrades(f,k)
 	if ups.is_empty(): return ["敵牌強化","本層敵方卡牌沒有強化"]
 	var head := ("每張牌 +%d 級：" % int(span[0])) if int(span[0]) == int(span[1]) else ("每張牌 +%d～+%d 級：" % [int(span[0]),int(span[1])])
@@ -173,7 +173,7 @@ static func face(g, rogue, i: int, r: Rect2, selected: bool, detail: bool) -> vo
 		var body := ""
 		if k == "event": body = str(Catalog.EVENTS.get(slot.get("event_id","wandering_smith"),Catalog.EVENTS.wandering_smith).story)
 		elif k == "camp": body = "休整築牆：修 45% 城牆、領主回 50%\n名匠鍛造：自選 1 張卡與屬性百分比強化\n軍資徵集：120 金並強化 1 張卡"
-		elif k == "shrine": body = "聖物匣：免費 1 件遺物\n精煉主力：自選 1 張卡與屬性百分比強化並得 70 金\n鮮血奉獻：損 25% 領主生命換 200 金"
+		elif k == "shrine": body = "聖物匣：免費 1 件遺物\n精煉主力：自選 1 張卡與屬性百分比強化並得 70 金\n鮮血奉獻：損 25% 領主生命換 200 金與隨機 1 卡 +1"
 		paragraph(g,body,Vector2(inner.position.x+10,y+6),inner.size.x-20,14,g.INK,9)
 	# Reward under the vellum, the hint on the tail.
 	var reward: String = rogue.slot_subtitle(slot) if k in ["battle","elite","boss","sboss"] else ""

@@ -13,9 +13,11 @@ const CUES := {
 	"axe_hit": "axe_chop",
 	"slash": "knifeSlice",
 	"hero_slash": "knifeSlice",
+	"hero_spin": "knifeSlice",
 	"wall_hit": "stone_hit",
 	"death": "dropLeather",
 	"burn": "flame_burst",
+	"dragon_breath": "flame_burst",
 	"spell": "bookPlace1",
 	"breach": "warhorn",
 	"arrow": "bow_shoot",
@@ -64,6 +66,9 @@ const CUES := {
 	"card_ready": "ui_tick",
 	"skill_ready": "holy_heal",
 	"collapse": "stone_crash",
+	"tower_rise": "stone_crash",
+	"grave_rise": "dark_magic",
+	"rune_fall": "lightning",
 	"witch_curse": "dark_magic",
 	"big_death": "heavy_punch",
 	"bolt_shot": "bow_shoot",
@@ -114,6 +119,9 @@ const COOLDOWNS := {
 	"card_ready": 240,
 	"skill_ready": 500,
 	"collapse": 200,
+	"tower_rise": 180,
+	"grave_rise": 140,
+	"rune_fall": 140,
 	"witch_curse": 250,
 	"big_death": 250,
 	"bolt_shot": 180,
@@ -171,6 +179,9 @@ const VOLUMES := {
 	"skill_ready": -6.5,
 	"stone_impact": 11.0, # catapult shells: stone_crash.ogg peaks at -15 dB
 	"collapse": 9.0,
+	"tower_rise": 4.0,
+	"grave_rise": -7.0,
+	"rune_fall": -6.0,
 	"witch_curse": -8.0,
 	"big_death": -4.0,
 	"death": -3.0,
@@ -195,6 +206,9 @@ const PITCHES := {
 	"card_ready": 1.24,
 	"stealth_ready": 1.18,
 	"collapse": 0.78,
+	"tower_rise": 0.72,
+	"grave_rise": 0.85,
+	"rune_fall": 1.15,
 	"big_death": 0.72,
 	"witch_curse": 0.9,
 	"bolt_shot": 0.78,
@@ -253,14 +267,14 @@ const PAN_BUSES := ["SFX_L2","SFX_L1","SFX","SFX_R1","SFX_R2"]
 const PAN_AMOUNT := [-0.55,-0.27,0.0,0.27,0.55]
 # Shots by shooter: crossbow towers twang deeper, the arquebus cracks, casters hum (2026-11-22).
 const SHOT_SOUND := {
-	"tower":"bolt", "watchtower":"bolt", "shroud_arbalist":"bolt", "vampire_hunter":"bolt",
+	"tower":"bolt", "watchtower":"bolt", "ballista_tower":"bolt", "shroud_arbalist":"bolt", "vampire_hunter":"bolt",
 	"arquebusier":"gun",
-	"prism_mage":"magic", "sigil_weaver":"magic", "spell_mirror":"magic", "spell_tide_magus":"magic", "astrolabe_surveyor":"magic", "seal_bearer":"magic", "arcane_archer":"magic",
+	"prism_mage":"magic", "sigil_weaver":"magic", "spell_mirror":"magic", "spell_tide_magus":"magic", "astrolabe_surveyor":"magic", "seal_bearer":"magic", "arcane_archer":"magic", "crystal_colossus":"magic",
 	"necromancer":"dark", "funeral_monk":"dark", "mourning_maid":"dark", "dark_wizard":"dark", "old_witch":"dark",
 	"beekeeper":"none", "bellbearer":"none",
 	"boss_bomb":"lob", "boss_pierce":"bolt", "boss_curse":"dark",
 }
-const BIG_UNITS := ["corpse_giant","arcane_golem","bog_troll","thorn_dragon","dire_hydra","tusk_boar","gold_monster","thorn_mother","knight","ram","catapult"]
+const BIG_UNITS := ["corpse_giant","arcane_golem","bog_troll","thorn_dragon","dire_hydra","tusk_boar","gold_monster","thorn_mother","knight","ram","catapult","crystal_colossus","siege_tower","flesh_abomination","bone_dragon","eyewing_dragon"]
 
 static func ensure_pan_buses() -> void:
 	if AudioServer.get_bus_index("SFX") < 0: return
@@ -385,11 +399,11 @@ func cue_event(e: Dictionary) -> void:
 	elif k == "hit":
 		var attacker: String = e.get("attacker", "")
 		var target: String = e.get("target", "")
-		if target in ["shieldguard", "barricade", "bonewall"]:
+		if target in ["shieldguard", "barricade", "bonewall", "ward_guard", "ward_phalanx", "bramble_wall"]:
 			cue("shield", x)
 		elif B.CARDS.get(target, {}).get("type", "") == "building":
 			cue("wall_hit", x)
-		elif attacker.begins_with("giant_") or attacker in ["corpse_giant", "arcane_golem", "bog_troll", "thorn_dragon", "dire_hydra", "tusk_boar", "gold_monster", "thorn_mother", "lord_iron", "lord_beast", "lord_lion", "lord_vampire"]:
+		elif attacker.begins_with("giant_") or B.CARDS.get(attacker, {}).get("giant", false) or attacker in ["corpse_giant", "arcane_golem", "bog_troll", "thorn_dragon", "dire_hydra", "tusk_boar", "gold_monster", "thorn_mother", "lord_iron", "lord_beast", "lord_lion", "lord_vampire"]:
 			cue("heavy_hit", x)
 		elif attacker in ["hunter", "archer", "arcane_archer", "tower", "watchtower", "shroud_arbalist", "vampire_hunter", "ballista_tower"]:
 			cue("arrow_hit", x)
@@ -401,7 +415,7 @@ func cue_event(e: Dictionary) -> void:
 			cue("spear", x)
 		elif attacker == "ram":
 			cue("ram", x)
-		elif attacker in ["knight", "guard", "bandit", "militia", "adventure"]:
+		elif attacker in ["knight", "guard", "bandit", "militia", "adventure", "lord_adventure", "lord_harvest"]:
 			cue("sword", x)
 		else:
 			cue("hit", x)
@@ -435,4 +449,5 @@ func screen_x_of(e: Dictionary) -> float:
 	if not pos is Vector2: return -1.0
 	var g := get_parent()
 	if g == null or not "cinematic" in g or g.cinematic == null: return pos.x
-	return (g.cinematic.field_transform(g)*pos).x
+	if g.cinematic.field_active: return (g.cinematic.field_transform(g)*pos).x
+	return g.cinematic.screen_pos(g,pos).x

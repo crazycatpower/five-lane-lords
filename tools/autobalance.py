@@ -18,7 +18,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BALANCE = os.path.join(ROOT, "balance.gd")
 RUNS = os.path.join(ROOT, "tools", "autobalance_runs")
 REPORT = os.path.join(ROOT, "tools", "autobalance_runs", "report.md") # tool output, not committed
-MIN_COST, MAX_COST = 1, 30
+MIN_COST, MAX_COST = 1, 50  # = balance.gd MAX_CARD_COST (使用者 2026-11-24)
 
 
 def round_half_up(val):
@@ -296,7 +296,7 @@ def run_examiner_gauntlet(workers, dry_run=False, report_path=REPORT):
         old_cost = cards[k][1]
         d = all_cards.get(k, {})
         theory_c = compute_theory_cost(k, d, all_cards)
-        gauntlet_c = max(1.0, min(30.0, intercept + slope * r["examiner_avg"]))
+        gauntlet_c = max(1.0, min(float(MAX_COST), intercept + slope * r["examiner_avg"]))
         # Role-normalized 0-100 score where 60 = role anchor average
         gauntlet_score_100 = max(12.0, min(99.0, 60.0 + (r["examiner_avg"] - mx) * 0.045))
         if k in EXAMINER_COSTS:

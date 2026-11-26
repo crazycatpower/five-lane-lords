@@ -27,16 +27,22 @@ static func on_kill(m, killer: int) -> void:
 	if charge > 0.0: m.add_skill_charge(killer,charge)
 
 static func on_gate_fall(m, side: int, lane: int) -> void:
-	var spec = m.lord_mod(side,"gate_fall_spell",{})
-	if not spec is Dictionary or spec.is_empty(): return
-	var kind := String(spec.get("kind",""))
-	if not B.CARDS.has(kind): return
+	var raw = m.lord_mod(side,"gate_fall_spell",null)
+	if raw == null: return
+	var specs: Array = raw if raw is Array else ([raw] if raw is Dictionary else [])
+	if specs.is_empty(): return
 	var used: Array = m.get_meta("gate_fall_used",[[],[]])
-	if bool(spec.get("once",false)) and not used[side].is_empty(): return
-	used[side].append(lane)
-	m.set_meta("gate_fall_used",used)
-	# The spell lands just outside the broken gate, where the attackers are pouring in.
 	var forward := 1.0 if side == 0 else -1.0
 	var pos := Vector2(L.gate_stop(side)+forward*L.CELL_SIZE.x*0.6,L.cell_center(Vector2i(0,lane)).y)
-	m.spells.append({"team":side,"kind":kind,"pos":pos,"delay":B.SPELL_DELAY})
-	m.event("spell",pos,side,{"card":kind})
+	var fired := false
+	for spec in specs:
+		if not spec is Dictionary or spec.is_empty(): continue
+		var kind := String(spec.get("kind",""))
+		if not B.CARDS.has(kind): continue
+		if bool(spec.get("once",false)) and not used[side].is_empty(): continue
+		m.spells.append({"team":side,"kind":kind,"pos":pos,"delay":B.SPELL_DELAY})
+		m.event("spell",pos,side,{"card":kind})
+		fired = true
+	if fired:
+		used[side].append(lane)
+		m.set_meta("gate_fall_used",used)

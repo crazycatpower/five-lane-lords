@@ -83,8 +83,12 @@ static func setup(m, cfg: Dictionary) -> void:
 	m.conveyor = cv
 	m.ink[team] = 0.0
 	if bool(cfg.get("clear_home", true)):
+		var old_home := String(m.home_cards[team])
 		m.home_cards[team] = ""
-		m.buildings = m.buildings.filter(func(b: Dictionary) -> bool: return int(b.get("team", -1)) != team or String(b.get("kind", "")) != "farm")
+		m.buildings = m.buildings.filter(func(b: Dictionary) -> bool:
+			if int(b.get("team", -1)) != team: return true
+			var bk := String(b.get("kind", ""))
+			return bk != "farm" and (old_home.is_empty() or bk != old_home))
 		m.refresh_territory()
 
 	var start_count := clampi(int(cfg.get("start_count", 3)), 0, cap)

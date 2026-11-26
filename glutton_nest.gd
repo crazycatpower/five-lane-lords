@@ -1,6 +1,7 @@
 extends RefCounted
 const B = preload("res://balance.gd")
 const L = preload("res://layout.gd")
+const Giant = preload("res://giant_unit.gd")
 
 static func hidden(actor: Dictionary) -> bool:
 	return actor.get("kind","") == "glutton_nest" and actor.get("digest_left",0.0) <= 0.0 and actor.get("nest_windup",0.0) <= 0.0
@@ -174,7 +175,7 @@ static func safe_coverage(s: Dictionary) -> Dictionary:
 			var close_approach := winding
 			if not winding:
 				for u: Dictionary in s.units:
-					if not edible_unit(u) or u.lane != lane: continue
+					if not edible_unit(u) or not Giant.occupies_lane(u,lane): continue
 					var u_speed: float = maxf(1.0,u.get("speed",B.CARDS.get(u.kind,{}).get("speed",40.0)))
 					var edge_now: float = B.point_edge_distance(b.pos,u)
 					if u.team != team:
@@ -189,7 +190,7 @@ static func safe_coverage(s: Dictionary) -> Dictionary:
 			var windup_damage := 0.0
 			var will_eat: Array[Dictionary] = []
 			for u: Dictionary in s.units:
-				if u.hp <= 0 or u.team == team or u.lane != lane or claimed.has(u.get("id",-1)): continue
+				if u.hp <= 0 or u.team == team or not Giant.occupies_lane(u,lane) or claimed.has(u.get("id",-1)): continue
 				var ud: Dictionary = B.CARDS.get(u.kind,{})
 				var u_speed: float = maxf(1.0,u.get("speed",ud.get("speed",40.0)))
 				var u_range: float = u.get("range",ud.get("range",0.0))
@@ -257,7 +258,7 @@ static func ai_score(c: Dictionary, s: Dictionary, _target_lane: int, defend: in
 		if u.team != team:
 			if covered.has(u.get("id",-1)): continue
 			if u.get("spawn_delay",0.0) <= 0 and dist <= d.radius: foe_eat += bite_hp
-			if u.lane == lane and u.get("fear_left",0.0) <= 0:
+			if Giant.occupies_lane(u,lane) and u.get("fear_left",0.0) <= 0:
 				var ahead: float = (u.pos.x-c.pos.x)*forward
 				if ahead >= -d.trigger_radius and ahead <= 150.0:
 					foe_ahead += bite_hp
@@ -267,7 +268,7 @@ static func ai_score(c: Dictionary, s: Dictionary, _target_lane: int, defend: in
 				ally_eat += bite_hp
 				var ud: Dictionary = B.CARDS.get(u.kind,{})
 				ally_cost += float(ud.get("cost",0))/maxf(1.0,float(ud.get("count",1)))*(bite_hp/maxf(1.0,float(u.max_hp)))
-			if u.lane == lane:
+			if Giant.occupies_lane(u,lane):
 				var behind: float = (c.pos.x-u.pos.x)*forward
 				if behind > -d.trigger_radius and behind <= 200.0:
 					ally_behind += bite_hp

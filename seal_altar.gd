@@ -104,7 +104,7 @@ static func release(m, b: Dictionary) -> void:
 static func update(m, dt: float) -> void:
 	if not m.has_plague_bishop: return
 	for u: Dictionary in m.units:
-		if u.hp <= 0 or not B.CARDS[u.kind].has("rot_period") or u.get("spawn_delay",0.0) > 0: continue
+		if u.hp <= 0 or m.frozen(u.team) or not B.CARDS[u.kind].has("rot_period") or u.get("spawn_delay",0.0) > 0: continue
 		var d: Dictionary = B.CARDS[u.kind]
 		u.rot_clock = u.get("rot_clock",0.0)+dt
 		while u.rot_clock >= d.rot_period:

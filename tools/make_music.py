@@ -1,21 +1,26 @@
 """Synthesises the game's music and a few extra sounds. Original work, released CC0 with the game.
 
-Acoustic timbres only (producer: no electronic sounds): a lute (plucked strings, additive
-synthesis with stiff-string partials), a recorder, frame drums, a shaker and a church bell, in a
-small stone room. Every run makes identical files (fixed seed).
+A medieval consort, acoustic timbres only (2026-11-24 rewrite: the 11-23 synth-brass / electronic-drum
+themes did not fit the illuminated-manuscript look). Plucked: lute, harp. Bowed: vielle (fiddle),
+hurdy-gurdy (melody, drones and its buzzing bridge), a bass fiddle. Blown: recorder, shawm, crumhorn,
+natural trumpet, portative organ, a few monks singing. Struck: tabor with snare, frame and war drums,
+nakers, tambourine, finger cymbals, hand bells and a church bell. In a stone hall (the dark theme and
+the lament in a cathedral). Melodies are in church modes. Every run makes identical files (fixed seeds).
 
     python tools/make_music.py            # everything
     python tools/make_music.py menu night # only these pieces
 
-Needs numpy, scipy and ffmpeg. Output: assets/music/*.ogg, assets/audio/{bell,heal_chime,ui_tick,ui_tock}.ogg
-The battle music is one theme per enemy faction (normal, magic, dark, beast), each four loops of the
-same length that play together (music_player.gd raises them as the day goes on and whenever the
-battle turns dangerous): battle_<theme>_lute, _drums, _tune and _tension.
+Needs numpy, scipy and ffmpeg. Output: assets/music/*.ogg, assets/audio/{bell,heal_chime,ui_tick,ui_tock,musket}.ogg
+The battle music is one theme per mood (normal, magic, dark, beast, conveyor, charge, duel, crimson;
+music_mood.gd picks one per match), each four loops of the same length that play together
+(music_player.gd raises the tension loop whenever the battle turns dangerous):
+battle_<theme>_lute (accompaniment), _drums, _tune and _tension.
     python tools/make_music.py battle:dark  # one theme only
+    python tools/make_music.py previews     # 90-second mixes into ../film/音樂試聽/
 """
-import pathlib, subprocess, sys, wave
+import pathlib, subprocess, sys, wave, zlib
 import numpy as np
-from scipy.signal import butter, fftconvolve, sosfilt
+from scipy.signal import butter, fftconvolve, iirpeak, lfilter, sosfilt
 
 SR = 44100
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -136,158 +141,321 @@ def bell(freq: float = 196.0, dur: float = 6.0) -> np.ndarray:
 
 
 
-
-# ---- retro-synth & hybrid percussion (2026-11-23) ---------------------------------------------
-def _harmonic_stack(f0: float, t: np.ndarray, cutoff_arr: np.ndarray, slopes: float = 0.85, max_k: int = 22) -> np.ndarray:
-    """Band-limited additive saw/brass stack with a sweeping low-pass contour."""
-    lim = max(1, min(max_k, int(13000.0 / max(20.0, f0))))
-    ks = np.arange(1, lim + 1, dtype=np.float64)[:, None]
-    freqs = ks * f0
-    mask = 1.0 / (1.0 + (freqs / np.maximum(cutoff_arr[None, :], 60.0)) ** 3.2)
-    amps = mask / (ks ** slopes)
-    return (amps * np.sin(2.0 * np.pi * freqs * t[None, :])).sum(axis=0)
+# ---- the rest of the consort (2026-11-24) ----------------------------------------------------
+def _env(t: np.ndarray, att: float, dur: float, rel: float) -> np.ndarray:
+    """Smooth rise over `att`, held to `dur`, then a release of `rel` seconds."""
+    rise = np.sin(np.clip(t / max(att, 1e-4), 0, 1) * np.pi / 2) ** 2
+    fall = np.clip((dur + rel - t) / rel, 0, 1) ** 1.5
+    return rise * fall
 
 
-def synth_brass(freq: float, dur: float, bright: float = 1.0) -> np.ndarray:
-    """80s Jupiter-style punchy detuned synth brass: biting filter blat settling into warm lead."""
-    key = ("sbrass", round(freq, 2), round(dur, 3), round(bright, 2))
+def _wander(n: int, rate: float, r) -> np.ndarray:
+    """Slow random drift (about `rate` turns a second), -1..1-ish."""
+    pts = r.standard_normal(int(n / SR * rate) + 3)
+    return np.interp(np.arange(n) / SR * rate, np.arange(len(pts)), pts)
+
+
+def _local(*key) -> np.random.Generator:
+    """A generator seeded from the note itself, so a cached sound is the same whichever piece made it first."""
+    return np.random.default_rng(zlib.crc32(repr(key).encode()))
+
+
+def _peaks(fk: np.ndarray, peaks) -> np.ndarray:
+    """Body or bore resonances as bumps on a log-frequency axis: (centre Hz, height, width in octaves)."""
+    return sum(a * np.exp(-0.5 * (np.log2(fk / f0) / w) ** 2) for f0, a, w in peaks)
+
+
+BOWED = {
+    # vielle: the medieval fiddle; gurdy: the hurdy-gurdy's wheel-bowed melody and drone strings
+    # (steadier, brighter, no vibrato); drone: the gurdy's drone strings, darker; bass: a large bowed instrument.
+    "vielle": dict(peaks=((280, 1.0, .4), (560, .5, .3), (1150, .75, .35), (2600, .4, .35)), tilt=1.15, vib=.0042, att=.07, rel=.12, noise=.02, top=4400),
+    "gurdy": dict(peaks=((420, .7, .35), (1250, 1.0, .3), (2900, .7, .35)), tilt=.9, vib=.0006, att=.035, rel=.08, noise=.05, top=7500),
+    "drone": dict(peaks=((300, 1.0, .4), (900, .7, .35), (2200, .3, .4)), tilt=1.0, vib=.0005, att=.05, rel=.1, noise=.015, top=4000),
+    "bass": dict(peaks=((170, 1.0, .45), (400, .6, .35), (900, .35, .4)), tilt=1.05, vib=.003, att=.09, rel=.15, noise=.025, top=3800),
+}
+
+
+def body_ir(kind: str) -> np.ndarray:
+    """The wooden box of a bowed instrument: a dozen narrow resonances at fixed places. Notes with
+    vibrato sweep their partials across them, so the tone shimmers the way a real fiddle's does."""
+    key = ("body", kind)
     if key in _cache:
         return _cache[key]
-    total_d = dur + 0.09
-    n = max(64, int(SR * total_d))
-    t = np.arange(n, dtype=np.float64) / SR
-    vib = 0.0045 * np.clip((t - 0.14) / 0.14, 0.0, 1.0) * np.sin(2.0 * np.pi * 5.6 * t)
-    scoop = 0.009 * np.exp(-t / 0.012)
-    ph_t = np.cumsum(1.0 + vib + scoop) / SR
-    cutoff = freq * (2.3 + 8.5 * bright * np.exp(-t / 0.13))
-    out = np.zeros(n, dtype=np.float64)
-    for det, w in ((0.9960, 0.34), (1.0000, 0.42), (1.0045, 0.34)):
-        out += w * _harmonic_stack(freq * det, ph_t, cutoff, slopes=0.82, max_k=22)
-    out += 0.22 * np.sin(2.0 * np.pi * (freq * 0.5) * ph_t)
-    att = min(n, int(0.004 * SR))
-    rel = min(n, int(0.025 * SR))
-    env = np.ones(n, dtype=np.float64)
-    if att > 0:
-        env[:att] = np.linspace(0.0, 1.0, att)
-    sust_end = min(n, int(dur * SR))
-    if sust_end < n:
-        env[sust_end:] = np.linspace(1.0, 0.0, n - sust_end) ** 1.4
-    elif rel > 0:
-        env[-rel:] *= np.linspace(1.0, 0.0, rel)
-    out = out * env * 0.28
-    out = band(out, low=95.0, order=1)
+    r = np.random.default_rng(zlib.crc32(kind.encode()))
+    low, high = {"vielle": (230, 4800), "gurdy": (300, 5500), "drone": (200, 3000), "bass": (90, 2000)}[kind]
+    impulse = np.zeros(int(0.08 * SR))
+    impulse[0] = 1.0
+    ir = 0.35 * impulse
+    for fc in np.exp(r.uniform(np.log(low), np.log(high), 12)):
+        b, a = iirpeak(fc, r.uniform(6, 14), fs=SR)
+        ir = ir + r.uniform(.4, 1.0) * lfilter(b, a, impulse) * 3.0
+    ir *= np.linspace(1, 0, len(ir)) ** 2
+    _cache[key] = ir
+    return ir
+
+
+def bowed(freq: float, dur: float, kind: str = "vielle", att: float = None) -> np.ndarray:
+    """A bowed string: sawtooth-like partials shaped by the body, vibrato, bow hiss and a scratch on the attack."""
+    key = ("bowed", round(freq, 2), round(dur, 3), kind, att)
+    if key in _cache:
+        return _cache[key]
+    p = BOWED[kind]
+    att = p["att"] if att is None else att
+    rel = p["rel"]
+    n = int(SR * (dur + rel))
+    t = np.arange(n) / SR
+    r = _local(key)
+    ks = np.arange(1, int(min(40, p["top"] * 1.6 / freq)) + 1)
+    fk = ks * freq
+    amps = (0.3 + _peaks(fk, p["peaks"])) / ks ** p["tilt"] / (1 + (fk / p["top"]) ** 4)
+    vib = p["vib"] * np.clip((t - 0.2) / 0.35, 0, 1) * np.sin(2 * np.pi * r.uniform(5.0, 5.8) * t + r.uniform(0, 6.3))
+    vib = vib + 0.0011 * _wander(n, 3.0, r)
+    phase = 2 * np.pi * freq * np.cumsum(1 + vib) / SR
+    sig = np.zeros(n)
+    for k, a, ph in zip(ks, amps, r.uniform(0, 2 * np.pi, len(ks))):
+        sig += a * np.sin(k * phase + ph)
+    sig = fftconvolve(sig, body_ir(kind))[:n]
+    sig /= np.abs(sig).max() + 1e-9
+    sig *= 1 + 0.035 * _wander(n, 9.0, r)  # bow pressure is never perfectly even
+    env = _env(t, att, dur, rel)
+    if dur > 0.6:
+        env *= 0.86 + 0.14 * np.sin(np.pi * np.clip(t / dur, 0, 1))  # long notes swell and relax
+    hiss = band(r.standard_normal(n), 2500, 8000) * p["noise"]
+    scratch = band(r.standard_normal(n), 1200, 5000) * np.exp(-t / 0.03) * 0.22 * min(1.0, 0.04 / att)
+    out = (sig + hiss) * env + scratch * np.minimum(t / 0.003, 1)
+    out *= 0.42 / (np.abs(out).max() + 1e-9)
     _cache[key] = out
     return out
 
 
-def synth_bass(freq: float, dur: float, punch: float = 1.0) -> np.ndarray:
-    """Bouncy 80s slap/Moog funk synth bass with elastic FM attack."""
-    key = ("sbass", round(freq, 2), round(dur, 3), round(punch, 2))
+def reed(freq: float, dur: float, kind: str = "shawm") -> np.ndarray:
+    """Double reeds: the shawm (loud, nasal, the street-band trumpet of its day) or the capped crumhorn (buzzy, odd partials)."""
+    key = ("reed", round(freq, 2), round(dur, 3), kind)
     if key in _cache:
         return _cache[key]
-    n = max(64, int(SR * (dur + 0.05)))
-    t = np.arange(n, dtype=np.float64) / SR
-    fm_idx = 2.3 * punch * np.exp(-t / 0.026)
-    mod = np.sin(2.0 * np.pi * (2.0 * freq) * t)
-    cutoff = freq * (1.8 + 7.2 * punch * np.exp(-t / 0.055))
-    saw = _harmonic_stack(freq, t, cutoff, slopes=0.92, max_k=14)
-    core = np.sin(2.0 * np.pi * freq * t + fm_idx * mod) + 0.48 * saw
-    env = np.minimum(t / 0.002, 1.0) * np.exp(-t / max(0.085, dur * 0.82))
-    fade = min(n, int(0.015 * SR))
-    if fade > 0:
-        env[-fade:] *= np.linspace(1.0, 0.0, fade)
-    out = band(core * env * 0.48, low=42.0, order=1)
+    rel = 0.06
+    n = int(SR * (dur + rel))
+    t = np.arange(n) / SR
+    r = _local(key)
+    top = 7000 if kind == "shawm" else 3500
+    ks = np.arange(1, int(min(36, top * 1.5 / freq)) + 1)
+    fk = ks * freq
+    if kind == "shawm":
+        amps = (0.35 + _peaks(fk, ((1150, 1.3, .4), (2700, .8, .35)))) / ks ** 0.5
+    else:
+        amps = np.where(ks % 2 == 1, 1.0, 0.22) * (0.5 + _peaks(fk, ((950, .6, .5),))) / ks ** 0.9
+    amps /= 1 + (fk / top) ** 4
+    vib = 0.0022 * np.clip((t - 0.22) / 0.3, 0, 1) * np.sin(2 * np.pi * 5.2 * t + r.uniform(0, 6.3))
+    scoop = -0.014 * np.exp(-t / 0.025)  # the player lips up into the note
+    phase = 2 * np.pi * freq * np.cumsum(1 + vib + scoop + 0.0008 * _wander(n, 2.5, r)) / SR
+    sig = np.zeros(n)
+    for k, a, ph in zip(ks, amps, r.uniform(0, 2 * np.pi, len(ks))):
+        sig += a * np.sin(k * phase + ph)
+    sig /= np.abs(sig).max() + 1e-9
+    breath = band(r.standard_normal(n), 2000, 7000) * 0.03
+    out = (sig + breath) * _env(t, 0.018, dur, rel)
+    out *= 0.40 / (np.abs(out).max() + 1e-9)
     _cache[key] = out
     return out
 
 
-def synth_arp(freq: float, dur: float, bright: float = 1.0) -> np.ndarray:
-    """Crisp magical electric clav/bell pluck for rapid 16th arpeggios."""
-    key = ("sarp", round(freq, 2), round(dur, 3), round(bright, 2))
+def trumpet(freq: float, dur: float) -> np.ndarray:
+    """A valveless natural trumpet: bright brassy blare on the attack, rounder as the note settles."""
+    key = ("trumpet", round(freq, 2), round(dur, 3))
     if key in _cache:
         return _cache[key]
-    n = max(64, int(SR * (dur + 0.08)))
-    t = np.arange(n, dtype=np.float64) / SR
-    idx = (1.6 * bright) * np.exp(-t / 0.04)
-    sig = np.sin(2.0 * np.pi * freq * t + idx * np.sin(2.0 * np.pi * (3.0 * freq) * t))
-    sig += 0.45 * np.sin(2.0 * np.pi * (2.0 * freq) * t) * np.exp(-t / 0.09)
-    env = np.minimum(t / 0.0015, 1.0) * np.exp(-t / max(0.07, dur * 0.9))
-    fade = min(n, int(0.014 * SR))
-    if fade > 0:
-        env[-fade:] *= np.linspace(1.0, 0.0, fade)
-    out = band(sig * env * 0.34, low=140.0, order=1)
+    rel = 0.07
+    n = int(SR * (dur + rel))
+    t = np.arange(n) / SR
+    r = _local(key)
+    ks = np.arange(1, int(min(24, 11000 / freq)) + 1)
+    blare = 0.45 + 0.55 * np.exp(-t / 0.09)
+    if dur > 0.7:
+        blare = blare + 0.18 * np.clip((t - 0.3) / max(dur - 0.3, 0.1), 0, 1)
+    vib = 0.0025 * np.clip((t - 0.25) / 0.3, 0, 1) * np.sin(2 * np.pi * 5.0 * t + r.uniform(0, 6.3))
+    scoop = -0.02 * np.exp(-t / 0.02)
+    phase = 2 * np.pi * freq * np.cumsum(1 + vib + scoop) / SR
+    sig = np.zeros(n)
+    for k, ph in zip(ks, r.uniform(0, 2 * np.pi, len(ks))):
+        lift = 1 + 0.6 * np.exp(-0.5 * (np.log2(k * freq / 1300) / 0.5) ** 2)
+        sig += lift * np.exp(-(k - 1) / (1.1 + 4.5 * blare)) * np.sin(k * phase + ph)
+    sig /= np.abs(sig).max() + 1e-9
+    lip = band(r.standard_normal(n), 600, 3000) * np.exp(-t / 0.015) * 0.18
+    out = (sig * _env(t, 0.012, dur, rel)) + lip
+    out *= 0.42 / (np.abs(out).max() + 1e-9)
     _cache[key] = out
     return out
 
 
-def synth_stab(chord: str, dur: float = 0.16, bright: float = 1.0) -> np.ndarray:
-    """Tight polyphonic synth-brass chord stab for offbeat accents."""
-    key = ("sstab", chord, round(dur, 3), round(bright, 2))
+def organ(freq: float, dur: float) -> np.ndarray:
+    """A portative organ: open flue pipes (8', 4' and a quint), a chiff as each pipe speaks."""
+    key = ("organ", round(freq, 2), round(dur, 3))
     if key in _cache:
         return _cache[key]
-    _, tones = CHORDS[chord]
-    pick = tones[1:4] if len(tones) >= 4 else tones[-3:]
-    n = max(64, int(SR * (dur + 0.06)))
-    t = np.arange(n, dtype=np.float64) / SR
-    out = np.zeros(n, dtype=np.float64)
-    for idx_t, name in enumerate(pick):
-        f0 = hz(name)
-        cutoff = f0 * (2.0 + 7.5 * bright * np.exp(-t / 0.075))
-        det = 1.0 + (idx_t - 1) * 0.0025
-        out += _harmonic_stack(f0 * det, t, cutoff, slopes=0.95, max_k=14)
-    env = np.minimum(t / 0.002, 1.0) * np.exp(-t / (dur * 0.65))
-    fade = min(n, int(0.015 * SR))
-    if fade > 0:
-        env[-fade:] *= np.linspace(1.0, 0.0, fade)
-    out = band(out * env * (0.20 / max(1, len(pick))), low=130.0, order=1)
+    rel = 0.06
+    n = int(SR * (dur + rel))
+    t = np.arange(n) / SR
+    r = _local(key)
+    sig = np.zeros(n)
+    for mult, partials in ((1.0, (1.0, .22, .09, .05)), (2.0012, (.36, .08)), (2.9985, (.12,))):
+        for j, a in enumerate(partials):
+            f = freq * mult * (j + 1)
+            if f < 12000:
+                sig += a * np.sin(2 * np.pi * f * t + r.uniform(0, 6.3))
+    sig *= 1 + 0.012 * _wander(n, 4.0, r)  # the bellows
+    sig /= np.abs(sig).max() + 1e-9
+    centre = min(freq * 3, 6000)
+    chiff = band(r.standard_normal(n), centre * 0.7, centre * 1.4) * np.exp(-t / 0.025) * 0.35
+    out = sig * _env(t, 0.025, dur, rel) + chiff * np.minimum(t / 0.002, 1)
+    out *= 0.40 / (np.abs(out).max() + 1e-9)
     _cache[key] = out
     return out
 
 
-def e_drum(kind: str) -> np.ndarray:
-    """Punchy 80s hybrid percussion: kick, snare, clap, hat_c, hat_o, tom."""
-    key = ("edrum", kind)
+def harp(freq: float, ring: float = 2.5) -> np.ndarray:
+    """A gut-strung medieval harp: plucked mid-string with the fingertip, rounder and longer than the lute."""
+    key = ("harp", round(freq, 2), round(ring, 2))
     if key in _cache:
         return _cache[key]
-    r_local = np.random.default_rng(700 + sum(ord(c) for c in kind))
-    if kind == "kick":
-        n = int(SR * 0.34)
+    n = int(SR * ring)
+    t = np.arange(n) / SR
+    r = _local(key)
+    out = np.zeros(n)
+    tau1 = 2.8 * (220.0 / freq) ** 0.45
+    for k in range(1, int(min(30, 9000 / freq)) + 1):
+        fk = k * freq * np.sqrt(1 + 0.00004 * k * k)
+        out += np.sin(np.pi * k * 0.28) / k ** 1.15 * np.exp(-t / (tau1 / (1 + 0.012 * k * k))) * np.sin(2 * np.pi * fk * t + r.uniform(0, 0.5))
+    attack = int(0.004 * SR)
+    out[:attack] += band(r.standard_normal(attack), 800, 3500) * 0.12 * np.linspace(1, 0, attack)
+    out *= np.minimum(t / 0.0012, 1.0)
+    out[-int(0.04 * SR):] *= np.linspace(1, 0, int(0.04 * SR))
+    out = 0.6 * out + 0.4 * band(out, low=110, order=1)
+    out *= 0.95 / (np.abs(out).max() + 1e-9)
+    _cache[key] = out
+    return out
+
+
+VOWELS = {  # men's voices: (formant Hz, height, bandwidth Hz)
+    "a": ((650, 1.0, 90), (1080, .45, 100), (2650, .28, 140), (2900, .2, 150)),
+    "o": ((420, 1.0, 80), (800, .4, 90), (2600, .12, 140)),
+    "u": ((330, 1.0, 70), (640, .25, 80), (2500, .08, 140)),
+}
+
+
+def choir(freq: float, dur: float, vowel: str = "o", voices: int = 4) -> np.ndarray:
+    """A few monks singing one vowel: each voice its own pitch wobble, the vowel's formants shaping all of them."""
+    key = ("choir", round(freq, 2), round(dur, 3), vowel, voices)
+    if key in _cache:
+        return _cache[key]
+    rel, att = 0.3, 0.22
+    n = int(SR * (dur + rel))
+    t = np.arange(n) / SR
+    r = _local(key)
+    out = np.zeros(n)
+    for v in range(voices):
+        f0 = freq * 2 ** ((v - (voices - 1) / 2) * 5 / 1200)
+        vib = 0.005 * np.clip((t - 0.25) / 0.4, 0, 1) * np.sin(2 * np.pi * r.uniform(4.6, 5.6) * t + r.uniform(0, 6.3)) + 0.0018 * _wander(n, 2.0, r)
+        phase = 2 * np.pi * f0 * np.cumsum(1 + vib) / SR
+        ks = np.arange(1, int(min(60, 5000 / f0)) + 1)
+        fk = ks * f0
+        amps = sum(a / (1 + ((fk - F) / bw) ** 2) for F, a, bw in VOWELS[vowel]) / ks ** 0.8 + 0.002
+        start = int(r.uniform(0, 0.05) * SR)  # singers never breathe in quite together
+        for k, a, ph in zip(ks, amps, r.uniform(0, 2 * np.pi, len(ks))):
+            out[start:] += a * np.sin(k * phase[:n - start] + ph)
+    out /= np.abs(out).max() + 1e-9
+    out += band(r.standard_normal(n), 400, 3000) * 0.012
+    out *= _env(t, att, dur, rel)
+    out *= 0.40 / (np.abs(out).max() + 1e-9)
+    _cache[key] = out
+    return out
+
+
+def handbell(freq: float, ring: float = 3.0) -> np.ndarray:
+    """A small bronze hand bell."""
+    key = ("handbell", round(freq, 2), ring)
+    if key in _cache:
+        return _cache[key]
+    n = int(SR * ring)
+    t = np.arange(n) / SR
+    out = np.zeros(n)
+    for ratio, a, tau in ((1.0, 1.0, 1.6), (2.0, .45, 1.0), (2.76, .3, .7), (5.4, .16, .3), (8.9, .08, .15)):
+        if freq * ratio < 15000:
+            out += a * np.exp(-t / tau) * np.sin(2 * np.pi * freq * ratio * t + ratio)
+    out *= np.minimum(t / 0.0015, 1.0)
+    out[-2000:] *= np.linspace(1, 0, 2000)
+    out *= 0.8 / (np.abs(out).max() + 1e-9)
+    _cache[key] = out
+    return out
+
+
+def buzz(freq: float, dur: float = 0.22) -> np.ndarray:
+    """The hurdy-gurdy's 'dog': a loose bridge that rattles when the player jerks the wheel."""
+    key = ("buzz", round(freq, 2), round(dur, 3))
+    if key in _cache:
+        return _cache[key]
+    n = int(SR * (dur + 0.03))
+    t = np.arange(n) / SR
+    ks = np.arange(1, int(min(70, 11000 / freq)) + 1)
+    sig = np.zeros(n)
+    for k in ks:
+        sig += (1 - np.exp(-k * freq / 1800)) * np.sin(2 * np.pi * k * freq * t + 0.3 * k)
+    sig /= np.abs(sig).max() + 1e-9
+    env = np.minimum(t / 0.004, 1) * np.exp(-t / (dur * 0.7)) * np.clip((dur + 0.03 - t) / 0.03, 0, 1)
+    out = band(sig * env, 500, 9000)
+    out *= 0.12 / (np.sqrt((out ** 2).mean()) + 1e-9)  # by loudness: a pulse train's peaks say little
+    _cache[key] = out
+    return out
+
+
+def _jingles(n: int, r, count: int, spread: float) -> np.ndarray:
+    """Loose brass discs knocking together: every disc its own inharmonic ring, all of them short."""
+    t = np.arange(n) / SR
+    out = np.zeros(n)
+    for _ in range(count):
+        off = int(r.uniform(0, spread) * SR)
+        tt = t[:n - off]
+        for f in r.uniform(2600, 11500, 5):
+            out[off:] += r.uniform(.3, 1) * np.sin(2 * np.pi * f * tt + r.uniform(0, 6.3)) * np.exp(-tt / r.uniform(.02, .07))
+    return out * 0.5 + band(r.standard_normal(n), 4500, 12000) * np.exp(-t / 0.025) * 1.2
+
+
+def perc(kind: str) -> np.ndarray:
+    """tabor (a drum with a gut snare across the skin), naker_hi/naker_lo (a pair of small kettle drums),
+    tamb (tambourine struck), jingle (tambourine shaken), zill (finger cymbals)."""
+    key = ("perc", kind)
+    if key in _cache:
+        return _cache[key]
+    r = np.random.default_rng(900 + sum(ord(c) for c in kind))
+    kind = kind.partition("#")[0]  # "jingle#2": another tambourine stroke, so a run of them never repeats exactly
+    if kind == "tabor":
+        n = int(SR * 0.45)
         t = np.arange(n) / SR
-        f = 48.0 + 132.0 * np.exp(-t / 0.016)
-        ph = 2.0 * np.pi * np.cumsum(f) / SR
-        body = np.sin(ph) * np.exp(-t / 0.145)
-        click = band(r_local.standard_normal(n), 900.0, 4800.0) * np.exp(-t / 0.004) * 0.55
-        out = np.tanh((body + click) * 1.45) * 0.72
-    elif kind == "snare":
-        n = int(SR * 0.26)
+        f = 150 + 60 * np.exp(-t / 0.015)
+        ph = 2 * np.pi * np.cumsum(f) / SR
+        body = np.sin(ph) * np.exp(-t / 0.09) + 0.4 * np.sin(1.6 * ph) * np.exp(-t / 0.05)
+        snare = band(r.standard_normal(n), 1800, 7500) * np.exp(-t / 0.1) * 0.6 + band(r.standard_normal(n), 700, 1800) * np.exp(-t / 0.045) * 0.3
+        out = body * 0.7 + snare
+    elif kind.startswith("naker"):
+        f0 = 205.0 if kind == "naker_hi" else 150.0
+        n = int(SR * 0.6)
         t = np.arange(n) / SR
-        tone = np.sin(2.0 * np.pi * np.cumsum(148.0 + 68.0 * np.exp(-t / 0.014)) / SR) * np.exp(-t / 0.068) * 0.72
-        gate = np.where(t < 0.075, 1.0, np.exp(-(t - 0.075) / 0.032))
-        noise = band(r_local.standard_normal(n), 850.0, 7200.0) * gate * 0.65
-        out = np.tanh((tone + noise) * 1.35) * 0.62
-    elif kind == "clap":
-        n = int(SR * 0.22)
+        bend = 1 + 0.05 * np.exp(-t / 0.02)
+        out = sum(a * np.exp(-t / d) * np.sin(2 * np.pi * np.cumsum(f0 * m * bend) / SR) for m, a, d in ((1, 1, .32), (1.5, .5, .22), (1.99, .35, .16), (2.44, .2, .11), (2.98, .12, .08)))
+        out += band(r.standard_normal(n), 2000, 6000) * np.exp(-t / 0.004) * 0.6
+    elif kind in ("tamb", "jingle"):
+        n = int(SR * 0.35)
         t = np.arange(n) / SR
-        env = sum(np.where(t >= d, np.exp(-(t - d) / 0.012), 0.0) for d in (0.0, 0.010, 0.021, 0.032))
-        tail = np.where(t >= 0.032, np.exp(-(t - 0.032) / 0.065), 0.0) * 0.85
-        out = band(r_local.standard_normal(n), 1050.0, 4600.0) * (env * 0.45 + tail) * 0.48
-    elif kind in ("hat_c", "hat_o"):
-        dur = 0.065 if kind == "hat_c" else 0.23
-        tau = 0.018 if kind == "hat_c" else 0.075
-        n = int(SR * dur)
+        out = _jingles(n, r, 7 if kind == "tamb" else 5, 0.012 if kind == "tamb" else 0.04) * (1.0 if kind == "tamb" else 0.6)
+        if kind == "tamb":
+            out += np.sin(2 * np.pi * 230 * t) * np.exp(-t / 0.03) * 1.2
+    else:  # zill
+        n = int(SR * 1.6)
         t = np.arange(n) / SR
-        metal = sum(np.sin(2.0 * np.pi * f * t + i) for i, f in enumerate((318.0, 476.0, 712.0, 1085.0, 1620.0)))
-        noise = r_local.standard_normal(n)
-        raw_h = band(metal * 0.25 + noise * 0.8, low=6200.0, order=2)
-        out = raw_h * np.exp(-t / tau) * (0.28 if kind == "hat_c" else 0.26)
-    else:  # tom
-        n = int(SR * 0.30)
-        t = np.arange(n) / SR
-        f = 84.0 + 70.0 * np.exp(-t / 0.025)
-        out = np.sin(2.0 * np.pi * np.cumsum(f) / SR) * np.exp(-t / 0.115) * 0.62
-    fade = min(len(out), 180)
-    out[-fade:] *= np.linspace(1.0, 0.0, fade)
-    out[:min(len(out), 44)] *= np.linspace(0.0, 1.0, min(len(out), 44))
+        out = sum(a * np.exp(-t / d) * (np.sin(2 * np.pi * f * t) + np.sin(2 * np.pi * f * 1.004 * t + 1)) for f, a, d in ((2780, 1, 1.2), (3910, .7, .9), (6620, .5, .6), (8240, .35, .45), (10230, .2, .3)))
+        out += band(r.standard_normal(n), 4000, 12000) * np.exp(-t / 0.003) * 0.8
+    out *= np.minimum(np.arange(len(out)) / 30.0, 1.0)
+    out[-200:] *= np.linspace(1, 0, 200)
+    out *= 1.0 / (np.abs(out).max() + 1e-9)
     _cache[key] = out
     return out
 
@@ -304,16 +472,19 @@ def room(seconds: float = 1.7, seed: int = 7) -> np.ndarray:
     return ir / np.sqrt((ir ** 2).sum(axis=0)).mean()
 
 
-ROOM = room()
+
+ROOM = room()  # a small stone hall
+CATHEDRAL = room(3.6, 11)  # the nave, for the dark theme and the lament
 
 
 class Mix:
     """A stereo timeline. With loop=True events are laid twice and the second pass is kept, so
     ringing strings and the room's tail wrap round the loop point."""
 
-    def __init__(self, seconds: float, loop: bool):
+    def __init__(self, seconds: float, loop: bool, ir: np.ndarray = None):
         self.length = int(round(seconds * SR))
         self.loop = loop
+        self.ir = ROOM if ir is None else ir
         self.total = self.length * (2 if loop else 1) + int(SR * 4)
         self.dry = np.zeros((self.total, 2))
         self.wet = np.zeros((self.total, 2))
@@ -331,12 +502,12 @@ class Mix:
             self.wet[start:end, 0] += part * left * send
             self.wet[start:end, 1] += part * right * send
 
-    def render(self, low_cut: float = 62.0) -> np.ndarray:
+    def render(self, low_cut: float = 55.0, air: float = 0.3) -> np.ndarray:
         out = self.dry.copy()
         for ch in range(2):
-            out[:, ch] += fftconvolve(self.wet[:, ch], ROOM[:, ch])[:self.total] * 0.5
+            out[:, ch] += fftconvolve(self.wet[:, ch], self.ir[:, ch])[:self.total] * 0.5
         out = band(out, low=low_cut)
-        out += 0.5 * band(out, low=2600, order=1)  # air: lifts the top octaves a few dB
+        out += air * band(out, low=2600, order=1)  # lifts the top octaves a little
         return out[self.length:self.length * 2] if self.loop else out[:self.length]
 
 
@@ -377,37 +548,425 @@ def human(amount: float = 0.006) -> float:
     return float(rng.normal(0, amount))
 
 
-def play_hybrid_tune(mix: Mix, bars: list, beat: float, start_beat: float = 0.0, gain: float = 0.48, pan: float = 0.12, doubled: bool = False, bright: float = 1.0) -> None:
-    """Biting synth-brass hook layered with lute pluck; chorus sections add octave gleam + recorder."""
+
+# ---- playing a written line ---------------------------------------------------------------------
+def midi(name: str) -> int:
+    return SEMITONE[name[:-1]] + 12 * (int(name[-1]) + 1)
+
+
+def lead_note(inst: str, f: float, sec: float):
+    """One melody note on `inst`, as (sound, reverb send)."""
+    if inst == "recorder":
+        return recorder(f, sec * 0.94), 0.32
+    if inst == "vielle":
+        return bowed(f, sec * 0.99 + 0.02, "vielle"), 0.30
+    if inst == "gurdy":
+        return bowed(f, sec * 0.97, "gurdy", att=0.02), 0.28
+    if inst in ("shawm", "crumhorn"):
+        return reed(f, sec * 0.9, inst), 0.26
+    if inst == "trumpet":
+        return trumpet(f, sec * 0.86), 0.30
+    if inst == "organ":
+        return organ(f, sec * 0.96), 0.36
+    if inst.startswith("choir"):
+        return choir(f, sec * 1.02 + 0.05, inst.partition(":")[2] or "o"), 0.45
+    if inst == "lute":
+        return pluck(f, min(2.0, sec + 0.6), 1.15), 0.24
+    if inst == "harp":
+        return harp(f, min(3.0, sec + 1.2)), 0.36
+    return handbell(f, 2.5), 0.40  # "bells"
+
+
+def play_line(mix: Mix, inst: str, bars: list, beat: float, start_beat: float, gain: float, pan: float, octave: int = 0, min_beats: float = 0.0) -> None:
+    """Bars of 'D5:1 A4:.5 R:1' on one instrument; notes shorter than `min_beats` are left to the others
+    (bells and the choir only take the long notes)."""
     at = start_beat
     for bar in bars:
+        first = True
         for pitch, beats in line(bar):
-            if pitch is not None:
-                f = hz(pitch)
-                dur = beats * beat
-                gate = 0.78 if beats <= 0.75 else (0.86 if beats <= 1.5 else 0.94)
-                pos = at * beat + human(0.002)
-                amp = gain * float(rng.uniform(0.95, 1.04))
-                mix.add(synth_brass(f, dur * gate, bright), pos, amp, pan, 0.24)
-                mix.add(pluck(f * 0.5, min(1.2, dur + 0.35), 1.3), pos, amp * 0.42, -pan * 1.4, 0.18)
-                if doubled:
-                    mix.add(synth_brass(f * 2.0, dur * gate * 0.9, bright * 1.05), pos, amp * 0.30, -pan, 0.28)
-                    if beats >= 0.75:
-                        mix.add(recorder(f, dur * 0.9), pos, amp * 0.26, pan * 1.3, 0.24)
+            if pitch is not None and beats >= min_beats - 1e-9:
+                sound, send = lead_note(inst, hz(pitch) * 2 ** octave, beats * beat)
+                accent = 1.08 if first else (0.93 if (at % 1) > 1e-6 else 1.0)
+                mix.add(sound, at * beat + human(0.004), gain * accent * float(rng.uniform(0.94, 1.04)), pan, send)
+            first = False
             at += beats
 
 
-def play_tune(mix: Mix, bars: list, beat: float, start_beat: float = 0.0, gain: float = 0.5, pan: float = 0.15, octave: int = 0, doubled: bool = False) -> None:
-    """A melody on the recorder; `doubled` adds the lute an octave below (plucked on every note)."""
-    at = start_beat
-    for bar in bars:
-        for pitch, beats in line(bar):
-            if pitch is not None:
-                f = hz(pitch) * 2 ** octave
-                mix.add(recorder(f, beats * beat * 0.94), at * beat + human(0.004), gain * float(rng.uniform(0.92, 1.05)), pan, 0.32)
-                if doubled:
-                    mix.add(pluck(f / 2, min(1.6, beats * beat + 0.5), 1.15), at * beat + human(0.004), gain * 0.55, -pan, 0.22)
-            at += beats
+def ornament(bar: str, th: dict, seed: int) -> str:
+    """A player's variation on a written bar: turns on long notes, passing notes across thirds."""
+    names = {SEMITONE[s]: s for s in th["scale"].split()}
+    pcs = sorted(names)
+    u = th.get("orn_unit", 0.25)
+    r = np.random.default_rng(seed)
+    notes = line(bar)
+    out = []
+
+    def spell(m: int) -> str:
+        return f"{names[m % 12]}{m // 12 - 1}"
+
+    for i, (p, b) in enumerate(notes):
+        nxt = notes[i + 1][0] if i + 1 < len(notes) else None
+        if p is None or b < 4 * u - 1e-9 or r.random() > 0.6:
+            out.append((p, b))
+            continue
+        m = midi(p)
+        if nxt is not None and 3 <= abs(midi(nxt) - m) <= 4:
+            lo, hi = sorted((m, midi(nxt)))
+            between = [x for x in range(lo + 1, hi) if x % 12 in pcs and x - lo <= 2 and hi - x <= 2]  # no augmented seconds
+            if between:
+                out += [(p, b - 2 * u), (spell(between[0]), 2 * u)]
+                continue
+        up = next(x for x in range(m + 1, m + 13) if x % 12 in pcs)
+        out += [(p, b - 2 * u), (spell(up), u), (p, u)]
+    return " ".join(f"{p or 'R'}:{b:g}" for p, b in out)
+
+
+def strong_tones(chord: str) -> tuple:
+    bass, tones = CHORDS[chord]
+    return bass, tones, tones[-3:]
+
+
+# ---- accompaniment (the always-on "lute" layer) -------------------------------------------------
+def quarter_lute(mix: Mix, chord: str, t0: float, beat: float) -> None:
+    bass, tones = CHORDS[chord]
+    for pos, name, g, ring in ((0, bass, .58, 2.6), (1, tones[2], .3, 1.5), (2, tones[0], .45, 2.2), (3, tones[min(3, len(tones) - 1)], .3, 1.5)):
+        mix.add(pluck(hz(name), ring, 1.0), t0 + pos * beat + human(), g * float(rng.uniform(.92, 1.05)), -.28 + .1 * pos, .26)
+
+
+def base_march(mix, chord, t0, beat, bar, sec, energy, th):
+    if energy == 0:
+        quarter_lute(mix, chord, t0, beat)
+    else:
+        lute_bar(mix, "vamp", chord, t0, beat, sec)
+    if energy >= 2 and bar % 2 == 1:
+        strum(mix, chord, t0 + 3.5 * beat, .14, .009, .6, -.32, up=True)
+
+
+def base_harp(mix, chord, t0, beat, bar, sec, energy, th):
+    bass, tones = CHORDS[chord]
+    pool = [hz(x) for x in tones] + [hz(x) * 2 for x in tones[1:3]]
+    seq = pool + pool[-2:0:-1]
+    step = .25 if energy else .5
+    for i in range(int(round(4 / step))):
+        idx = i % len(seq)
+        mix.add(harp(seq[idx], 2.2), t0 + i * step * beat + human(.003), (.3 if i % 4 == 0 else .21) * float(rng.uniform(.9, 1.05)), -.4 + .8 * idx / len(seq), .38)
+    mix.add(harp(hz(bass), 3.6), t0 + human(), .42, -.2, .3)
+    mix.add(organ(hz(bass) * 2, 4 * beat * .98), t0, .10, .15, .4)
+    mix.add(organ(hz(tones[0]) * 2, 4 * beat * .98), t0, .07, .22, .4)
+
+
+def base_dirge(mix, chord, t0, beat, bar, sec, energy, th):
+    bass, tones = CHORDS[chord]
+    mix.add(pluck(hz(bass), 4.5, .7), t0 + human(), .58, -.2, .4)
+    mix.add(pluck(hz(tones[0]), 3.5, .75), t0 + 2 * beat + human(), .36, -.05, .4)
+    if energy >= 1:
+        for i, name in enumerate(tones[1:4]):
+            mix.add(pluck(hz(name), 2.2, .9), t0 + (2.5 + i * .5) * beat + human(), .2, .15 + i * .1, .45)
+    if bar % 4 == 0:
+        mix.add(bell(hz(th["bell"]), 6.0), t0, .2, .3, .55)
+
+
+def base_riff(mix, chord, t0, beat, bar, sec, energy, th):
+    lute_bar(mix, "riff", chord, t0, beat, sec)
+    if energy >= 1:
+        for pos in (0, 1.5, 3):
+            mix.add(buzz(hz(th["drone"][0])), t0 + pos * beat + human(.002), .17 if pos == 0 else .12, .3, .2)
+
+
+def base_jig(mix, chord, t0, beat, bar, sec, energy, th):  # 6/8, beat = an eighth
+    bass, tones = CHORDS[chord]
+    for pos in range(6):
+        if pos in (0, 3):
+            mix.add(pluck(hz(bass if pos == 0 else tones[0]), 1.8, .95), t0 + pos * beat + human(), .56 if pos == 0 else .44, -.3, .24)
+        elif energy or pos in (2, 5):
+            name = tones[1 + pos % 3] if len(tones) > 3 else tones[-1]
+            mix.add(pluck(hz(name), 1.0, 1.1), t0 + pos * beat + human(), .27 * float(rng.uniform(.9, 1.06)), -.1 + .1 * (pos % 3), .24)
+    if energy >= 2:
+        mix.add(harp(hz(tones[-1]) * 2, 1.6), t0 + human(), .15, .42, .4)
+        mix.add(harp(hz(tones[-2]) * 2, 1.6), t0 + 3 * beat + human(), .13, .42, .4)
+
+
+def base_gallop(mix, chord, t0, beat, bar, sec, energy, th):  # 6/8 saltarello
+    bass, tones = CHORDS[chord]
+    for pos, name, g, ring in ((0, bass, .6, 1.6), (2, tones[2], .3, .9), (3, tones[0], .46, 1.4), (5, tones[3 % len(tones)], .3, .9)):
+        mix.add(pluck(hz(name), ring, 1.0), t0 + pos * beat + human(), g * float(rng.uniform(.92, 1.05)), -.3 + .08 * pos, .24)
+    if energy >= 1:
+        strum(mix, chord, t0 + human(), .12, .008, .7, -.3)
+    if energy >= 2:
+        for pos in (0, 3):
+            mix.add(buzz(hz(th["drone"][0]), .18), t0 + pos * beat, .14, .3, .2)
+
+
+def base_chop(mix, chord, t0, beat, bar, sec, energy, th):
+    bass, tones = CHORDS[chord]
+    for pos in (0, 1.5, 3):
+        mix.add(pluck(hz(bass), 1.4, .9), t0 + pos * beat + human(), .6 if pos == 0 else .45, -.3, .22)
+        mix.add(pluck(hz(tones[0]), 1.2, .95), t0 + pos * beat + .012, .3, -.15, .22)
+    for pos in ((.5, 1, 2, 2.5, 3.5) if energy else (1, 3)):
+        for j, name in enumerate(tones[1:3]):
+            mix.add(bowed(hz(name) * 2, .13, "vielle", att=.012), t0 + pos * beat + human(.003), .15, .2 + .1 * j, .25)
+
+
+def base_epic(mix, chord, t0, beat, bar, sec, energy, th):
+    bass = CHORDS[chord][0]
+    if energy:
+        lute_bar(mix, "vamp", chord, t0, beat, sec)
+    else:
+        quarter_lute(mix, chord, t0, beat)
+    f = hz(bass) * (2 if hz(bass) < 80 else 1)
+    for half in (0, 2):
+        mix.add(bowed(f, 2 * beat * .95, "bass", att=.04), t0 + half * beat, .2, -.1, .3)
+    if energy >= 1:
+        for pos in (0, 2):
+            mix.add(buzz(hz(th["drone"][0]) * 2), t0 + pos * beat + human(.002), .13, .3, .2)
+
+
+# ---- percussion layer ---------------------------------------------------------------------------
+def hit(mix: Mix, kind: str, at: float, gain: float, pan: float = 0.0, send: float = 0.2) -> None:
+    if kind in ("tamb", "jingle"):
+        kind += f"#{int(rng.integers(4))}"
+    sound = drum(kind) if kind in ("dum", "tak", "war", "shake") else perc(kind)
+    mix.add(sound, at + human(0.003), gain * float(rng.uniform(0.93, 1.05)), pan, send)
+
+
+def roll(mix: Mix, kind: str, start: float, count: int, step: float, g0: float, g1: float, pan: float = 0.1) -> None:
+    for j in range(count):
+        hit(mix, kind, start + j * step, g0 + (g1 - g0) * j / max(1, count - 1), pan, .22)
+
+
+def drums_march(mix, t0, beat, bar, sec, energy, th):
+    fill = bar % 8 == 7
+    hit(mix, "dum", t0, .6)
+    hit(mix, "dum", t0 + 2 * beat, .48)
+    hit(mix, "tabor", t0 + beat, .42, .12)
+    if not fill:
+        hit(mix, "tabor", t0 + 3 * beat, .42, .12)
+    if energy >= 1:
+        hit(mix, "dum", t0 + 2.5 * beat, .28)
+        hit(mix, "tabor", t0 + 3.5 * beat, .13, .12)
+        for i in range(8):
+            hit(mix, "tamb" if i in (2, 6) else "jingle", t0 + i * beat / 2, .26 if i in (2, 6) else .17, .45)
+    else:
+        for i in range(4):
+            hit(mix, "jingle", t0 + i * beat, .18, .45)
+    if fill:
+        roll(mix, "tabor", t0 + 2 * beat, 8, beat / 4, .1, .4)
+
+
+def drums_magic(mix, t0, beat, bar, sec, energy, th):
+    hit(mix, "dum", t0, .45, 0, .35)
+    if energy >= 1:
+        hit(mix, "dum", t0 + 2.5 * beat, .25, 0, .35)
+        for i in range(8):
+            hit(mix, "jingle", t0 + i * beat / 2, .13 if i % 2 else .17, .45, .35)
+    if energy >= 1 or bar % 2 == 0:
+        for pos in (1, 3):
+            hit(mix, "zill", t0 + pos * beat, .15, -.4, .45)
+    if energy >= 2:
+        hit(mix, "naker_lo", t0, .26, -.15)
+        hit(mix, "naker_hi", t0 + 1.5 * beat, .2, .15)
+        hit(mix, "naker_hi", t0 + 3.5 * beat, .2, .15)
+    if bar % 8 == 7:
+        roll(mix, "naker_hi", t0 + 2 * beat, 8, beat / 4, .08, .3, .15)
+
+
+def drums_heartbeat(mix, t0, beat, bar, sec, energy, th):
+    fill = bar % 8 == 7
+    hit(mix, "war", t0, .6, 0, .35)
+    hit(mix, "war", t0 + .5 * beat, .36, 0, .35)
+    if energy >= 1 and not fill:
+        hit(mix, "war", t0 + 2 * beat, .4, 0, .35)
+        hit(mix, "war", t0 + 2.5 * beat, .24, 0, .35)
+    if bar % 2 == 1:
+        hit(mix, "tak", t0 + 3.5 * beat, .18, .3, .45)
+    if bar % 4 == 2:
+        hit(mix, "zill", t0, .08, -.45, .6)
+    if fill:
+        roll(mix, "war", t0 + 2 * beat, 4, beat / 2, .2, .5, 0)
+
+
+def drums_tribal(mix, t0, beat, bar, sec, energy, th):
+    for pos, g in ((0, .62), (1.5, .5), (3, .46)):
+        hit(mix, "war", t0 + pos * beat, g, 0, .25)
+    if energy >= 1:
+        for pos in (1, 2.5):
+            hit(mix, "dum", t0 + pos * beat, .3, -.12)
+        for i, kind in enumerate(("naker_lo", "naker_hi", "naker_hi", "naker_lo", "naker_hi", "naker_hi", "naker_lo", "naker_hi")):
+            hit(mix, kind, t0 + i * beat / 2, .22 if kind == "naker_lo" else .15, -.2 if kind == "naker_lo" else .2)
+    if energy >= 2:
+        hit(mix, "tabor", t0 + 2 * beat, .36, .1)
+        for i in range(8):
+            hit(mix, "tamb" if i in (0, 3, 6) else "jingle", t0 + i * beat / 2, .2 if i in (0, 3, 6) else .13, .45)
+    if bar % 8 == 7:
+        roll(mix, "tabor", t0 + 2 * beat, 8, beat / 4, .12, .42)
+
+
+def drums_jig(mix, t0, beat, bar, sec, energy, th):
+    fill = bar % 8 == 7
+    hit(mix, "dum", t0, .55)
+    hit(mix, "dum", t0 + 3 * beat, .4)
+    hit(mix, "tabor" if energy else "tak", t0 + 2 * beat, .3, .12)
+    if not fill:
+        hit(mix, "tabor" if energy else "tak", t0 + 5 * beat, .3, .12)
+    for i in range(6):
+        hit(mix, "jingle", t0 + i * beat, .22 if i in (0, 3) else .13, .45)
+    if energy >= 2:
+        for pos in (1, 4):
+            hit(mix, "naker_hi", t0 + pos * beat, .14, -.2)
+    if fill:
+        roll(mix, "tabor", t0 + 3 * beat, 6, beat / 2, .15, .42)
+
+
+def drums_gallop(mix, t0, beat, bar, sec, energy, th):
+    fill = bar % 8 == 7
+    hit(mix, "war", t0, .55, 0, .25)
+    hit(mix, "dum", t0 + 3 * beat, .42)
+    for pos in (2, 5):
+        if not (fill and pos == 5):
+            hit(mix, "tabor" if energy else "tak", t0 + pos * beat, .34, .12)
+    for pos in (0, 2, 3, 5):
+        hit(mix, "tamb" if pos in (0, 3) else "jingle", t0 + pos * beat, .2, .45)
+    if energy >= 2:
+        for i in range(6):
+            hit(mix, "naker_lo" if i % 3 == 0 else "naker_hi", t0 + i * beat, .14, -.2)
+    if fill:
+        roll(mix, "tabor", t0 + 3 * beat, 6, beat / 2, .15, .45)
+
+
+def drums_duel(mix, t0, beat, bar, sec, energy, th):
+    hit(mix, "dum", t0, .5)
+    for i in range(8):
+        low = i in (0, 3, 6)
+        hit(mix, "naker_lo" if low else "naker_hi", t0 + i * beat / 2, .3 if low else .17, -.2 if low else .2)
+    if energy >= 1:
+        for pos in (1, 3):
+            hit(mix, "tabor", t0 + pos * beat, .4, .1)
+    if energy >= 2:
+        for i in range(8):
+            hit(mix, "jingle", t0 + i * beat / 2, .14, .45)
+    if bar % 8 == 7:
+        roll(mix, "tabor", t0 + 2 * beat, 8, beat / 4, .12, .42)
+
+
+def drums_epic(mix, t0, beat, bar, sec, energy, th):
+    fill = bar % 8 == 7
+    hit(mix, "war", t0, .62, 0, .25)
+    hit(mix, "war", t0 + 2 * beat, .5, 0, .25)
+    hit(mix, "tabor", t0 + beat, .44, .1)
+    if not fill:
+        hit(mix, "tabor", t0 + 3 * beat, .44, .1)
+        hit(mix, "tabor", t0 + 3.75 * beat, .18, .1)
+    for i in range(8):
+        hit(mix, "tamb" if i in (2, 6) else "jingle", t0 + i * beat / 2, .22 if i in (2, 6) else .14, .45)
+    if energy >= 2:
+        for i in (1, 3, 5, 7):
+            hit(mix, "war", t0 + i * beat / 2, .2, 0, .25)
+    if fill:
+        roll(mix, "tabor", t0 + 2 * beat, 8, beat / 4, .12, .45)
+        hit(mix, "war", t0 + 3.5 * beat, .45)
+
+
+# ---- tension layer (raised when the battle turns dangerous or decisive) -------------------------
+def tension_fanfare(mix, chord, t0, beat, bar, sec, energy, th):
+    bass, tones, hi = strong_tones(chord)
+    for pos, d, i in ((0, .75, 2), (.75, .25, 1), (1, 1, 0), (2, .75, 2), (2.75, .25, 1), (3, 1, 1)):
+        mix.add(reed(hz(hi[i]), d * beat * .85, "shawm"), t0 + pos * beat + human(.003), .3 if d >= .75 else .24, .3, .25)
+    for i in range(4):
+        hit(mix, "war", t0 + i * beat, .5 if i == 0 else .32)
+    for i in range(16):
+        hit(mix, "jingle", t0 + i * beat / 4, .11 if i % 2 else .15, .45)
+    if bar % 4 == 3:
+        roll(mix, "tabor", t0 + 2 * beat, 8, beat / 4, .12, .4)
+
+
+def tension_spark(mix, chord, t0, beat, bar, sec, energy, th):
+    bass, tones = CHORDS[chord]
+    pool = [hz(x) * 2 for x in tones[1:]]
+    seq = pool[::-1] + pool[1:-1]
+    for i in range(16):
+        mix.add(harp(seq[i % len(seq)], 1.6), t0 + i * beat / 4 + human(.002), .2 if i % 4 == 0 else .14, .4 - .8 * (i % len(seq)) / len(seq), .4)
+        hit(mix, "naker_hi", t0 + i * beat / 4, .17 if i % 4 == 0 else .07, .2)
+    for pos in range(4):
+        hit(mix, "zill", t0 + pos * beat, .1, -.4, .45)
+    mix.add(organ(hz(tones[0]) * 4, 4 * beat * .98), t0, .08, -.2, .45)
+
+
+def tension_dread(mix, chord, t0, beat, bar, sec, energy, th):
+    bass, tones = CHORDS[chord]
+    root = hz(bass) * (2 if hz(bass) < 100 else 1)
+    for i in range(16):
+        at = t0 + i * beat / 4
+        mix.add(bowed(root, beat / 4 * .95, "vielle", att=.008), at + human(.002), .15 if i % 4 == 0 else .1, -.25, .3)
+        mix.add(bowed(root * 1.5, beat / 4 * .95, "vielle", att=.008), at + human(.002), .08, .25, .3)
+    for f in (root, root * 1.5, root * 2):
+        mix.add(choir(f, 4 * beat, "a"), t0, .17, 0, .5)
+    for i in range(8):
+        hit(mix, "war", t0 + i * beat / 2, .5 if i == 0 else (.36 if i == 4 else .22), 0, .3)
+
+
+def tension_horde(mix, chord, t0, beat, bar, sec, energy, th):
+    bass, tones = CHORDS[chord]
+    for i in range(8):
+        accent = i in (0, 3, 6)
+        mix.add(buzz(hz(th["drone"][0]), .16), t0 + i * beat / 2, .2 if accent else .11, .3, .2)
+        hit(mix, "war", t0 + i * beat / 2, .5 if accent else .25, 0, .25)
+    if bar % 2 == 0:
+        root = hz(bass) * (2 if hz(bass) < 130 else 1)
+        for pos, f, d in ((0, root, 1.3), (1.5, root * 1.5, 1.3), (3, root * 2, .9)):
+            mix.add(trumpet(f, d * beat), t0 + pos * beat + human(.003), .32, -.25, .3)
+
+
+def tension_reel(mix, chord, t0, beat, bar, sec, energy, th):  # 6/8
+    bass, tones = CHORDS[chord]
+    pool = [hz(x) * 2 for x in tones[1:4]] + [hz(tones[1]) * 4]
+    seq = pool + pool[-2:0:-1]
+    for i in range(6):
+        mix.add(bowed(seq[(i + bar) % len(seq)], beat * .9, "vielle", att=.015), t0 + i * beat + human(.003), .34 if i in (0, 3) else .25, -.25, .28)
+        hit(mix, "tabor", t0 + i * beat, .38 if i in (0, 3) else .17, .1)
+    for pos in (0, 3):
+        mix.add(reed(hz(tones[-1]), beat * 1.6, "shawm"), t0 + pos * beat, .3, .3, .25)
+    hit(mix, "war", t0, .4, 0, .25)
+
+
+def tension_charge(mix, chord, t0, beat, bar, sec, energy, th):  # 6/8
+    bass, tones, hi = strong_tones(chord)
+    for pos, d, i in ((0, 2, 0), (2, 1, 1), (3, 2, 2), (5, 1, 1)):
+        mix.add(trumpet(hz(hi[i]), d * beat * .85), t0 + pos * beat + human(.003), .3, -.25, .3)
+    hit(mix, "war", t0, .5, 0, .25)
+    hit(mix, "war", t0 + 3 * beat, .42, 0, .25)
+    for i in range(6):
+        hit(mix, "jingle", t0 + i * beat, .15, .45)
+    if bar % 4 == 3:
+        roll(mix, "tabor", t0 + 3 * beat, 6, beat / 2, .15, .42)
+
+
+def tension_clash(mix, chord, t0, beat, bar, sec, energy, th):
+    bass, tones = CHORDS[chord]
+    for i in range(16):
+        for j, name in enumerate(tones[1:3]):
+            mix.add(bowed(hz(name) * 2, beat / 4 * .95, "vielle", att=.008), t0 + i * beat / 4 + human(.002), .09 if i % 4 else .13, -.3 + .2 * j, .3)
+    for pos in (0, 1.5, 3):
+        mix.add(trumpet(hz(tones[-1]), .3), t0 + pos * beat + human(.003), .3, .25, .3)
+    for i in range(8):
+        hit(mix, "war", t0 + i * beat / 2, .5 if i in (0, 3, 6) else .24, 0, .25)
+
+
+def tension_siege(mix, chord, t0, beat, bar, sec, energy, th):
+    bass, tones = CHORDS[chord]
+    root = hz(bass) * (2 if hz(bass) < 100 else 1)
+    for f in (root, root * 1.5, root * 2):
+        mix.add(choir(f, 4 * beat, "a"), t0, .16, 0, .5)
+    if bar % 2 == 0:
+        mix.add(bell(hz(th["bell"]), 5.0), t0, .2, .3, .5)
+    for pos in (0, 2.5):
+        mix.add(trumpet(hz(tones[-1]), .35), t0 + pos * beat + human(.003), .28, -.25, .3)
+    for i in range(8):
+        hit(mix, "war", t0 + i * beat / 2, .5 if i in (0, 4) else .24, 0, .25)
+
+
+BASES = {"march": base_march, "harp": base_harp, "dirge": base_dirge, "riff": base_riff, "jig": base_jig, "gallop": base_gallop, "chop": base_chop, "epic": base_epic}
+DRUMS = {"march": drums_march, "magic": drums_magic, "heartbeat": drums_heartbeat, "tribal": drums_tribal, "jig": drums_jig, "gallop": drums_gallop, "duel": drums_duel, "epic": drums_epic}
+TENSIONS = {"fanfare": tension_fanfare, "spark": tension_spark, "dread": tension_dread, "horde": tension_horde, "reel": tension_reel, "charge": tension_charge, "clash": tension_clash, "siege": tension_siege}
 
 
 CHORDS = {
@@ -433,6 +992,7 @@ CHORDS = {
     "E7": ("E2", ["B2", "E3", "G#3", "D4", "E4", "G#4"]),
     "G7": ("G2", ["D3", "G3", "B3", "F4", "G4"]),
     "B7": ("B2", ["F#3", "B3", "D#4", "A4", "B4"]),
+    "E": ("E2", ["B2", "E3", "G#3", "B3", "E4", "G#4"]),
 }
 
 
@@ -444,45 +1004,6 @@ def strum(mix: Mix, chord: str, at: float, gain: float = 0.5, spread: float = 0.
     for i, name in enumerate(notes):
         mix.add(pluck(hz(name), ring, 1.1), at + i * spread + human(0.002), gain * (1.0 if i == 0 else 0.7) * float(rng.uniform(0.9, 1.05)), pan + i * 0.05, 0.3)
 
-
-# ---- the pieces -------------------------------------------------------------------------------
-def menu() -> None:
-    """標題與選單：三拍子魯特琴分解和弦×溫暖合成貝斯與水晶音序，D Dorian，92 拍。"""
-    beat = 60 / 92
-    prog = ["Dm", "Dm", "C", "C", "Dm", "G", "Am", "Dm", "F", "C", "Dm", "Am", "F", "G", "Am", "Dm"]
-    arps = {"Dm": ["A3", "D4", "F4", "D4", "A3"], "C": ["G3", "C4", "E4", "C4", "G3"], "G": ["B3", "D4", "G4", "D4", "B3"], "Am": ["A3", "C4", "E4", "C4", "A3"], "F": ["A3", "C4", "F4", "C4", "A3"]}
-    tune = ["D5:2 E5:1", "F5:1 E5:1 D5:1", "C5:2 E5:1", "G4:3", "A4:1 D5:1 F5:1", "G5:2 F5:1", "E5:1.5 D5:.5 C5:1", "D5:3",
-            "F5:2 A5:1", "G5:1 E5:1 C5:1", "D5:1 F5:1 A5:1", "E5:3", "F5:1 E5:1 D5:1", "B4:1 D5:1 G5:1", "E5:1.5 C5:.5 E5:1", "D5:3"]
-    mix = Mix(32 * 3 * beat, True)
-    for bar in range(32):
-        chord = prog[bar % 16]
-        t0 = bar * 3 * beat
-        second = bar >= 16
-        f_bass = hz(CHORDS[chord][0])
-        mix.add(pluck(f_bass, 3.0, 0.85), t0 + human(), 0.56, -0.14, 0.28)
-        mix.add(synth_bass(f_bass, 1.45 * beat, 0.72 if not second else 0.82), t0, 0.34 if not second else 0.40, -0.08, 0.14)
-        for i, name in enumerate(arps[chord]):
-            mix.add(pluck(hz(name), 2.1, 0.98), t0 + (i + 1) * beat / 2 + human(), 0.33 * (1.12 if i == 2 else 1.0) * float(rng.uniform(0.88, 1.06)), -0.25 + i * 0.1, 0.28)
-            if second and i in (1, 3):
-                mix.add(synth_arp(hz(name) * 2.0, beat * 0.45, 0.85), t0 + (i + 1) * beat / 2 + human(0.002), 0.11, 0.32 if i == 1 else -0.30, 0.26)
-        if second:
-            mix.add(synth_bass(hz(arps[chord][0]) * 0.5, 0.65 * beat, 0.74), t0 + 2.0 * beat, 0.24, 0.08, 0.14)
-            mix.add(e_drum("kick"), t0, 0.36, 0.0, 0.12)
-            mix.add(e_drum("hat_c"), t0 + 1.0 * beat, 0.12, 0.30, 0.12)
-            mix.add(e_drum("hat_c"), t0 + 2.0 * beat, 0.14, -0.25, 0.12)
-            mix.add(drum("shake"), t0 + 2.5 * beat, 0.11, 0.38, 0.18)
-            if bar % 2 == 1:
-                mix.add(pluck(hz(arps[chord][2]) * 2, 1.8, 1.25), t0 + 2.5 * beat + human(), 0.22, 0.45, 0.38)
-    play_tune(mix, tune, beat, 16 * 3, 0.38, 0.20)
-    play_hybrid_tune(mix, tune, beat, 16 * 3, 0.24, -0.14, doubled=False, bright=0.80)
-    save("menu", level([mix.render(45.0)], 0.85)[0], quality=4)
-
-
-# ---- battle themes (2026-11-22) --------------------------------------------------------------
-# One theme per faction of the enemy lord: 經典 normal, 魔法 magic, 黑暗 dark, 魔物 beast. Each is 64 bars
-# (two to three minutes before it repeats) in eight 8-bar sections, written as four loops of the same
-# length that play in step (music_player.gd): lute (always), drums (from noon), tune (from dusk) and
-# tension (raised whenever the battle turns dangerous or decisive).
 
 
 def lute_bar(mix: Mix, style: str, chord: str, t0: float, beat: float, section: int) -> None:
@@ -518,412 +1039,215 @@ def lute_bar(mix: Mix, style: str, chord: str, t0: float, beat: float, section: 
         strum(mix, chord, t0 + 2 * beat, 0.16, 0.01, 0.9, 0.3, up=True)
 
 
-def drum_bar(mix: Mix, style: str, t0: float, beat: float, bar: int) -> None:
-    fill = bar % 8 == 7
-    for i in range(8):
-        at = t0 + i * beat / 2 + human(0.004)
-        if style == "march":
-            mix.add(drum("shake"), at, 0.16 * (1.5 if i % 2 == 0 else 1.0), 0.5, 0.2)
-            if i in (0, 3, 4) and not (fill and i == 4):
-                mix.add(drum("dum"), at, 0.62 if i == 0 else 0.42, 0.05, 0.2)
-            if i in (2, 6) and not fill:
-                mix.add(drum("tak"), at, 0.34, 0.25, 0.25)
-        elif style == "light":
-            if i % 2 == 0 or bar % 2 == 1:
-                mix.add(drum("shake"), at, 0.2 * (1.4 if i % 4 == 0 else 1.0), 0.45, 0.35)
-            if i in (2, 6) and not fill:
-                mix.add(drum("tak"), at, 0.4, 0.3, 0.4)
-            if i == 0 or (i == 5 and bar % 2 == 1):
-                mix.add(drum("dum"), at, 0.6 if i == 0 else 0.4, 0.0, 0.35)
-        elif style == "heartbeat":
-            if i in (0, 1):
-                mix.add(drum("war"), at, 0.55 if i == 0 else 0.32, 0.0, 0.35)
-            if i == 6 and bar % 2 == 1 and not fill:
-                mix.add(drum("tak"), at, 0.22, 0.3, 0.45)
-            if i in (2, 6):
-                mix.add(drum("shake"), at, 0.08, 0.5, 0.4)
-        else:  # "tribal"
-            if i in (0, 3, 6):
-                mix.add(drum("war"), at, 0.58 if i == 0 else 0.44, 0.0, 0.25)
-            if i in (2, 5) and not fill:
-                mix.add(drum("dum"), at, 0.34, -0.15, 0.25)
-            if i == 4:
-                mix.add(drum("tak"), at, 0.32, 0.3, 0.25)
-            for half in range(2):
-                mix.add(drum("shake"), at + half * beat / 4, 0.1 * (1.5 if half == 0 else 1.0), 0.55, 0.2)
-    if fill:  # a run of strokes into the next phrase
-        for j in range(8):
-            mix.add(drum("dum" if style == "heartbeat" else "tak"), t0 + (2 + j / 4) * beat + human(0.003), 0.16 + 0.035 * j, 0.25, 0.25)
 
-
-def tension_bar(mix: Mix, chord: str, t0: float, beat: float, bar: int) -> None:
-    """The danger layer: war drum on every eighth, the root hammered low, a high ostinato on the chord."""
-    bass, tones = CHORDS[chord]
-    high = tones[-3:]
-    for i in range(8):
-        at = t0 + i * beat / 2 + human(0.003)
-        accent = i in (0, 3, 6)
-        mix.add(drum("war"), at, 0.5 if accent else 0.24, 0.0, 0.22)
-        mix.add(pluck(hz(bass), 0.4, 0.8), at, 0.42 if accent else 0.26, -0.35, 0.15)
-        mix.add(pluck(hz(high[i % 3]) * 2, 0.7, 1.3), at + 0.008, 0.2 if accent else 0.13, 0.4, 0.3)
-    if bar % 4 == 3:  # a rim roll into the next four bars
-        for j in range(8):
-            mix.add(drum("tak"), t0 + (2 + j / 4) * beat, 0.18 + 0.04 * j, 0.2, 0.2)
-
-
-# ---- high-energy hybrid themes (Axel-F bounce × medieval parchment, 2026-11-23) -----------------
-BASS_GROOVES = {
-    "march": [
-        (0, 0, 2.2, 1.00), (3, 1, 1.3, 0.84), (4, 0, 1.8, 0.88), (6, 2, 1.5, 0.86),
-        (8, 0, 2.0, 0.96), (11, 1, 1.3, 0.86), (12, 2, 1.6, 0.90), (14, 1, 1.4, 0.84),
-    ],
-    "arp": [
-        (0, 0, 2.4, 1.00), (2, 1, 1.4, 0.82), (4, 2, 1.5, 0.84), (6, 1, 1.4, 0.80),
-        (8, 0, 2.2, 0.96), (10, 2, 1.4, 0.82), (12, 1, 1.5, 0.86), (14, 3, 1.3, 0.82),
-    ],
-    "heartbeat": [
-        (0, 0, 2.6, 1.00), (3, 0, 1.5, 0.86), (6, 2, 1.4, 0.78),
-        (8, 0, 2.4, 0.96), (11, 1, 1.5, 0.88), (14, 2, 1.3, 0.80),
-    ],
-    "tribal": [
-        (0, 0, 2.0, 1.00), (3, 1, 1.2, 0.86), (6, 0, 2.0, 0.96), (8, 2, 1.3, 0.84),
-        (10, 1, 1.3, 0.86), (12, 0, 1.8, 0.94), (14, 2, 1.2, 0.86),
-    ],
-    "axel": [
-        (0, 0, 2.2, 1.00), (3, 1, 1.4, 0.88), (4, 0, 1.6, 0.78), (6, 2, 1.6, 0.90),
-        (8, 1, 2.0, 0.95), (10, 0, 1.5, 0.82), (11, 2, 1.3, 0.84), (12, 0, 1.8, 0.92), (14, 1, 1.5, 0.88),
-    ],
-    "gallop": [
-        (0, 0, 1.8, 1.00), (2, 0, 1.3, 0.76), (3, 1, 1.3, 0.88), (4, 0, 1.8, 0.88), (6, 2, 1.5, 0.86),
-        (8, 0, 1.8, 0.96), (10, 0, 1.3, 0.76), (11, 1, 1.3, 0.88), (12, 2, 1.6, 0.90), (14, 1, 1.4, 0.88), (15, 2, 0.9, 0.72),
-    ],
-    "funk": [
-        (0, 0, 2.0, 1.00), (3, 1, 1.2, 0.90), (6, 0, 1.4, 0.85), (7, 2, 1.2, 0.78),
-        (8, 1, 1.8, 0.95), (10, 2, 1.4, 0.84), (12, 0, 1.6, 0.90), (14, 3, 1.3, 0.86), (15, 1, 0.9, 0.75),
-    ],
-    "blitz": [
-        (0, 0, 1.5, 1.00), (2, 1, 1.2, 0.82), (4, 0, 1.5, 0.92), (6, 2, 1.2, 0.84),
-        (8, 0, 1.5, 0.98), (10, 1, 1.2, 0.84), (11, 0, 1.0, 0.76), (12, 2, 1.5, 0.92), (14, 1, 1.4, 0.88),
-    ],
-}
-
-
-def hybrid_base_bar(mix: Mix, groove: str, chord: str, t0: float, beat: float, bar: int) -> None:
-    bass, tones = CHORDS[chord]
-    f_root = hz(bass)
-    f_oct = f_root * 2.0
-    f_fifth = hz(tones[0]) if len(tones) > 0 else f_root * 1.5
-    f_hi = hz(tones[min(2, len(tones) - 1)])
-    pitches = (f_root, f_oct, f_fifth, f_hi)
-    s16 = beat / 4.0
-    bright_b = 0.86 if groove == "heartbeat" else 1.0
-    for step, deg, gate16, weight in BASS_GROOVES[groove]:
-        at = t0 + step * s16 + human(0.002)
-        f = pitches[deg]
-        mix.add(synth_bass(f, gate16 * s16, (0.95 if weight > 0.85 else 0.78) * bright_b), at, 0.56 * weight, -0.10, 0.10)
-        if step in (0, 6, 8, 14) or (groove == "heartbeat" and step in (3, 11)):
-            mix.add(pluck(f * 2.0, 0.85, 1.25), at, 0.22 * weight, -0.28, 0.18)
-    arp_idx = (1, 2, 3, 2, 1, 3)
-    for k_i, step in enumerate((2, 4, 7, 10, 13, 15)):
-        note_name = tones[arp_idx[k_i] % len(tones)]
-        mix.add(synth_arp(hz(note_name), s16 * 1.4, 1.05 if groove == "arp" else 0.95), t0 + step * s16 + human(0.002), 0.14 if step in (2, 10) else 0.10, 0.34 - (k_i % 2) * 0.22, 0.24)
-    if groove == "arp":
-        mix.add(pluck(hz(tones[-1]) * 2.0, 1.8, 1.35), t0 + human(0.002), 0.16, 0.44, 0.36)
-        for st in (0, 6, 8, 12):
-            mix.add(synth_arp(hz(tones[st % len(tones)]) * 2.0, s16 * 1.2, 1.1), t0 + st * s16, 0.09, -0.35 if st % 8 == 0 else 0.35, 0.30)
-    if bar % 2 == 1:
-        strum(mix, chord, t0 + 3.5 * beat, 0.14, 0.009, 0.55, -0.32, up=True)
-
-
-def hybrid_drum_bar(mix: Mix, style: str, t0: float, beat: float, bar: int) -> None:
-    s16 = beat / 4.0
-    fill4 = (bar % 8 == 3)
-    fill8 = (bar % 8 == 7)
-    kick_map = {
-        "march": (0, 4, 6, 8, 12, 14),
-        "arp": (0, 6, 8, 12, 14),
-        "heartbeat": (0, 3, 8, 11),
-        "tribal": (0, 3, 6, 8, 12, 14),
-        "axel": (0, 6, 8, 14),
-        "funk": (0, 6, 8, 14),
-    }
-    kicks = kick_map.get(style, (0, 4, 8, 12, 14))
-    war_steps = (0, 3, 6) if style == "tribal" else ((0, 3, 8, 11) if style == "heartbeat" else (0, 8))
-    for step in range(16):
-        at = t0 + step * s16 + human(0.002)
-        if step in kicks or (style in ("axel", "funk") and step == 12 and bar % 2 == 0):
-            primary = step in ((0, 6, 12) if style == "tribal" else ((0, 3, 8, 11) if style == "heartbeat" else (0, 8)))
-            mix.add(e_drum("kick"), at, 0.74 if primary else 0.54, 0.0, 0.08)
-        if step in war_steps:
-            mix.add(drum("war"), at, 0.30 if step in (0, 8) else 0.24, 0.0, 0.18)
-        if step in (4, 12) and not (fill8 and step == 12):
-            mix.add(e_drum("snare"), at, 0.62, 0.05, 0.20)
-            mix.add(e_drum("clap"), at + 0.003, 0.36, -0.18 if step == 4 else 0.18, 0.24)
-            if style in ("march", "tribal"):
-                mix.add(drum("tak"), at, 0.18, 0.22, 0.20)
-        if not (fill8 and step >= 12):
-            if step == 14 and style != "blitz" or (style == "arp" and step == 10):
-                mix.add(e_drum("hat_o"), at, 0.28, 0.42, 0.18)
-            elif step % 2 == 0 or style in ("blitz", "axel", "arp", "tribal"):
-                accent = 1.25 if step % 4 == 2 else (0.95 if step % 4 == 0 else 0.56)
-                mix.add(e_drum("hat_c"), at, 0.22 * accent, 0.38 if step % 2 == 0 else -0.35, 0.10)
-        if step in (2, 10) and style in ("axel", "funk", "march"):
-            mix.add(drum("shake"), at, 0.14, -0.45, 0.16)
-    if fill4:
-        for j, st in enumerate((12, 14, 15)):
-            mix.add(e_drum("tom" if j < 2 else "snare"), t0 + st * s16, 0.42 + 0.08 * j, -0.2 + 0.25 * j, 0.22)
-    elif fill8:
-        for j in range(6):
-            kind = "tom" if j in (1, 2, 4) else "snare"
-            mix.add(e_drum(kind), t0 + (10 + j) * s16 + human(0.002), 0.36 + 0.07 * j, -0.3 + 0.12 * j, 0.24)
-
-
-def hybrid_tension_bar(mix: Mix, chord: str, t0: float, beat: float, bar: int) -> None:
-    """Climax boost: rapid 16th synth-arp cascade + syncopated octave synth-brass power stabs + extra clap."""
-    bass, tones = CHORDS[chord]
-    pool = tones + tones[-2:0:-1]
-    s16 = beat / 4.0
-    for step in range(16):
-        at = t0 + step * s16 + human(0.002)
-        accent = step in (0, 3, 6, 8, 10, 14)
-        note_name = pool[(step + bar) % len(pool)]
-        mix.add(synth_arp(hz(note_name) * (2.0 if step % 4 == 2 else 1.0), s16 * 1.4, 1.2), at, 0.24 if accent else 0.15, -0.4 + (step % 4) * 0.26, 0.24)
-        if accent:
-            mix.add(synth_bass(hz(bass) * 2.0, s16 * 1.1, 1.05), at, 0.22, -0.15, 0.12)
-        if step in (3, 6, 14):
-            mix.add(synth_stab(chord, s16 * 1.6, 1.15), at, 0.34, 0.32 if step == 6 else -0.32, 0.28)
-    if bar % 2 == 1:
-        mix.add(e_drum("clap"), t0 + 14 * s16, 0.34, 0.0, 0.28)
-
-
+# ---- battle themes (2026-11-24) ----------------------------------------------------------------
+# Each theme is a little medieval consort piece in a church mode, written as four loops of the same
+# length that play in step (music_player.gd): "lute" = the accompaniment (lute, harp, organ, drones;
+# always on), "drums", "tune" = the melody, and "tension" = a danger layer raised when the battle
+# turns (shawm calls, war drums, tremolo strings, chant). A form entry is
+# (progression, tune, voices, ornamented, energy 0..2); voices may be ("split", a, b, bars) for call
+# and answer. 4/4 themes count in quarter notes; 6/8 themes count in eighths (bpm = eighths a minute).
 THEMES = {
-    "normal": {  # 經典・英勇行軍：D Dorian，118 拍，合成銅管行軍×魯特琴與電子戰鼓
-        "hybrid": True, "bpm": 118, "groove": "march", "drums": "march", "gain": 0.44, "bright": 1.00, "stab_beats": (1.5, 3.5),
-        "prog": {
-            "p1": ["Dm", "Dm", "C", "Dm", "Dm", "F", "C", "Dm"], "p2": ["Dm", "G", "Dm", "C", "F", "C", "Am", "Dm"],
-            "p4": ["F", "C", "Dm", "Am", "F", "G", "Am", "Dm"], "p5": ["Bb", "F", "C", "F", "Bb", "F", "Gm", "A"],
-            "p6": ["Dm", "C", "Bb", "C", "Dm", "Am", "G", "A"]},
+    "normal": {  # 經典・王國行軍：D Dorian，112 拍。魯特琴進行曲、手搖琴持續音、木笛與維奧爾琴，危急時肖姆管號角
+        "bpm": 112, "meter": 4, "scale": "D E F G A B C", "base": "march", "drums": "march", "tension": "fanfare",
+        "drone": ("D3", "A3"), "drone_gain": .085,
+        "prog": {"A": ["Dm", "Dm", "C", "Dm", "Dm", "F", "C", "Dm"], "B": ["F", "C", "Dm", "Am", "F", "G", "Am", "Dm"],
+                 "C": ["Dm", "C", "Dm", "G", "F", "C", "A", "Dm"]},
         "tunes": {
-            "a": ["D5:1 A4:.5 D5:.5 E5:1 F5:1", "E5:.5 D5:.5 E5:1 A4:2", "C5:1 G4:.5 C5:.5 D5:1 E5:1", "D5:2 R:1 A4:1",
-                  "D5:1 A4:.5 D5:.5 E5:1 F5:1", "A5:1.5 G5:.5 F5:1 E5:1", "E5:.5 D5:.5 C5:1 E5:1 C5:1", "D5:3 R:1"],
-            "b": ["A5:1 A5:.5 G5:.5 F5:1 E5:1", "D5:1 B4:1 G4:1 B4:1", "D5:.5 E5:.5 F5:1 E5:1 D5:1", "C5:1.5 D5:.5 E5:2",
-                  "F5:1 A5:1 G5:.5 F5:.5 E5:1", "E5:1 G5:1 E5:1 C5:1", "E5:1 D5:.5 C5:.5 B4:1 C5:1", "D5:3 R:1"],
-            "c": ["A5:1 F5:.5 A5:.5 C6:1 A5:1", "G5:1 E5:1 C5:1 E5:1", "F5:.5 E5:.5 D5:1 F5:1 A5:1", "E5:2 C5:1 E5:1",
-                  "F5:1 A5:1 C6:1 A5:1", "B5:1 G5:1 D5:1 G5:1", "E5:1 C5:.5 E5:.5 A5:1 E5:1", "D5:3 R:1"],
-            "d": ["F5:2 D5:1 C5:1", "C5:1 A4:1 F4:2", "E5:1 G5:1 C6:1 G5:1", "A5:3 R:1",
-                  "D6:1.5 C6:.5 Bb5:1 A5:1", "A5:1 G5:1 F5:2", "G5:1 Bb5:1 G5:1 D5:1", "E5:2 C#5:2"],
-            "e": ["D5:.5 E5:.5 F5:1 A5:1 F5:1", "E5:1 G5:1 C5:1 E5:1", "D5:1 F5:1 Bb5:1 F5:1", "E5:1 G5:.5 F5:.5 E5:2",
-                  "F5:.5 E5:.5 D5:1 A5:1 D6:1", "C6:1 A5:1 E5:1 A5:1", "B5:1 G5:1 D5:1 B4:1", "C#5:1 E5:1 A5:2"]},
-        "form": [("p1", "a", 0), ("p2", "b", 0), ("p1", "a", 1), ("p4", "c", 1), ("p5", "d", 0), ("p6", "e", 0), ("p1", "a", 1), ("p4", "c", 1)]},
-    "magic": {  # 魔法・奧術脈衝：E 小調，114 拍，水晶音序分解×合成銅管主旋律
-        "hybrid": True, "bpm": 114, "groove": "arp", "drums": "arp", "gain": 0.44, "bright": 1.12, "stab_beats": (1.5, 3.5),
-        "prog": {
-            "m1": ["Em", "Em", "C", "B", "Em", "Am", "B", "Em"], "m2": ["Am", "Em", "C", "G", "Am", "F", "B", "B"],
-            "m3": ["C", "D", "Em", "Em", "C", "D", "B", "B"], "m4": ["Em", "F", "Em", "F", "Am", "B", "Em", "Em"]},
+            "a": ["D5:1 E5:.5 F5:.5 G5:1 F5:.5 E5:.5", "D5:1.5 E5:.5 F5:1 A5:1", "G5:1 F5:.5 E5:.5 C5:1 E5:1", "D5:3 R:1",
+                  "A5:1 A5:.5 G5:.5 F5:1 A5:1", "C6:1.5 A5:.5 F5:1 G5:.5 A5:.5", "G5:1 E5:.5 D5:.5 C5:1 E5:1", "D5:3 R:1"],
+            "b": ["A5:1.5 G5:.5 F5:1 C5:1", "E5:1 G5:1 E5:.5 D5:.5 C5:1", "D5:1 F5:1 A5:1 D6:1", "C6:1 B5:.5 A5:.5 E5:2",
+                  "F5:1 A5:1 C6:1 A5:1", "B5:1.5 A5:.5 G5:1 D5:1", "E5:1 C5:.5 D5:.5 E5:1 A4:1", "D5:4"],
+            "c": ["D5:.75 D5:.25 A5:1 A5:.75 G5:.25 F5:1", "E5:.75 E5:.25 G5:1 C5:2", "D5:.75 D5:.25 F5:1 A5:1 D6:1", "B5:2 G5:2",
+                  "A5:.75 G5:.25 F5:1 C6:1 A5:1", "G5:.75 F5:.25 E5:1 C5:2", "E5:1 D5:.5 C#5:.5 E5:1 A4:1", "D5:3 R:1"]},
+        "voices": {"rec_lute": [("recorder", 0, .5, .15), ("lute", -1, .28, -.3)], "vielle": [("vielle", -1, .46, -.12)],
+                   "duo": [("recorder", 0, .42, .18), ("vielle", -1, .34, -.15)], "rec": [("recorder", 0, .5, .15)],
+                   "band": [("shawm", -1, .36, .25), ("recorder", 0, .28, -.05), ("vielle", -1, .26, -.2)]},
+        "form": [("A", "a", "rec_lute", 0, 0), ("A", "a", "vielle", 1, 1), ("B", "b", "duo", 0, 1), ("B", "b", "rec", 1, 1),
+                 ("C", "c", "band", 0, 2), ("A", "a", "duo", 1, 1), ("C", "c", "band", 1, 2), ("B", "b", "band", 1, 2)]},
+    "magic": {  # 魔法・星象塔：F Lydian，100 拍。豎琴十六分音符分解和弦、攜帶式管風琴、手鈴與指鈸
+        "bpm": 100, "meter": 4, "scale": "F G A B C D E", "base": "harp", "drums": "magic", "tension": "spark",
+        "prog": {"P1": ["F", "G", "F", "G", "Am", "G", "F", "F"], "P2": ["Dm", "Am", "G", "G", "F", "C", "G", "F"],
+                 "P3": ["Dm", "Dm", "C", "C", "Am", "Am", "G", "G"]},
         "tunes": {
-            "a": ["E5:2 B4:1 E5:1", "G5:1.5 F#5:.5 E5:2", "E5:1 G5:1 C6:1 B5:1", "B5:2 D#5:2",
-                  "E5:1 F#5:1 G5:1 B5:1", "A5:1.5 G5:.5 E5:1 C5:1", "D#5:1 F#5:1 B5:1 A5:1", "G5:2 E5:2"],
-            "b": ["B5:1 A5:.5 G5:.5 E5:2", "E5:.5 F#5:.5 G5:1 B5:2", "C6:1 B5:1 G5:1 E5:1", "F#5:1 D#5:1 B4:2",
-                  "E5:1 B4:1 E5:1 G5:1", "C6:1 A5:1 E5:1 A5:1", "B5:1 A5:1 F#5:1 D#5:1", "E5:4"],
-            "c": ["A5:2 E5:1 C5:1", "B4:1 E5:1 G5:2", "G5:1 E5:1 C5:1 E5:1", "D5:1.5 B4:.5 G4:2",
-                  "C5:1 E5:1 A5:1 C6:1", "A5:1 F5:1 C5:1 F5:1", "D#5:1 F#5:1 A5:1 B5:1", "B5:2 F#5:1 D#5:1"],
-            "d": ["E5:1 G5:1 C6:2", "F#5:1 A5:1 D6:2", "B5:1.5 A5:.5 G5:1 E5:1", "E5:3 R:1",
-                  "G5:1 E5:1 C5:1 E5:1", "A5:1 F#5:1 D5:1 F#5:1", "B5:2 A5:1 F#5:1", "D#5:2 B4:2"],
-            "e": ["E5:1 B4:1 E5:1 G5:1", "F5:2 A5:1 C6:1", "B5:1 G5:1 E5:2", "A5:1 F5:1 C5:2",
-                  "C5:1 E5:1 A5:1 E5:1", "D#5:1 F#5:1 B5:2", "G5:1 F#5:1 E5:1 B4:1", "E5:4"]},
-        "form": [("m1", "a", 0), ("m1", "b", 0), ("m2", "c", 0), ("m3", "d", 0), ("m1", "a", 1), ("m4", "e", 0), ("m2", "c", 1), ("m3", "d", 1)]},
-    "dark": {  # 黑暗・深淵喪鐘：D 小調／Phrygian，106 拍，雙拍心跳低音×宏鐘與重低音合成器
-        "hybrid": True, "bpm": 106, "groove": "heartbeat", "drums": "heartbeat", "gain": 0.44, "bright": 0.92, "stab_beats": (1.5, 3.5), "bells": True,
-        "prog": {
-            "d1": ["Dm", "Dm", "Eb", "Dm", "Gm", "Gm", "A", "A"], "d2": ["Dm", "Bb", "Gm", "A", "Dm", "Eb", "Dm", "Dm"],
-            "d3": ["Bb", "F", "Gm", "Dm", "Eb", "Bb", "A", "A"], "d4": ["Gm", "Dm", "Eb", "A", "Dm", "Eb", "Dm", "Dm"]},
+            "a": ["C5:1 F5:1 A5:1.5 G5:.5", "B5:2 A5:1 G5:1", "A5:1 C6:1 F5:1.5 G5:.5", "G5:2 D5:2",
+                  "E5:1 A5:1 C6:1 B5:1", "D6:1.5 C6:.5 B5:1 G5:1", "A5:1 G5:1 F5:1 E5:1", "F5:4"],
+            "b": ["D6:1.5 C6:.5 A5:2", "C6:1 B5:1 A5:1 E5:1", "G5:1 B5:1 D6:2", "B5:1 A5:1 G5:2",
+                  "A5:1 C6:1 F6:1.5 E6:.5", "E6:1 D6:1 C6:1 G5:1", "B5:1.5 A5:.5 G5:1 B5:1", "A5:2 F5:2"],
+            "c": ["D5:2 F5:1 A5:1", "G5:1 F5:1 E5:1 D5:1", "E5:2 G5:1 C6:1", "B5:1 A5:1 G5:2",
+                  "A5:1.5 B5:.5 C6:1 E6:1", "D6:1 C6:1 B5:1 A5:1", "B5:2 D6:1 B5:1", "G5:3 R:1"]},
+        "voices": {"rec": [("recorder", 0, .44, .15), ("harp", -1, .2, -.3)], "organ": [("organ", 0, .36, .1)],
+                   "organ_low": [("organ", -1, .38, 0)], "bells": [("recorder", 0, .42, .15), ("bells", 0, .18, .35, 1)],
+                   "all": [("organ", 0, .28, .1), ("recorder", 0, .3, -.1), ("bells", 1, .12, .35, 1)]},
+        "form": [("P1", "a", "rec", 0, 0), ("P1", "a", "organ", 1, 1), ("P2", "b", "bells", 0, 1), ("P3", "c", "organ_low", 0, 1),
+                 ("P1", "a", "bells", 1, 2), ("P2", "b", "rec", 1, 2), ("P3", "c", "organ", 1, 1), ("P2", "b", "all", 0, 2)]},
+    "dark": {  # 黑暗・深淵喪鐘：D Phrygian，76 拍。大教堂殘響、低音弓弦持續音、喪鐘、修士吟唱與心跳戰鼓
+        "bpm": 76, "meter": 4, "scale": "D Eb F G A Bb C", "base": "dirge", "drums": "heartbeat", "tension": "dread",
+        "hall": "cathedral", "drone": ("D2", "A2"), "drone_kind": "bass", "drone_gain": .13, "drone_from": 0, "bell": "D3",
+        "prog": {"P1": ["Dm", "Dm", "Eb", "Dm", "Dm", "Cm", "Eb", "Dm"], "P2": ["Gm", "Gm", "Dm", "Dm", "Eb", "Eb", "Dm", "Dm"],
+                 "P3": ["Bb", "Cm", "Dm", "Dm", "Bb", "Cm", "Eb", "Dm"]},
         "tunes": {
-            "a": ["D5:3 A4:1", "F5:2 E5:1 D5:1", "Eb5:2 D5:1 Bb4:1", "D5:4", "G5:2 F5:1 D5:1", "Bb4:1 D5:1 G5:2", "A5:2 G5:1 E5:1", "C#5:4"],
-            "b": ["A4:1 D5:1 F5:1 A5:1", "Bb5:2 F5:2", "G5:1 F5:1 D5:1 Bb4:1", "C#5:2 E5:2", "F5:1.5 E5:.5 D5:2", "Eb5:1 G5:1 Bb5:2", "A5:1 F5:1 E5:1 D5:1", "D5:4"],
-            "c": ["D5:2 F5:1 Bb5:1", "A5:2 C5:2", "Bb4:1 D5:1 G5:2", "F5:1 E5:1 D5:2", "Eb5:1 G5:1 Bb5:1 G5:1", "F5:2 D5:2", "E5:1 C#5:1 A4:2", "A4:4"],
-            "d": ["G5:1 D5:1 Bb4:1 D5:1", "F5:2 A5:2", "G5:1.5 F5:.5 Eb5:2", "E5:2 C#5:2", "D5:1 F5:1 A5:1 D6:1", "C6:1 Bb5:1 G5:1 Eb5:1", "F5:1 E5:1 D5:1 C#5:1", "D5:4"]},
-        "form": [("d1", "a", 0), ("d2", "b", 0), ("d1", "a", 1), ("d3", "c", 0), ("d4", "d", 0), ("d2", "b", 1), ("d3", "c", 1), ("d4", "d", 1)]},
-    "beast": {  # 魔物・荒野狂踏：G 小調，128 拍，3＋3＋2 部落電鼓×野性銅管齊奏
-        "hybrid": True, "bpm": 128, "groove": "tribal", "drums": "tribal", "gain": 0.44, "bright": 1.15, "stab_beats": (1.5, 3.0),
-        "prog": {
-            "b1": ["Gm", "Gm", "F", "Gm", "Gm", "Eb", "D", "Gm"], "b2": ["Cm", "Gm", "F", "Gm", "Eb", "Bb", "D", "D"],
-            "b3": ["Eb", "F", "Gm", "Gm", "Eb", "F", "D", "D"]},
+            "a": ["D4:2 Eb4:1 F4:1", "G4:1.5 F4:.5 Eb4:1 D4:1", "Eb4:1 G4:1 Bb4:2", "A4:3 R:1",
+                  "A4:1 Bb4:1 A4:1 F4:1", "G4:1.5 F4:.5 Eb4:1 C4:1", "Eb4:2 F4:1 Eb4:1", "D4:4"],
+            "b": ["G4:2 Bb4:1 A4:1", "G4:1 F4:1 D4:2", "A4:1 C5:1 D5:2", "C5:1 Bb4:1 A4:2",
+                  "Bb4:1.5 C5:.5 Bb4:1 G4:1", "Eb5:2 D5:1 Bb4:1", "A4:1 G4:1 F4:1 Eb4:1", "D4:3 R:1"],
+            "c": ["F4:1 Bb4:1 D5:2", "Eb5:1.5 D5:.5 C5:2", "D5:1 A4:1 F4:1 A4:1", "D5:3 R:1",
+                  "D5:1 C5:1 Bb4:1 F4:1", "G4:1 C5:1 Eb5:1 D5:1", "C5:1 Bb4:1 G4:1 Eb4:1", "D4:4"]},
+        "voices": {"low": [("vielle", 0, .48, -.1)], "chant": [("choir:u", -1, .44, 0, 1), ("vielle", 0, .3, -.15)],
+                   "full": [("crumhorn", 0, .3, .25), ("vielle", 0, .34, -.15), ("choir:o", -1, .3, 0, 1)]},
+        "form": [("P1", "a", "low", 0, 0), ("P1", "a", "chant", 0, 1), ("P2", "b", "low", 1, 1), ("P3", "c", "chant", 0, 2),
+                 ("P2", "b", "full", 1, 2), ("P1", "a", "chant", 1, 1)]},
+    "beast": {  # 魔物・荒野狂踏：G Phrygian，132 拍。3＋3＋2 戰鼓與小定音鼓、手搖琴蜂鳴、肖姆管與彎角管
+        "tune_gain": 2.4, "bpm": 132, "meter": 4, "scale": "G Ab Bb C D Eb F", "base": "riff", "drums": "tribal", "tension": "horde",
+        "drone": ("G2", "D3"), "drone_gain": .09,
+        "prog": {"P1": ["Gm", "Gm", "Ab", "Gm", "Gm", "Fm", "Ab", "Gm"], "P2": ["Cm", "Cm", "Gm", "Gm", "Eb", "Fm", "Ab", "Gm"],
+                 "P3": ["Eb", "Eb", "Fm", "Fm", "Ab", "Fm", "Ab", "Gm"]},
         "tunes": {
-            "a": ["G5:1.5 G5:1.5 Bb5:1", "A5:1.5 G5:1.5 D5:1", "F5:1.5 A5:1.5 C6:1", "Bb5:2 G5:2",
-                  "G5:1.5 Bb5:1.5 D6:1", "Eb6:1.5 D6:1.5 Bb5:1", "A5:1.5 F#5:1.5 D5:1", "G5:4"],
-            "b": ["D6:1 Bb5:.5 G5:.5 D6:2", "C6:1.5 Bb5:1.5 A5:1", "C6:1 A5:1 F5:2", "G5:1.5 D5:1.5 G5:1",
-                  "Bb5:1 D6:1 G6:2", "G5:1.5 Eb5:1.5 G5:1", "F#5:1 A5:1 D6:2", "G5:3 R:1"],
-            "c": ["C6:1.5 G5:1.5 Eb5:1", "D5:1.5 G5:1.5 Bb5:1", "A5:1.5 F5:1.5 C5:1", "D5:2 G5:2",
-                  "G5:1.5 Bb5:1.5 Eb6:1", "D6:1.5 Bb5:1.5 F5:1", "F#5:1 A5:1 D6:1 C6:1", "A5:2 F#5:2"],
-            "d": ["G5:1 Bb5:1 Eb6:2", "F5:1 A5:1 C6:2", "D6:1.5 Bb5:1.5 G5:1", "G5:3 R:1",
-                  "Eb6:1.5 D6:1.5 Bb5:1", "C6:1.5 A5:1.5 F5:1", "D5:1 F#5:1 A5:1 D6:1", "D6:2 A5:2"]},
-        "form": [("b1", "a", 0), ("b1", "b", 0), ("b2", "c", 0), ("b1", "a", 1), ("b3", "d", 0), ("b2", "c", 1), ("b1", "b", 1), ("b3", "d", 1)]},
+            "a": ["G4:1.5 Bb4:1.5 D5:1", "C5:1.5 Bb4:1.5 G4:1", "Ab4:1.5 C5:1.5 Eb5:1", "D5:2 G4:2",
+                  "G5:1.5 F5:1.5 D5:1", "F5:1.5 Eb5:1.5 C5:1", "Eb5:1 C5:1 Ab4:1 Bb4:1", "G4:3 R:1"],
+            "b": ["C5:1 Eb5:1 G5:2", "G5:1.5 F5:1.5 Eb5:1", "D5:1 G5:1 Bb5:2", "Ab5:1.5 G5:1.5 D5:1",
+                  "Eb5:1.5 G5:1.5 Bb5:1", "Ab5:1.5 G5:1.5 F5:1", "Eb5:1 F5:.5 Eb5:.5 C5:1 Ab4:1", "G4:2 D5:2"],
+            "c": ["Bb5:3 G5:1", "Ab5:1 G5:1 Eb5:2", "C6:3 Ab5:1", "G5:1 F5:1 C5:2",
+                  "Eb5:1.5 Ab5:1.5 C6:1", "C6:1.5 Ab5:1.5 F5:1", "Eb5:1 Ab5:1 G5:1 F5:1", "G5:4"]},
+        "voices": {"shawm": [("shawm", 0, .46, .2)], "horde": [("shawm", 0, .4, .2), ("gurdy", 0, .3, -.2)],
+                   "crum": [("crumhorn", 0, .42, .15), ("vielle", -1, .28, -.2)]},
+        "form": [("P1", "a", "shawm", 0, 0), ("P1", "a", "horde", 1, 1), ("P2", "b", "shawm", 0, 1), ("P1", "a", "crum", 1, 1),
+                 ("P3", "c", "horde", 0, 2), ("P2", "b", "horde", 1, 2), ("P3", "c", "crum", 1, 2), ("P1", "a", "horde", 0, 2)]},
+    "conveyor": {  # 補給傳送帶・工坊吉格：G Mixolydian，6/8（附點四分 104）。輕快吉格舞曲，木笛與維奧爾琴輪唱
+        "bpm": 312, "meter": 6, "orn_unit": .5, "scale": "G A B C D E F", "base": "jig", "drums": "jig", "tension": "reel",
+        "drone": ("G3", "D4"), "drone_gain": .06,
+        "prog": {"P1": ["G", "G", "F", "G", "C", "G", "F", "G"], "P2": ["C", "C", "G", "G", "Am", "F", "G", "G"],
+                 "P3": ["Am", "Am", "G", "G", "F", "C", "Dm", "G"]},
+        "tunes": {
+            "a": ["G5:2 B5:1 D6:2 B5:1", "A5:1 B5:1 G5:1 D5:2 G5:1", "F5:2 A5:1 C6:2 A5:1", "B5:1 A5:1 G5:1 D5:3",
+                  "E5:1 G5:1 C6:1 B5:1 A5:1 G5:1", "D6:2 B5:1 G5:2 B5:1", "A5:1 G5:1 F5:1 E5:1 F5:1 A5:1", "G5:4 R:2"],
+            "b": ["C6:2 E6:1 D6:1 C6:1 B5:1", "A5:1 G5:1 E5:1 G5:3", "B5:2 D6:1 G6:2 D6:1", "F6:1 E6:1 D6:1 B5:3",
+                  "C6:1 B5:1 A5:1 E5:2 A5:1", "F5:2 A5:1 C6:2 A5:1", "B5:1 A5:1 G5:1 F5:1 E5:1 D5:1", "G5:4 R:2"],
+            "c": ["E5:1 A5:1 B5:1 C6:2 B5:1", "A5:1 G5:1 E5:1 A5:3", "D5:1 G5:1 A5:1 B5:2 A5:1", "G5:1 F5:1 D5:1 G5:3",
+                  "F5:1 A5:1 C6:1 F6:2 E6:1", "E6:1 D6:1 C6:1 G5:3", "F5:1 E5:1 D5:1 A5:2 F5:1", "G5:4 R:2"]},
+        "voices": {"rec": [("recorder", 0, .48, .15)], "fiddle": [("vielle", -1, .44, -.12)],
+                   "duo": [("recorder", 0, .4, .18), ("vielle", -1, .32, -.15)],
+                   "full": [("recorder", 0, .34, .18), ("vielle", -1, .28, -.15), ("crumhorn", -1, .22, .3)]},
+        "form": [("P1", "a", "rec", 0, 0), ("P1", "a", "fiddle", 1, 1), ("P2", "b", "rec", 0, 1), ("P2", "b", "duo", 1, 1),
+                 ("P1", "a", "duo", 1, 2), ("P3", "c", "fiddle", 0, 1), ("P3", "c", "duo", 1, 2), ("P2", "b", "full", 0, 2),
+                 ("P1", "a", "rec", 1, 1), ("P1", "a", "full", 0, 2)]},
+    "charge": {  # 五路衝鋒・薩爾塔雷洛：A Aeolian，6/8（附點四分 124）。長短馳騁節奏、自然小號與肖姆管
+        "tune_gain": 2.2, "bpm": 372, "meter": 6, "orn_unit": .5, "scale": "A B C D E F G", "base": "gallop", "drums": "gallop", "tension": "charge",
+        "drone": ("A2", "E3"), "drone_gain": .085,
+        "prog": {"A": ["Am", "Am", "G", "Am", "F", "G", "E", "Am"], "B": ["F", "G", "Am", "Am", "Dm", "Em", "F", "E"],
+                 "C": ["C", "G", "Am", "Em", "F", "C", "Dm", "E"]},
+        "tunes": {
+            "a": ["A4:2 C5:1 E5:2 A5:1", "G5:2 E5:1 C5:2 E5:1", "D5:2 G5:1 B5:2 G5:1", "A5:3 E5:3",
+                  "F5:2 A5:1 C6:2 A5:1", "B5:2 A5:1 G5:2 D5:1", "E5:2 G#5:1 B5:2 G#5:1", "A5:4 R:2"],
+            "b": ["C6:2 A5:1 F5:2 A5:1", "D6:2 B5:1 G5:2 B5:1", "E6:2 C6:1 A5:2 C6:1", "B5:1 C6:1 B5:1 A5:3",
+                  "F5:2 A5:1 D6:2 A5:1", "G5:2 B5:1 E6:2 B5:1", "A5:2 C6:1 F5:2 A5:1", "E5:3 G#5:2 B5:1"],
+            "c": ["C5:1 E5:1 G5:1 C6:3", "B5:1 A5:1 G5:1 D5:3", "E5:1 A5:1 C6:1 E6:3", "D6:1 C6:1 B5:1 G5:3",
+                  "A5:2 C6:1 F6:2 C6:1", "E6:2 C6:1 G5:2 E5:1", "F5:2 A5:1 D6:2 F5:1", "E5:3 B4:3"]},
+        "voices": {"shawm": [("shawm", -1, .46, .2)], "rec": [("recorder", 0, .42, .15), ("vielle", -1, .3, -.15)],
+                   "trump": [("trumpet", -1, .42, -.15), ("shawm", -1, .28, .25)],
+                   "full": [("trumpet", -1, .34, -.15), ("shawm", -1, .26, .25), ("recorder", 0, .26, .05)]},
+        "form": [("A", "a", "shawm", 0, 0), ("A", "a", "rec", 1, 1), ("B", "b", "shawm", 0, 1), ("A", "a", "trump", 1, 2),
+                 ("C", "c", "trump", 0, 2), ("C", "c", "rec", 1, 1), ("B", "b", "trump", 1, 2), ("A", "a", "shawm", 1, 1),
+                 ("B", "b", "rec", 0, 1), ("C", "c", "full", 1, 2), ("A", "a", "full", 0, 2), ("A", "a", "trump", 1, 2)]},
+    "duel": {  # 鐵血交鋒・領主死鬥：C Aeolian，120 拍。肖姆管與維奧爾琴一問一答、小定音鼓 3＋3＋2、弓弦斷奏
+        "loud": 1.12, "tune_gain": 1.9, "bpm": 120, "meter": 4, "scale": "C D Eb F G Ab Bb", "base": "chop", "drums": "duel", "tension": "clash",
+        "prog": {"U1": ["Cm", "Cm", "Bb", "Bb", "Ab", "Ab", "G", "G"], "U2": ["Cm", "Fm", "Cm", "Fm", "Eb", "Bb", "Ab", "G"],
+                 "U3": ["Ab", "Bb", "Cm", "Cm", "Ab", "Bb", "G", "G"]},
+        "tunes": {
+            "a": ["C5:1 Eb5:.5 G5:.5 C6:1 G5:1", "Bb5:.5 Ab5:.5 G5:1 Eb5:2", "D5:1 F5:.5 Bb5:.5 D6:1 Bb5:1", "C6:.5 Bb5:.5 Ab5:1 F5:2",
+                  "C6:1 Eb6:.5 C6:.5 Ab5:1 Eb5:1", "F5:.5 G5:.5 Ab5:1 C6:2", "B5:1 D6:.5 B5:.5 G5:1 D5:1", "G5:3 R:1"],
+            "b": ["G5:1.5 Eb5:.5 C5:1 G4:1", "Ab4:1 C5:1 F5:2", "Eb5:1.5 G5:.5 C6:1 G5:1", "Ab5:1 G5:1 F5:2",
+                  "G5:1 Bb5:1 Eb6:1 D6:1", "F6:1.5 Eb6:.5 D6:1 Bb5:1", "C6:1 Ab5:1 Eb5:1 C5:1", "B4:1 D5:1 G5:2"],
+            "c": ["Eb5:.5 F5:.5 Ab5:1 C6:1 Ab5:1", "F5:.5 G5:.5 Bb5:1 D6:1 Bb5:1", "G5:.5 Bb5:.5 C6:1 Eb6:1 C6:1", "D6:1 C6:1 G5:2",
+                  "Ab5:1 C6:1 Eb6:1.5 D6:.5", "D6:1 Bb5:1 F5:1 D5:1", "B4:.5 D5:.5 G5:.5 B5:.5 D6:1 B5:1", "G5:2 D5:2"]},
+        "voices": {"shawm": [("shawm", -1, .46, .22)], "vielle": [("vielle", -1, .48, -.18)],
+                   "both": [("shawm", -1, .36, .22), ("vielle", -1, .34, -.18)],
+                   "all": [("shawm", -1, .32, .22), ("vielle", -1, .3, -.18), ("trumpet", -1, .22, 0)]},
+        "form": [("U1", "a", ("split", "shawm", "vielle", 2), 0, 0), ("U2", "b", "vielle", 0, 1), ("U1", "a", ("split", "shawm", "vielle", 2), 1, 1),
+                 ("U3", "c", "both", 0, 2), ("U2", "b", "shawm", 1, 1), ("U3", "c", "both", 1, 2),
+                 ("U1", "a", ("split", "vielle", "shawm", 2), 1, 1), ("U1", "a", "all", 0, 2)]},
+    "crimson": {  # 赤旗總攻・破陣之歌：E Aeolian／Phrygian 終止，128 拍。自然小號齊奏、戰鼓、修士合唱與大鐘
+        "tune_gain": 2.1, "bpm": 128, "meter": 4, "scale": "E F# G A B C D", "base": "epic", "drums": "epic", "tension": "siege",
+        "drone": ("E2", "B2"), "drone_gain": .09, "drone_from": 0, "bell": "E3",
+        "prog": {"R1": ["Em", "Em", "D", "Em", "C", "D", "F", "Em"], "R2": ["C", "D", "Em", "Em", "Am", "C", "B", "B"],
+                 "R3": ["F", "G", "Am", "Em", "F", "D", "B", "B"]},
+        "tunes": {
+            "a": ["E5:1 B4:.5 E5:.5 G5:1 B5:1", "A5:.5 G5:.5 F#5:1 E5:2", "D5:1 A4:.5 D5:.5 F#5:1 A5:1", "G5:1 F#5:1 E5:2",
+                  "E5:1 G5:1 C6:1 B5:1", "A5:1.5 G5:.5 F#5:1 D5:1", "F5:1 A5:1 C6:1 A5:1", "E5:3 R:1"],
+            "b": ["G5:1 C6:1 E6:2", "F#6:1 E6:1 D6:2", "B5:1.5 A5:.5 G5:1 E5:1", "B5:3 R:1",
+                  "C6:1 B5:1 A5:1 E5:1", "G5:1 A5:1 C6:2", "B5:1 A5:1 F#5:1 D#5:1", "B5:4"],
+            "c": ["C6:2 A5:1 F5:1", "D6:2 B5:1 G5:1", "E6:1.5 D6:.5 C6:1 A5:1", "B5:1 G5:1 E5:2",
+                  "A5:1 C6:1 F6:2", "F#6:1 E6:1 D6:1 A5:1", "D#6:1 B5:1 F#5:1 D#5:1", "B5:2 F#5:2"]},
+        "voices": {"trump": [("trumpet", -1, .42, -.15), ("shawm", -1, .28, .25)],
+                   "rec": [("recorder", 0, .4, .15), ("vielle", -1, .32, -.15)],
+                   "choir": [("trumpet", -1, .36, -.15), ("choir:a", -1, .3, 0, 1), ("vielle", -1, .24, .2)]},
+        "form": [("R1", "a", "trump", 0, 1), ("R1", "a", "rec", 1, 1), ("R2", "b", "trump", 0, 2), ("R3", "c", "choir", 0, 2),
+                 ("R1", "a", "choir", 1, 2), ("R2", "b", "rec", 1, 1), ("R3", "c", "trump", 0, 2), ("R1", "a", "choir", 0, 2)]},
+}
+
+NIGHT = {  # 入夜：城牆崩落的總攻。D Aeolian，136 拍。警鐘、戰鼓、手搖琴蜂鳴、小號與肖姆管
+    "bpm": 136, "meter": 4, "scale": "D E F G A Bb C", "base": "epic", "drums": "epic", "tension": "siege",
+    "drone": ("D2", "A2"), "drone_gain": .09, "drone_from": 0, "bell": "D3",
+    "prog": {"n1": ["Dm", "Dm", "Bb", "C", "Dm", "Dm", "Gm", "A"], "n2": ["Dm", "Dm", "Bb", "C", "Gm", "A", "Dm", "Dm"],
+             "n3": ["F", "C", "Gm", "A", "Dm", "Bb", "Gm", "A"]},
+    "tunes": {
+        "a": ["D5:.5 D5:.5 F5:.5 E5:.5 D5:1 A4:1", "D5:.5 D5:.5 F5:.5 G5:.5 A5:2", "Bb5:1 A5:.5 G5:.5 F5:1 D5:1", "E5:1 G5:1 E5:1 C5:1",
+              "D5:.5 D5:.5 F5:.5 E5:.5 D5:1 A4:1", "D5:.5 E5:.5 F5:.5 G5:.5 A5:2", "Bb5:1 G5:1 D5:1 G5:1", "A5:1 E5:1 C#5:1 E5:1"],
+        "b": ["A5:.5 A5:.5 D6:1 A5:1 F5:1", "G5:.5 F5:.5 E5:.5 F5:.5 D5:2", "F5:1 D5:.5 F5:.5 Bb5:1 A5:1", "G5:1 E5:1 C5:1 E5:1",
+              "D5:1 G5:.5 A5:.5 Bb5:1 G5:1", "A5:1.5 G5:.5 E5:1 C#5:1", "D5:1 A4:.5 D5:.5 F5:1 E5:1", "D5:3 R:1"],
+        "c": ["A5:1 F5:1 C5:1 F5:1", "G5:1 E5:1 C5:1 E5:1", "G5:.5 A5:.5 Bb5:1 A5:1 G5:1", "A5:2 E5:1 C#5:1",
+              "D5:.5 D5:.5 F5:.5 E5:.5 D5:1 A4:1", "Bb4:1 D5:1 F5:1 Bb5:1", "A5:.5 G5:.5 F5:.5 G5:.5 Bb5:1 G5:1", "A5:1 C#5:1 E5:1 A5:1"]},
+    "voices": {"horns": [("trumpet", -1, .42, -.15), ("shawm", -1, .3, .25)],
+               "all": [("trumpet", -1, .36, -.15), ("shawm", -1, .26, .25), ("vielle", -1, .26, 0)]},
+    "form": [("n1", "a", "horns", 0, 2), ("n2", "b", "horns", 0, 2), ("n3", "c", "all", 1, 2), ("n2", "b", "all", 1, 2), ("n1", "a", "all", 1, 2)],
 }
 
 
-HYBRID_THEMES = {
-    "conveyor": {  # 傳送帶・狂想曲：F 小調，126 拍，彈性合成貝斯＋16 分切分合成銅管＋大鍵琴對答
-        "hybrid": True, "bpm": 126, "groove": "axel", "drums": "axel", "gain": 0.46, "bright": 1.08, "stab_beats": (1.5, 3.5),
-        "prog": {
-            "f1": ["Fm", "Fm", "Db", "Eb", "Fm", "Fm", "Eb", "C7"],
-            "f2": ["Db", "Eb", "Fm", "Ab", "Bbm", "Fm", "Db", "C7"],
-            "f3": ["Bbm", "Eb", "Ab", "Db", "Bbm", "C7", "Fm", "Fm"],
-            "f4": ["Db", "Db", "Bbm", "Bbm", "Ab", "Eb", "C7", "C7"]},
-        "tunes": {
-            "a": ["F5:.75 Ab5:.75 F5:.5 F5:.25 Bb5:.5 F5:.5 Eb5:.75", "F5:.75 C6:.75 F5:.5 F5:.25 Db6:.5 C6:.5 Ab5:.75",
-                  "F5:.5 C6:.5 F6:.5 F5:.25 Eb5:.5 Eb5:.25 C5:.5 G5:.5 G5:.5", "F5:2 R:.5 C5:.5 Eb5:.5 F5:.5",
-                  "F5:.75 Ab5:.75 F5:.5 F5:.25 Bb5:.5 F5:.5 Eb5:.75", "F5:.75 C6:.75 F5:.5 Ab5:.5 Bb5:.5 C6:1",
-                  "Eb6:.75 C6:.75 Bb5:.5 Ab5:.5 G5:.5 Eb5:1", "C6:.5 Bb5:.5 G5:.5 E5:.5 G5:.5 C6:.5 E5:1"],
-            "b": ["Db5:.75 F5:.75 Ab5:.5 Eb5:.75 G5:.75 Bb5:.5", "C6:.5 Ab5:.5 F5:.5 C5:.5 Ab5:1.5 R:.5",
-                  "Bb5:.75 F5:.75 Db5:.5 F5:.5 Ab5:.5 C6:1", "Ab5:.5 G5:.5 F5:.5 Eb5:.5 C5:1.5 R:.5",
-                  "Db5:.75 F5:.75 Ab5:.5 Bb5:.5 C6:.5 Db6:1", "C6:.75 Ab5:.75 F5:.5 Eb5:.5 F5:.5 C6:1",
-                  "Db6:.75 Bb5:.75 Ab5:.5 F5:.5 G5:.5 Eb5:1", "C6:.5 Bb5:.5 G5:.5 E5:.5 C5:1.5 R:.5"],
-            "c": ["Bb5:.75 F5:.75 Db5:.5 Eb5:.75 G5:.75 Bb5:.5", "Ab5:.75 C6:.75 Eb6:.5 Db6:.5 C6:.5 Bb5:1",
-                  "Ab5:.5 C6:.5 Eb6:.5 C6:.5 Db6:.75 Bb5:.75 F5:.5", "G5:.5 Bb5:.5 C6:.5 E5:.5 G5:1.5 R:.5",
-                  "Bb5:.5 Db6:.5 F6:.5 Db6:.5 C6:.5 Ab5:.5 F5:.5 C5:.5", "Eb5:.75 G5:.75 Bb5:.5 C6:.5 E5:.5 G5:1",
-                  "F5:.5 Ab5:.5 C6:.5 Eb6:.5 F6:1 C6:1", "F5:2 R:2"],
-            "d": ["Db5:1.5 Ab5:1.5 F5:1", "Db5:1 F5:1 Ab5:1 Db6:1",
-                  "Bb5:1.5 F5:1.5 Db5:1", "Bb4:1 Db5:1 F5:1 Bb5:1",
-                  "Ab5:1.5 Eb5:1.5 C5:1", "Eb5:1 G5:1 Bb5:1 Eb6:1",
-                  "C6:.5 G5:.5 E5:.5 G5:.5 C6:.5 Bb5:.5 G5:.5 E5:.5", "C6:.5 C6:.5 Bb5:.5 G5:.5 E5:1.5 R:.5"],
-            "e": ["F5:.75 Ab5:.75 C6:.5 F6:.75 C6:.75 Bb5:.5", "Ab5:.75 G5:.75 F5:.5 Eb5:.5 F5:.5 C6:1",
-                  "Db6:.75 Bb5:.75 F5:.5 Eb6:.75 C6:.75 G5:.5", "F6:1.5 Eb6:.5 C6:1 Ab5:1",
-                  "F5:.75 Ab5:.75 F5:.5 Bb5:.75 F5:.75 Eb5:.5", "C6:.75 Ab5:.75 F5:.5 Db6:.75 C6:.75 Bb5:.5",
-                  "Eb6:.5 Db6:.5 C6:.5 Bb5:.5 Ab5:.5 G5:.5 F5:.5 Eb5:.5", "F5:1 C6:1 F6:1.5 R:.5"]},
-        "form": [("f1", "a", 0), ("f2", "b", 0), ("f1", "a", 1), ("f3", "c", 0), ("f4", "d", 0), ("f2", "b", 1), ("f3", "c", 1), ("f1", "e", 1)]},
-    "charge": {  # 五路衝鋒・疾風號令：A 小調，130 拍，英雄式馳騁合成銅管＋戰鼓快節奏
-        "hybrid": True, "bpm": 130, "groove": "gallop", "drums": "gallop", "gain": 0.46, "bright": 1.05, "stab_beats": (1.0, 2.5, 3.5),
-        "prog": {
-            "c1": ["Am", "Am", "F", "G", "Am", "F", "Dm", "E7"],
-            "c2": ["F", "G", "Am", "Em", "F", "G", "E7", "Am"],
-            "c3": ["Dm", "G", "C", "F", "Dm", "E7", "Am", "Am"],
-            "c4": ["F", "F", "G", "G", "Dm", "Am", "E7", "E7"]},
-        "tunes": {
-            "a": ["A4:.5 C5:.5 E5:1 A5:.75 G5:.75 E5:.5", "A5:.5 G5:.5 E5:1 C5:1 D5:.5 E5:.5",
-                  "F5:.75 A5:.75 C6:.5 G5:.75 B5:.75 D6:.5", "C6:1.5 B5:.5 A5:1 E5:1",
-                  "A5:.75 E5:.75 C5:.5 F5:.75 C5:.75 A4:.5", "D5:.5 F5:.5 A5:1 G5:.5 F5:.5 E5:1",
-                  "D5:.75 F5:.75 A5:.5 B5:.5 G#5:.5 E5:1", "A5:2 R:1 E5:.5 A5:.5"],
-            "b": ["F5:1 C6:1 A5:.5 F5:.5 C6:1", "G5:1 D6:1 B5:.5 G5:.5 D6:1",
-                  "E6:.75 C6:.75 A5:.5 B5:.5 G5:.5 E5:1", "A5:.5 B5:.5 C6:.5 D6:.5 E6:1.5 R:.5",
-                  "F5:.75 A5:.75 C6:.5 G5:.75 B5:.75 D6:.5", "E6:1 C6:1 G5:1 E5:1",
-                  "D5:.5 F5:.5 A5:.5 G#5:.5 B5:1 E5:1", "A5:2.5 R:1.5"],
-            "c": ["D5:.75 F5:.75 A5:.5 G5:.75 B5:.75 D6:.5", "C6:.75 E6:.75 G5:.5 F5:.75 A5:.75 C6:.5",
-                  "D6:.5 B5:.5 G#5:.5 E5:.5 E5:1 B5:1", "A5:.5 E5:.5 C5:.5 E5:.5 A5:1.5 R:.5",
-                  "D6:.75 C6:.75 A5:.5 B5:.75 A5:.75 G5:.5", "C6:.75 G5:.75 E5:.5 F5:1 C6:1",
-                  "D6:.5 C6:.5 B5:.5 A5:.5 G#5:1 E5:1", "A5:1.5 E5:.5 A5:1.5 R:.5"],
-            "d": ["F5:1.5 C6:1.5 A5:1", "F5:1 A5:1 C6:1 F6:1",
-                  "G5:1.5 D6:1.5 B5:1", "G5:1 B5:1 D6:1 G6:1",
-                  "D6:1 A5:1 F5:1 D5:1", "E5:1 A5:1 C6:1 E6:1",
-                  "E6:.5 D6:.5 B5:.5 G#5:.5 E5:.5 G#5:.5 B5:.5 D6:.5", "E6:2 R:2"],
-            "e": ["A5:.75 C6:.75 E6:.5 A5:.75 G5:.75 E5:.5", "F5:.75 A5:.75 C6:.5 G5:.75 B5:.75 D6:.5",
-                  "E6:.5 D6:.5 C6:.5 B5:.5 A5:.5 G5:.5 E5:.5 C5:.5", "D5:.5 F5:.5 A5:1 E5:1 G#5:1",
-                  "A5:.75 E6:.75 C6:.5 F5:.75 C6:.75 A5:.5", "G5:.75 D6:.75 B5:.5 C6:.5 G5:.5 E5:1",
-                  "F5:.5 D5:.5 B4:.5 G#5:.5 E5:1 B5:1", "A5:2.5 R:1.5"]},
-        "form": [("c1", "a", 0), ("c2", "b", 0), ("c1", "a", 1), ("c3", "c", 0), ("c4", "d", 0), ("c2", "b", 1), ("c3", "c", 1), ("c1", "e", 1)]},
-    "duel": {  # 鐵血交鋒・領主死鬥：C 小調，124 拍，放克彈跳合成貝斯＋犀利對切銅管＋大鍵琴花彩
-        "hybrid": True, "bpm": 124, "groove": "funk", "drums": "funk", "gain": 0.45, "bright": 1.12, "stab_beats": (1.5, 3.0),
-        "prog": {
-            "u1": ["Cm", "Cm", "Eb", "Bb", "Cm", "Ab", "Fm", "G7"],
-            "u2": ["Ab", "Bb", "Cm", "Gm", "Fm", "Cm", "Ab", "G7"],
-            "u3": ["Fm", "Bb", "Eb", "Ab", "Fm", "G7", "Cm", "Cm"],
-            "u4": ["Ab", "Ab", "Fm", "Fm", "Eb", "Bb", "G7", "G7"]},
-        "tunes": {
-            "a": ["C5:.75 Eb5:.75 G5:.5 R:.25 Bb5:.5 G5:.5 Eb5:.75", "C5:.75 G5:.75 Bb5:.5 C6:.5 Bb5:.5 G5:1",
-                  "Eb5:.75 G5:.75 Bb5:.5 F5:.75 Bb5:.75 D6:.5", "C6:1.5 G5:.5 Eb5:1 C5:1",
-                  "C6:.5 Bb5:.5 G5:.5 Eb5:.5 Ab5:.75 Eb5:.75 C5:.5", "F5:.5 Ab5:.5 C6:1 G5:.5 F5:.5 D5:1",
-                  "C5:.5 D5:.5 Eb5:.5 F5:.5 G5:.75 B4:.75 D5:.5", "C5:1.5 G4:.5 C5:1.5 R:.5"],
-            "b": ["Ab5:.75 C6:.75 Eb6:.5 Bb5:.75 D6:.75 F6:.5", "Eb6:.5 D6:.5 C6:.5 G5:.5 Eb5:1.5 R:.5",
-                  "F5:.75 Ab5:.75 C6:.5 G5:.75 Bb5:.75 D6:.5", "C6:.5 Bb5:.5 Ab5:.5 G5:.5 Eb5:1.5 R:.5",
-                  "Ab5:.75 Eb5:.75 C5:.5 F5:.75 C5:.75 Ab4:.5", "G5:.5 C6:.5 Eb6:1 D6:.5 C6:.5 G5:1",
-                  "Ab5:.5 F5:.5 D5:.5 C5:.5 B4:1 G5:1", "C6:2 R:2"],
-            "c": ["F5:.75 Ab5:.75 C6:.5 Bb5:.75 D6:.75 F5:.5", "Eb5:.75 G5:.75 Bb5:.5 Ab5:.75 C6:.75 Eb6:.5",
-                  "F6:.5 D6:.5 Bb5:.5 Ab5:.5 G5:.5 F5:.5 D5:.5 B4:.5", "C5:.75 G5:.75 Eb5:.5 C5:1.5 R:.5",
-                  "F5:.5 Ab5:.5 C6:.5 Ab5:.5 Bb5:.5 D6:.5 F6:1", "Eb6:.75 C6:.75 G5:.5 Ab5:1 Eb6:1",
-                  "D6:.5 C6:.5 B5:.5 G5:.5 F5:1 D5:1", "C5:2 R:2"],
-            "d": ["Ab5:1.5 Eb5:1.5 C5:1", "Ab4:1 C5:1 Eb5:1 Ab5:1",
-                  "F5:1.5 C5:1.5 Ab4:1", "F5:1 Ab5:1 C6:1 F6:1",
-                  "Eb6:1.5 Bb5:1.5 G5:1", "Bb5:1 D6:1 F6:1 Bb5:1",
-                  "G5:.5 B5:.5 D6:.5 B5:.5 G5:.5 F5:.5 D5:.5 B4:.5", "G5:2 R:2"],
-            "e": ["C5:.75 G5:.75 C6:.5 R:.25 Bb5:.5 G5:.5 Eb5:.75", "Eb5:.75 Bb5:.75 Eb6:.5 D6:.75 Bb5:.75 F5:.5",
-                  "C6:.5 Bb5:.5 G5:.5 Eb5:.5 Ab5:.75 F5:.75 C5:.5", "D5:.5 F5:.5 G5:.5 B5:.5 D6:1 G5:1",
-                  "C6:.75 Eb6:.75 G6:.5 C6:.75 Ab5:.75 Eb5:.5", "F5:.75 Ab5:.75 C6:.5 G5:.5 D6:.5 B5:1",
-                  "Eb6:.5 D6:.5 C6:.5 Bb5:.5 Ab5:.5 G5:.5 F5:.5 D5:.5", "C5:1 G5:1 C6:1.5 R:.5"]},
-        "form": [("u1", "a", 0), ("u2", "b", 0), ("u1", "a", 1), ("u3", "c", 0), ("u4", "d", 0), ("u2", "b", 1), ("u3", "c", 1), ("u1", "e", 1)]},
-    "crimson": {  # 赤旗總攻・破陣之歌：E 小調，134 拍，高燃雙拍衝鋒與大考終極戰歌
-        "hybrid": True, "bpm": 134, "groove": "blitz", "drums": "blitz", "gain": 0.45, "bright": 1.10, "stab_beats": (1.5, 3.5),
-        "prog": {
-            "r1": ["Em", "Em", "C", "D", "Em", "C", "Am", "B7"],
-            "r2": ["C", "D", "Em", "G", "Am", "Em", "C", "B7"],
-            "r3": ["Am", "D", "G", "C", "F", "Em", "B7", "Em"],
-            "r4": ["F", "F", "Em", "Em", "C", "Am", "B7", "B7"]},
-        "tunes": {
-            "a": ["E5:.75 G5:.75 B5:.5 E6:.75 D6:.75 B5:.5", "E5:.75 G5:.75 B5:.5 C6:.5 B5:.5 A5:.5 G5:.5",
-                  "C5:.75 E5:.75 G5:.5 D5:.75 F#5:.75 A5:.5", "B5:1.5 G5:.5 E5:1 B4:1",
-                  "E5:.5 G5:.5 B5:.5 E6:.5 C6:.75 G5:.75 E5:.5", "A5:.5 C6:.5 E6:1 D6:.5 C6:.5 B5:1",
-                  "A5:.5 G5:.5 F#5:.5 E5:.5 D#5:1 B4:1", "E5:2 R:1 B4:.5 E5:.5"],
-            "b": ["C5:.75 G5:.75 E5:.5 D5:.75 A5:.75 F#5:.5", "E5:.5 G5:.5 B5:.5 E6:.5 B5:1.5 R:.5",
-                  "G5:.75 B5:.75 D6:.5 C6:.75 A5:.75 E5:.5", "F#5:.5 A5:.5 B5:.5 D#6:.5 E6:1.5 R:.5",
-                  "C6:.75 G5:.75 E5:.5 A5:.75 E5:.75 C5:.5", "B5:.5 E6:.5 G6:1 F#6:.5 E6:.5 B5:1",
-                  "C6:.5 A5:.5 F#5:.5 D#5:.5 B4:1 F#5:1", "E5:2.5 R:1.5"],
-            "c": ["A5:.75 C6:.75 E6:.5 D6:.75 A5:.75 F#5:.5", "G5:.75 B5:.75 D6:.5 C6:.75 G5:.75 E5:.5",
-                  "F5:.5 A5:.5 C6:.5 A5:.5 E5:1 B5:1", "D#5:.5 F#5:.5 B5:.5 D#6:.5 E6:1.5 R:.5",
-                  "A5:.5 C6:.5 E6:.5 A6:.5 G6:.75 E6:.75 B5:.5", "C6:.5 G5:.5 E5:.5 C5:.5 F5:1 C6:1",
-                  "B5:.5 A5:.5 G5:.5 F#5:.5 D#5:1 B4:1", "E5:2 R:2"],
-            "d": ["F5:1.5 C6:1.5 A5:1", "F5:1 A5:1 C6:1 F6:1",
-                  "E5:1.5 B5:1.5 G5:1", "E5:1 G5:1 B5:1 E6:1",
-                  "C6:.5 G5:.5 E5:.5 G5:.5 A5:.5 E5:.5 C5:.5 E5:.5", "B5:1 D#5:1 F#5:1 B5:1",
-                  "B5:.5 F#5:.5 D#5:.5 F#5:.5 B5:.5 A5:.5 F#5:.5 D#5:.5", "B4:2 R:2"],
-            "e": ["E5:.75 B5:.75 E6:.5 G6:.75 F#6:.75 E6:.5", "D6:.75 B5:.75 G5:.5 A5:.5 C6:.5 E6:1",
-                  "C6:.75 G5:.75 E5:.5 D6:.75 A5:.75 F#5:.5", "E6:1.5 D6:.5 B5:1 G5:1",
-                  "E5:.75 G5:.75 B5:.5 E6:.75 C6:.75 G5:.5", "D6:.75 A5:.75 F#5:.5 B5:.75 F#5:.75 D#5:.5",
-                  "E5:.5 G5:.5 B5:.5 E6:.5 F#6:.5 D#6:.5 B5:.5 F#5:.5", "E5:1 B5:1 E6:1.5 R:.5"]},
-        "form": [("r1", "a", 0), ("r2", "b", 0), ("r1", "a", 1), ("r3", "c", 0), ("r4", "d", 0), ("r2", "b", 1), ("r3", "c", 1), ("r1", "e", 1)]},
-}
-THEMES.update(HYBRID_THEMES)
-
-def _assert_bar_beats(tunes: dict) -> None:
-    for tk, p_bars in tunes.items():
-        for bi, bar_s in enumerate(p_bars):
-            total_b = sum(b for _, b in line(bar_s))
-            assert abs(total_b - 4.0) < 1e-6, f"Tune {tk} bar {bi} has {total_b} beats (expected 4.0): {bar_s}"
+def render_parts(th: dict) -> list:
+    """The four loops of one theme: [accompaniment, drums, tune, tension]."""
+    meter = th["meter"]
+    beat = 60 / th["bpm"]
+    for key, bars in th["tunes"].items():
+        for i, bar in enumerate(bars):
+            total = sum(b for _, b in line(bar))
+            assert abs(total - meter) < 1e-6, f"tune {key} bar {i} has {total} beats, not {meter}: {bar}"
+    seconds = sum(len(th["prog"][f[0]]) for f in th["form"]) * meter * beat
+    ir = CATHEDRAL if th.get("hall") == "cathedral" else ROOM
+    mixes = [Mix(seconds, True, ir) for _ in range(4)]
+    base, drums, tune, tension = mixes
+    bar = 0
+    for sec, (prog_key, tune_key, voice_key, orn, energy) in enumerate(th["form"]):
+        prog = th["prog"][prog_key]
+        bars = th["tunes"][tune_key]
+        if orn:
+            bars = [ornament(b, th, 100 * sec + i) for i, b in enumerate(bars)]
+        for i, b in enumerate(bars):
+            key = voice_key
+            if isinstance(voice_key, tuple):  # call and answer
+                key = voice_key[1] if (i // voice_key[3]) % 2 == 0 else voice_key[2]
+            for v in th["voices"][key]:
+                play_line(tune, v[0], [b], beat, (bar + i) * meter, v[2], v[3], v[1], v[4] if len(v) > 4 else 0.0)
+        start = bar * meter * beat
+        if th.get("drone") and energy >= th.get("drone_from", 1):
+            for j, note in enumerate(th["drone"]):
+                drone = bowed(hz(note), len(prog) * meter * beat + 0.3, th.get("drone_kind", "drone"), att=0.5)
+                base.add(drone, start, th.get("drone_gain", .09) * (1 if j == 0 else .8), .25 - .5 * j, .3)
+        for chord in prog:
+            t0 = bar * meter * beat
+            BASES[th["base"]](base, chord, t0, beat, bar, sec, energy, th)
+            DRUMS[th["drums"]](drums, t0, beat, bar, sec, energy, th)
+            TENSIONS[th["tension"]](tension, chord, t0, beat, bar, sec, energy, th)
+            bar += 1
+    parts = [m.render(air=th.get("air", .3)) for m in mixes]
+    parts[2] *= th.get("tune_gain", 1.7)  # the melody sits on top of the consort, not inside it
+    return parts
 
 
 def theme(name: str) -> None:
-    th = THEMES[name]
-    _assert_bar_beats(th["tunes"])
-    beat = 60 / th["bpm"]
-    seconds = 64 * 4 * beat
-    lute, drums, tune, tension = (Mix(seconds, True) for _ in range(4))
-    hybrid = bool(th.get("hybrid", False))
-    bar = 0
-    for section, (prog_key, tune_key, doubled) in enumerate(th["form"]):
-        if hybrid:
-            play_hybrid_tune(tune, th["tunes"][tune_key], beat, bar * 4, th["gain"], 0.12, bool(doubled), float(th.get("bright", 1.0)))
-        else:
-            play_tune(tune, th["tunes"][tune_key], beat, bar * 4, th["gain"], 0.2, doubled=bool(doubled))
-        for chord in th["prog"][prog_key]:
-            t0 = bar * 4 * beat
-            if hybrid:
-                hybrid_base_bar(lute, th["groove"], chord, t0, beat, bar)
-                hybrid_drum_bar(drums, th["drums"], t0, beat, bar)
-                for sb in th.get("stab_beats", (1.5, 3.5)):
-                    tune.add(synth_stab(chord, 0.14, float(th.get("bright", 1.0))), t0 + sb * beat, 0.24, 0.30, 0.22)
-                for b in (1, 3):
-                    strum(tune, chord, t0 + b * beat, 0.12, 0.010, 0.85, -0.35, up=b == 3)
-                hybrid_tension_bar(tension, chord, t0, beat, bar)
-            else:
-                lute_bar(lute, th["lute"], chord, t0, beat, section)
-                drum_bar(drums, th["drums"], t0, beat, bar)
-                for b in (1, 3):  # a second lute strums on two and four under the tune
-                    strum(tune, chord, t0 + b * beat, 0.17, 0.012, 1.2, 0.35, up=b == 3)
-                tension_bar(tension, chord, t0, beat, bar)
-            if th.get("bells") and bar % 8 == 0:
-                lute.add(bell(hz(CHORDS[chord][0]) * 2, 6.0), t0, 0.24, 0.3, 0.5)
-            bar += 1
-    lc = 45.0 if hybrid else 62.0
-    parts = level([lute.render(lc), drums.render(lc), tune.render(lc), tension.render(lc)], 0.86 if hybrid else 0.84)
+    parts = level(render_parts(THEMES[name]), 0.86)
+    parts = [p * THEMES[name].get("loud", 1.0) for p in parts]  # evens out themes whose peaks are spikier than their body
     for layer, part in zip(("lute", "drums", "tune", "tension"), parts):
-        save(f"battle_{name}_{layer}", part, quality=4 if hybrid else 3)
+        save(f"battle_{name}_{layer}", part, quality=3)
 
 
 def battle(*names: str) -> None:
@@ -932,112 +1256,90 @@ def battle(*names: str) -> None:
 
 
 def night() -> None:
-    """入夜：城門朽壞的總攻。D 小調，136 拍，3＋3＋2 狂飆合成貝斯×電戰鼓×警鐘銅管。"""
-    beat = 60 / 136
-    s16 = beat / 4.0
-    n1 = ["Dm", "Dm", "Bb", "C", "Dm", "Dm", "Gm", "A"]
-    n2 = ["Dm", "Dm", "Bb", "C", "Gm", "A", "Dm", "Dm"]
-    n3 = ["F", "C", "Gm", "A", "Dm", "Bb", "Gm", "A"]
-    prog = n1 + n2 + n3 + n2
-    mix = Mix(32 * 4 * beat, True)
-    for bar, chord in enumerate(prog):
-        t0 = bar * 4 * beat
-        bass, tones = CHORDS[chord]
-        f_bass = hz(bass)
-        fill = bar % 8 == 7
-        if bar % 8 == 0:
-            mix.add(bell(f_bass * 2.0, 5.5), t0, 0.24, 0.30, 0.45)
-        for i in range(8):
-            at = t0 + i * beat / 2 + human(0.003)
-            name = bass if i % 2 == 0 else tones[0]
-            accent = i in (0, 3, 6)
-            mix.add(synth_bass(hz(name) if not accent else f_bass, beat * (0.55 if accent else 0.35), 1.05 if accent else 0.82), at, 0.48 if accent else 0.28, -0.10, 0.12)
-            mix.add(pluck(hz(name), 1.1, 1.1), at, (0.30 if accent else 0.18) * float(rng.uniform(0.92, 1.05)), -0.30, 0.18)
-            if accent:
-                mix.add(drum("war"), at, 0.38 if i == 0 else 0.28, 0.0, 0.24)
-        for step in range(16):
-            at = t0 + step * s16 + human(0.002)
-            if step in (0, 3, 6, 8, 12, 14):
-                mix.add(e_drum("kick"), at, 0.66 if step in (0, 6, 8) else 0.48, 0.0, 0.08)
-            if step in (4, 12) and not (fill and step == 12):
-                mix.add(e_drum("snare"), at, 0.58, 0.05, 0.18)
-                mix.add(e_drum("clap"), at + 0.003, 0.34, -0.18 if step == 4 else 0.18, 0.22)
-                mix.add(drum("tak"), at, 0.20, 0.25, 0.20)
-            if not (fill and step >= 12):
-                if step == 14:
-                    mix.add(e_drum("hat_o"), at, 0.26, 0.40, 0.16)
-                elif step % 2 == 0 or step in (3, 7, 11, 15):
-                    mix.add(e_drum("hat_c"), at, 0.19 if step % 2 == 0 else 0.11, 0.35 if step % 2 == 0 else -0.35, 0.10)
-            arp_note = tones[(step + bar) % len(tones)]
-            mix.add(synth_arp(hz(arp_note) * (2.0 if step % 4 == 2 else 1.0), s16 * 1.35, 1.08), at, 0.14 if step % 3 == 0 else 0.09, -0.35 + (step % 4) * 0.24, 0.22)
-        if fill:
-            for j in range(6):
-                mix.add(e_drum("tom" if j in (1, 2, 4) else "snare"), t0 + (10 + j) * s16 + human(0.002), 0.34 + 0.07 * j, -0.3 + 0.12 * j, 0.22)
-        for sb in (1.5, 3.5):
-            mix.add(synth_stab(chord, 0.14, 1.12), t0 + sb * beat, 0.22, 0.30, 0.20)
-        strum(mix, chord, t0 + beat, 0.12, 0.01, 0.9, -0.35)
-        strum(mix, chord, t0 + 3 * beat, 0.12, 0.01, 0.9, -0.35, up=True)
-    a = ["D5:.5 D5:.5 F5:.5 E5:.5 D5:1 A4:1", "D5:.5 D5:.5 F5:.5 G5:.5 A5:2", "Bb5:1 A5:.5 G5:.5 F5:1 D5:1", "E5:1 G5:1 E5:1 C5:1",
-         "D5:.5 D5:.5 F5:.5 E5:.5 D5:1 A4:1", "D5:.5 E5:.5 F5:.5 G5:.5 A5:2", "Bb5:1 G5:1 D5:1 G5:1", "A5:1 E5:1 C#5:1 E5:1"]
-    b = ["A5:.5 A5:.5 D6:1 A5:1 F5:1", "G5:.5 F5:.5 E5:.5 F5:.5 D5:2", "F5:1 D5:.5 F5:.5 Bb5:1 A5:1", "G5:1 E5:1 C5:1 E5:1",
-         "D5:1 G5:.5 A5:.5 Bb5:1 G5:1", "A5:1.5 G5:.5 E5:1 C#5:1", "D5:1 A4:.5 D5:.5 F5:1 E5:1", "D5:3 R:1"]
-    c = ["A5:1 F5:1 C5:1 F5:1", "G5:1 E5:1 C5:1 E5:1", "G5:.5 A5:.5 Bb5:1 A5:1 G5:1", "A5:2 E5:1 C#5:1",
-         "D5:.5 D5:.5 F5:.5 E5:.5 D5:1 A4:1", "Bb4:1 D5:1 F5:1 Bb5:1", "A5:.5 G5:.5 F5:.5 G5:.5 Bb5:1 G5:1", "A5:1 C#5:1 E5:1 A5:1"]
-    play_hybrid_tune(mix, a, beat, 0, 0.44, 0.14, doubled=True, bright=1.12)
-    play_hybrid_tune(mix, b, beat, 32, 0.44, 0.14, doubled=True, bright=1.14)
-    play_hybrid_tune(mix, c, beat, 64, 0.44, 0.14, doubled=True, bright=1.14)
-    play_hybrid_tune(mix, b, beat, 96, 0.46, 0.14, doubled=True, bright=1.16)
-    save("night", level([mix.render(45.0)], 0.86)[0], quality=4)
+    """入夜：四層一起演奏（緊張層略收），單一循環。"""
+    base, drums, tune, tension = render_parts(NIGHT)
+    save("night", level([base + drums + tune + 0.75 * tension], 0.86)[0], quality=4)
+
+
+def menu() -> None:
+    """標題與選單：三拍子魯特琴分解和弦、手搖琴輕輕的持續音；後半豎琴與手鼓加入，木笛唱主題。D Dorian，88 拍。"""
+    beat = 60 / 88
+    prog = ["Dm", "Dm", "C", "C", "Dm", "G", "Am", "Dm", "F", "C", "Dm", "Am", "F", "G", "Am", "Dm"]
+    arps = {"Dm": ["A3", "D4", "F4", "D4", "A3"], "C": ["G3", "C4", "E4", "C4", "G3"], "G": ["B3", "D4", "G4", "D4", "B3"], "Am": ["A3", "C4", "E4", "C4", "A3"], "F": ["A3", "C4", "F4", "C4", "A3"]}
+    tune = ["D5:2 E5:1", "F5:1 E5:1 D5:1", "C5:2 E5:1", "G4:3", "A4:1 D5:1 F5:1", "G5:2 F5:1", "E5:1.5 D5:.5 C5:1", "D5:3",
+            "F5:2 A5:1", "G5:1 E5:1 C5:1", "D5:1 F5:1 A5:1", "E5:3", "F5:1 E5:1 D5:1", "B4:1 D5:1 G5:1", "E5:1.5 C5:.5 E5:1", "D5:3"]
+    mix = Mix(32 * 3 * beat, True)
+    for half in (0, 16):
+        for j, note in enumerate(("D3", "A3")):
+            mix.add(bowed(hz(note), 16 * 3 * beat + 0.4, "drone", att=1.2), half * 3 * beat, .05 if j == 0 else .04, .3 - .5 * j, .35)
+    for bar in range(32):
+        chord = prog[bar % 16]
+        t0 = bar * 3 * beat
+        second = bar >= 16
+        mix.add(pluck(hz(CHORDS[chord][0]), 3.0, 0.85), t0 + human(), 0.56, -0.14, 0.28)
+        for i, name in enumerate(arps[chord]):
+            mix.add(pluck(hz(name), 2.1, 0.98), t0 + (i + 1) * beat / 2 + human(), 0.33 * (1.12 if i == 2 else 1.0) * float(rng.uniform(0.88, 1.06)), -0.25 + i * 0.1, 0.28)
+        if second:
+            hit(mix, "dum", t0, .26, 0, .3)
+            hit(mix, "jingle", t0 + 2 * beat, .1, .4, .3)
+            if bar % 2 == 1:
+                mix.add(harp(hz(arps[chord][2]) * 2, 2.4), t0 + 2.5 * beat + human(), 0.2, 0.45, 0.4)
+    play_line(mix, "recorder", tune, beat, 16 * 3, 0.40, 0.20)
+    play_line(mix, "vielle", tune, beat, 16 * 3, 0.16, -0.25, -1)
+    save("menu", level([mix.render()], 0.85)[0], quality=4)
 
 
 def victory() -> None:
-    """勝利：D 大調的耀眼銅管凱旋號角×電子軍鼓與璀璨琶音。"""
+    """勝利：D 大調自然小號號角，塔布鼓滾奏、手鈴與管風琴收在大和弦上。"""
     beat = 60 / 128
     mix = Mix(9.0, False)
+    fan = ["A4:.5 D5:.5 F#5:.5 A5:1.5", "B5:.5 A5:.5 G5:.5 A5:.5", "D6:5"]
+    play_line(mix, "trumpet", fan, beat, 0, .5, -.15, -1)
+    play_line(mix, "shawm", fan, beat, 0, .24, .25, -1)
+    play_line(mix, "recorder", fan, beat, 0, .2, .1, 0)
+    for note, g, pan in (("A4", .3, .3), ("F#4", .26, -.35)):
+        mix.add(trumpet(hz(note), 5 * beat * .86), 5 * beat, g, pan, .3)
     strum(mix, "D", 0.0, 0.48, 0.018, 2.8)
-    mix.add(synth_bass(hz("D2"), 2.4 * beat, 0.95), 0.0, 0.50, -0.08, 0.12)
-    mix.add(synth_bass(hz("G2"), 1.6 * beat, 0.92), 3.0 * beat, 0.46, -0.08, 0.12)
-    mix.add(synth_bass(hz("D2"), 5.0 * beat, 1.02), 5.0 * beat, 0.56, -0.08, 0.14)
-    mix.add(synth_stab("D", 0.25, 1.15), 5.0 * beat, 0.34, 0.28, 0.26)
-    play_hybrid_tune(mix, ["A4:.5 D5:.5 F#5:.5 A5:1.5", "B5:.5 A5:.5 G5:.5 A5:.5", "D6:5"], beat, 0, 0.50, 0.12, doubled=True, bright=1.12)
     strum(mix, "G", 3 * beat, 0.44, 0.016, 2.2)
     strum(mix, "D", 5 * beat, 0.62, 0.025, 4.5)
     strum(mix, "D", 5 * beat + 0.45, 0.34, 0.018, 4.0, 0.3, up=True)
-    for at, gain in ((0.0, 0.65), (1.5 * beat, 0.48), (3 * beat, 0.58), (5 * beat, 0.78)):
-        mix.add(e_drum("kick"), at, gain, 0.0, 0.10)
-        mix.add(drum("dum"), at, gain * 0.45, 0.0, 0.22)
-    for at in (2.0 * beat, 4.0 * beat, 5.0 * beat):
-        mix.add(e_drum("snare"), at, 0.52, 0.05, 0.20)
-        mix.add(e_drum("clap"), at + 0.003, 0.34, -0.15, 0.24)
-    for i, note_n in enumerate(["D5", "F#5", "A5", "D6", "F#6", "A5", "D6"]):
-        mix.add(synth_arp(hz(note_n), beat * 0.65, 1.18), 5.0 * beat + i * beat * 0.28, 0.18, -0.35 + i * 0.11, 0.28)
-    for j in range(18):
-        mix.add(drum("shake"), 5 * beat + j * 0.055, 0.08 + 0.22 * np.sin(np.pi * j / 18), 0.4, 0.28)
-    audio = mix.render(45.0)
+    for at, g in ((0.0, .62), (3 * beat, .55), (5 * beat, .75)):
+        hit(mix, "war", at, g, 0, .3)
+    for at in (1.5 * beat, 2 * beat):
+        hit(mix, "tabor", at, .4, .1)
+    roll(mix, "tabor", 3.5 * beat, 6, beat / 4, .15, .45)
+    for i, note in enumerate(("D5", "F#5", "A5", "D6", "F#6")):
+        mix.add(handbell(hz(note), 3.0), 5 * beat + i * beat * .3, .16, -.35 + i * .17, .4)
+    for note in ("D3", "A3", "D4", "F#4"):
+        mix.add(organ(hz(note), 3.4), 5 * beat, .09, 0, .4)
+    for j in range(14):
+        hit(mix, "jingle", 5 * beat + j * 0.07, .06 + .16 * np.sin(np.pi * j / 14), .4)
+    audio = mix.render()
     audio[-SR:] *= np.linspace(1, 0, SR)[:, None]
     save("victory", level([audio], 0.88)[0], quality=4)
 
 
 def defeat() -> None:
-    """敗北：D 小調輓歌，大鐘、魯特琴、木笛與沉厚暖色低音合成鋪底。"""
+    """敗北：D 小調輓歌，大教堂裡的喪鐘、魯特琴、木笛與維奧爾琴，修士低聲合唱收尾。"""
     beat = 60 / 66
-    mix = Mix(10.5, False)
+    mix = Mix(10.5, False, CATHEDRAL)
     mix.add(bell(146.83, 6.0), 0.0, 0.50, -0.2, 0.5)
-    for bass_n, at_b, dur_b, gain in (("D2", 0.0, 1.9, 0.34), ("Bb2", 2.0, 0.95, 0.28), ("A2", 3.0, 0.95, 0.30), ("D2", 4.0, 4.8, 0.38)):
-        mix.add(synth_bass(hz(bass_n), dur_b * beat, 0.62), at_b * beat, gain, -0.08, 0.26)
-    mix.add(e_drum("kick"), 0.0, 0.32, 0.0, 0.18)
-    mix.add(e_drum("kick"), 4.0 * beat, 0.36, 0.0, 0.20)
+    for name, at_b, dur_b, g in (("D2", 0.0, 1.9, .2), ("Bb2", 2.0, .95, .17), ("A2", 3.0, .95, .18), ("D2", 4.0, 4.8, .22)):
+        mix.add(bowed(hz(name), dur_b * beat, "bass"), at_b * beat, g, -.1, .35)
     for i, name in enumerate(["D2", "A2", "D3", "F3"]):
         mix.add(pluck(hz(name), 3.5, 0.8), i * beat / 2, 0.50, -0.2, 0.35)
-    play_tune(mix, ["A4:1.5 G4:.5 F4:1 E4:1", "D4:4"], beat, 0, 0.46, 0.16)
-    play_hybrid_tune(mix, ["A4:1.5 G4:.5 F4:1 E4:1", "D4:4"], beat, 0, 0.18, -0.12, doubled=False, bright=0.58)
+    lament = ["A4:1.5 G4:.5 F4:1 E4:1", "D4:4"]
+    play_line(mix, "recorder", lament, beat, 0, .44, .16)
+    play_line(mix, "vielle", lament, beat, 0, .2, -.2, -1)
     for i, name in enumerate(["Bb2", "F3", "Bb3"]):
         mix.add(pluck(hz(name), 3.0, 0.8), 2 * beat + i * 0.03, 0.38, -0.2, 0.35)
     for i, name in enumerate(["A2", "E3", "A3", "C#4"]):
         mix.add(pluck(hz(name), 3.0, 0.8), 3 * beat + i * 0.03, 0.38, -0.2, 0.35)
     for i, name in enumerate(["D2", "A2", "D3"]):
         mix.add(pluck(hz(name), 5.0, 0.75), 4 * beat + i * 0.05, 0.55, -0.2, 0.4)
-    audio = mix.render(45.0)
+    for note in ("D3", "A3"):
+        mix.add(choir(hz(note), 4.2 * beat, "u"), 4 * beat, .14, 0, .5)
+    audio = mix.render()
     audio[-SR:] *= np.linspace(1, 0, SR)[:, None]
     save("defeat", level([audio], 0.82)[0], quality=4)
 
@@ -1133,9 +1435,10 @@ def previews(*names: str) -> None:
         print(f"preview -> {out_mp3} ({out_mp3.stat().st_size // 1024} KB)")
 
 
+
 PIECES = {"musket": musket, "menu": menu, "battle": battle, "previews": previews, "night": night, "victory": victory, "defeat": defeat, "extras": extras}
 
 if __name__ == "__main__":
-    for name in (sys.argv[1:] or list(PIECES)):
+    for name in (sys.argv[1:] or [p for p in PIECES if p != "previews"]):
         piece, _, arg = name.partition(":")
         PIECES[piece](*([arg] if arg else []))

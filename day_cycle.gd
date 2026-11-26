@@ -55,7 +55,7 @@ static func track(g) -> void:
 	for i: int in range(1,points.size()-1):
 		var x: float = r.position.x+r.size.x*points[i]/end
 		g.draw_line(Vector2(x,r.position.y-4),Vector2(x,r.end.y+4),Color(g.INK,0.85),2)
-	var at := Vector2(r.position.x+r.size.x*clampf(m.elapsed/end,0,1),r.get_center().y)
+	var at := Vector2(r.position.x+r.size.x*clampf(m.day_clock()/end,0,1),r.get_center().y)
 	# The part of the day already spent is dimmed, so the sun's place reads at a glance.
 	g.draw_rect(Rect2(r.position,Vector2(at.x-r.position.x,r.size.y)),Color(0.20,0.14,0.08,0.22))
 	if m.day_phase() == 3:
@@ -98,7 +98,7 @@ static func moon(g, at: Vector2, radius: float) -> void:
 
 # The light lying over the field right now (alpha 0 = plain daylight).
 static func tint(m) -> Color:
-	var t: float = m.elapsed
+	var t: float = m.day_clock()
 	var ns: float = m.night_start_time()
 	var c := Color(NOON,0.0).lerp(NOON,smoothstep(B.RAMP_1,B.RAMP_1+BLEND,t))
 	c = c.lerp(DUSK,smoothstep(B.RAMP_2,B.RAMP_2+BLEND,t))
@@ -108,7 +108,7 @@ static func tint(m) -> Color:
 # How dark it is, 0..1 (lights come on with it).
 static func darkness(m) -> float:
 	var ns: float = m.night_start_time()
-	return smoothstep(ns,ns+BLEND,m.elapsed) if m.night_decay else 0.0
+	return smoothstep(ns,ns+BLEND,m.day_clock()) if m.night_decay else 0.0
 
 static func glow() -> GradientTexture2D:
 	if glow_texture == null:
@@ -131,10 +131,12 @@ static func pool(g, at: Vector2, radius: float, strength: float) -> void:
 	g.draw_texture_rect(glow(),Rect2(at-size*0.5,size),false,Color(1,1,1,strength))
 
 # Drawn over the troops and effects, under the HUD: the wash of light, then at night the fires.
-static func light(g, field: Rect2) -> void:
-	var m = g.model
-	var c := tint(m)
+static func wash(g, field: Rect2) -> void:
+	var c := tint(g.model)
 	if c.a > 0.003: g.draw_rect(field,c)
+
+static func lamps(g) -> void:
+	var m = g.model
 	var dark := darkness(m)
 	if dark <= 0.0: return
 	for team: int in range(2):
@@ -146,6 +148,10 @@ static func light(g, field: Rect2) -> void:
 		if lord.hp > 0 and m.lord_active[lord.team]: pool(g,lord.pos+Vector2(0,-14),70.0,dark*0.8)
 	for b: Dictionary in m.buildings:
 		if b.hp > 0 and b.kind in ["tower","watchtower","arcane_tower","blood_tower"]: pool(g,b.pos+Vector2(0,-30),56.0,dark*0.7)
+
+static func light(g, field: Rect2) -> void:
+	wash(g,field)
+	lamps(g)
 
 static func torch(g, at: Vector2, strength: float) -> void:
 	var lick: float = sin(g.clock*13.0+at.y)*2.0

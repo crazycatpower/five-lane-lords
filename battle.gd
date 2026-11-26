@@ -15,6 +15,8 @@ const SealAltar = preload("res://seal_altar.gd")
 const CoreCards = preload("res://core_cards.gd")
 const GridRules = preload("res://grid_rules.gd")
 const Giant = preload("res://giant_unit.gd")
+const LargeBody = preload("res://large_body.gd")
+const BossTraits = preload("res://boss_traits.gd")
 const Upgrades = preload("res://card_upgrades.gd")
 const DarkSorcery = preload("res://dark_sorcery.gd")
 const LordExpansion = preload("res://lord_expansion.gd")
@@ -49,13 +51,31 @@ var lords: Array = []
 var gates: Array = []
 var alarm: Array = [0.0,0.0,0.0,0.0,0.0]
 var building_alarm: Array = [0.0,0.0,0.0,0.0,0.0]
+var blue_alarm: Array = [0.0,0.0,0.0,0.0,0.0]
+var blue_building_alarm: Array = [0.0,0.0,0.0,0.0,0.0]
 var stats: Array = []
 var events: Array[Dictionary] = []
 var elapsed := 0.0
 var vampire_until: Array[float] = [0.0,0.0]
+# Lord skills that play out one piece at a time (使用者 2026-11-25): 豐年祭 farms, 箭樓築城 towers, 亡者甦醒
+# skeletons, 符文落雨 traps. Steps left and the time to the next one, per side (tick_skill_steps).
+var skill_steps_left: Array[int] = [0,0]
+var skill_step_cd: Array[float] = [0.0,0.0]
+var skill_ghouls_left: Array[int] = [0,0]
+var hero_spins: Array[Dictionary] = []
 var time_stop_left := 0.0
 var time_stop_team := -1
 var time_stop_origin := Vector2.ZERO
+var ranged_hit := false
+
+# The day's clock (使用者 2026-11-25「讓時間暫停能暫停時鐘」): it runs with elapsed but stands still during 時空凝滯,
+# so the sun, the gold ramps, nightfall, dawn and survive timers all wait. Troops, cooldowns and the caster's side
+# keep using elapsed. Kept as the paused seconds, so code and tests that set elapsed still move the clock.
+var time_paused := 0.0
+var day_step := 0.0 # how far the day's clock moved this step (0 while paused)
+
+func day_clock() -> float:
+	return elapsed-time_paused
 
 func time_stopped() -> bool:
 	return time_stop_left > 0.000001
@@ -64,8 +84,9 @@ func actor_time(actor: Dictionary) -> float:
 	return elapsed+float(actor.get("extra_time",0.0))
 
 # 時空凝滯 (producer 2026-11-19): the game keeps running; only the caster's enemies stop. Their
-# troops and lord stand still (animations too), their buildings (towers and economy) and base income
-# pause. Everything else, both sides' cards and cooldowns and the projectiles in flight, carries on.
+# troops and lord stand still (animations too), their buildings (towers and economy), base income and
+# (使用者 2026-11-25) card, home-card and skill cooldowns pause, and the day's clock stops for both sides.
+# The caster's side and the projectiles in flight carry on.
 func frozen(team: int) -> bool:
 	return time_stop_left > 0.000001 and time_stop_team >= 0 and team != time_stop_team
 
@@ -156,6 +177,8 @@ func _init(seed_value: int = 1, deck_a: Array = [], deck_b: Array = [], lord_a: 
 	active_lanes.assign(range(L.GRID_ROWS))
 	alarm = per_lane(0.0)
 	building_alarm = per_lane(0.0)
+	blue_alarm = per_lane(0.0)
+	blue_building_alarm = per_lane(0.0)
 	territory.resize(L.GRID_COLUMNS*L.GRID_ROWS)
 	territory.fill(-1)
 	for team: int in range(2):
@@ -248,7 +271,8 @@ func apply_domestic(team: int, home: String, mods: Dictionary) -> void:
 		buildings = buildings.filter(func(b: Dictionary) -> bool: return not (b.team == team and b.kind == home_cards[team]))
 		home_cards[team] = home
 		if not home.is_empty():
-			for cell: Vector2i in B.START_FARMS: add_building(team,Vector2i(cell.x if team == 0 else 8-cell.x,cell.y),home)
+			for cell: Vector2i in B.START_FARMS: add_building(team,Vector2i(cell.x if team == 0 else 8-cell.x,cell.y),home).start_home = true
+			if L.GRID_ROWS != 5: place_start_homes()
 	place_start_buildings(team,mods.get("start_buildings",[]))
 	apply_lord_boost(team)
 	ink[team] = minf(B.MAX_INK,ink[team]+mods.get("start_ink",0.0))
@@ -362,7 +386,10 @@ func place_start_buildings(team: int, specs: Array) -> void:
 			continue
 		for lane: int in slot_lanes(String(spec[1])):
 			var b := place_near(team,int(spec[0]),lane,String(spec[2]))
-			if not b.is_empty(): b.slot_spec = true
+			if not b.is_empty():
+				b.slot_spec = true
+				var bt := LargeBody.twin(self,b)
+				if not bt.is_empty(): bt.slot_spec = true
 		slot_specs[team].append(spec)
 
 func place_near(team: int, col0: int, lane: int, kind: String) -> Dictionary:
@@ -385,7 +412,10 @@ func fill_home_rows(team: int) -> void:
 		for lane: int in active_lanes:
 			var cell := Vector2i(col,lane)
 			if is_no_build_cell(cell) or not building_at(cell).is_empty(): continue
-			add_building(team,cell,hc).fill_home = true
+			var fb := add_building(team,cell,hc)
+			fb.fill_home = true
+			var ft := LargeBody.twin(self,fb)
+			if not ft.is_empty(): ft.fill_home = true
 
 # The two opening farms sit symmetrically on the open lanes (使用者 2026-11-22：偶數路的初始經濟建築要改):
 # the second lane from each edge (II and IV of five, II and V of six, the inner two of four), both ends of
@@ -646,8 +676,8 @@ func building_at(cell: Vector2i) -> Dictionary:
 	return {}
 
 func multiplier() -> float:
-	if night_decay and elapsed >= night_start_time(): return B.NIGHT_GOLD
-	return B.DUSK_GOLD if elapsed >= B.RAMP_2 else (B.NOON_GOLD if elapsed >= B.RAMP_1 else B.START_GOLD)
+	if night_decay and day_clock() >= night_start_time(): return B.NIGHT_GOLD
+	return B.DUSK_GOLD if day_clock() >= B.RAMP_2 else (B.NOON_GOLD if day_clock() >= B.RAMP_1 else B.START_GOLD)
 
 func is_conveyor(team: int) -> bool:
 	return Conveyor.is_active(self, team)
@@ -716,10 +746,14 @@ func build_lookups() -> void:
 	for u: Dictionary in units:
 		var against: int = 1-u.team
 		foe_units[against].append(u)
-		for ul in Giant.lanes(u):
-			var uli := int(ul)
-			if uli >= 0 and uli < lane_foes[against].size():
-				lane_foes[against][uli].append(u)
+		var foe_lanes: Array = lane_foes[against]
+		if u.has("lanes"): # a 2×2 giant stands in two lanes
+			for ul in u.lanes:
+				var uli := int(ul)
+				if uli >= 0 and uli < foe_lanes.size(): foe_lanes[uli].append(u)
+		else:
+			var uli: int = int(u.lane)
+			if uli >= 0 and uli < foe_lanes.size(): foe_lanes[uli].append(u)
 		if u.hp > 0:
 			if int(u.get("poison_stacks",0)) > 0 or float(u.get("poison_zone_seen",-1.0)) >= 0.0: has_poisoned_unit = true
 			if u.get("levy",false): has_levy = true
@@ -796,6 +830,7 @@ func play_check(team: int, slot: int, pos: Vector2) -> Refusal:
 		return Refusal.OK
 	var cell := cell_at(pos)
 	if cell.x < 0 or not cell.y in active_lanes: return Refusal.OFF_GRID
+	if card.type == "building" and LargeBody.is_tall(kind): return LargeBody.refusal(self,team,kind,cell) as Refusal # 1×2 buildings check both cells
 	if card.type == "building" and is_water_cell(cell): return Refusal.WATER
 	if card.type == "building" and is_blocked_cell(cell): return Refusal.BLOCKED
 	if territory_owner(cell) != team: return Refusal.NOT_OURS
@@ -850,6 +885,8 @@ func play(team: int, slot: int, pos: Vector2) -> bool:
 	stats[team].used[kind] = stats[team].used.get(kind,0)+1
 	stats[team].spent[kind] = stats[team].spent.get(kind,0.0)+paid
 	var cell := cell_at(pos)
+	var played_cells: Array[Vector2i] = GridRules.played_cells(self,team,kind,cell,pos)
+	var spawned: Array[Dictionary] = []
 	if card.type == "building":
 		var here := building_at(cell)
 		if here.is_empty():
@@ -861,7 +898,11 @@ func play(team: int, slot: int, pos: Vector2) -> bool:
 					u.card = kind
 					event("summoned",u.pos,team)
 		else: refresh_building(here)
-	elif card.type == "unit": deploy(team,kind,cell,int(paid) if GoldMonster.pays_all(kind) else 0)
+	elif card.type == "unit":
+		var unit_start: int = units.size()
+		deploy(team,kind,cell,int(paid) if GoldMonster.pays_all(kind) else 0)
+		for ui: int in range(unit_start,units.size()):
+			spawned.append(units[ui])
 	else:
 		var spell_origin: Vector2 = lords[team].pos+Vector2((1.0 if team == 0 else -1.0)*20.0,-34.0) if (lord_active[team] and float(lords[team].hp) > 0.0) else Vector2(L.gate_icon_x(team),clampf(pos.y,L.GRID_ORIGIN.y+36.0,L.GRID_ORIGIN.y+L.GRID_SIZE.y-36.0)-44.0)
 		spells.append({"kind":kind,"team":team,"pos":pos,"origin":spell_origin,"delay":B.SPELL_DELAY})
@@ -869,8 +910,8 @@ func play(team: int, slot: int, pos: Vector2) -> bool:
 	if card.type == "unit":
 		recent_lanes[team].append(cell.y)
 		if recent_lanes[team].size() > 3: recent_lanes[team].pop_front()
-	event("play",pos,team,{"card":kind,"slot":slot})
-	ExpansionMore.on_card_played(self,team,kind,cell.y)
+	event("play",pos,team,{"card":kind,"slot":slot,"cells":played_cells})
+	ExpansionMore.on_card_played(self,team,kind,played_cells,spawned)
 	CoreCards.on_card_played(self,team,kind) # 咒潮法師 tide stacks
 	return true
 
@@ -893,6 +934,7 @@ func add_building(team: int, cell: Vector2i, kind: String) -> Dictionary:
 		if ups.has(key) and data.has(key):
 			b[key] = Upgrades.scaled(key,float(data[key]),int(ups[key]))
 	if kind == "farm": stats[team].planted += 1
+	LargeBody.on_built(self,b) # 1×2 buildings: the second segment in the next lane
 	return b
 
 func spell_card_data(team: int, kind: String) -> Dictionary:
@@ -907,6 +949,7 @@ func refresh_building(b: Dictionary) -> void:
 	if data.has("charges"): b.charges = data.charges
 	if data.expires > 0: b.expires = elapsed+data.expires
 	if b.kind == "bonewall": b.thresholds_spawned = 0
+	if b.has("twin_id"): LargeBody.on_refresh(self,b)
 	stats[b.team].repairs = stats[b.team].get("repairs",0)+1
 	event("heal",b.pos,b.team)
 
@@ -940,7 +983,7 @@ func deploy(team: int, kind: String, cell: Vector2i, gold: int = 0) -> void:
 	for group: Array in groups: front_offset = minf(front_offset,group[2])
 	var lanes: Array = [cell.y]
 	if card.get("spread",false):
-		var middle := clampi(cell.y,1,3)
+		var middle := clampi(cell.y,1,maxi(1,L.GRID_ROWS-2))
 		lanes = [middle-1,middle,middle+1]
 	# Legion members march at their own speeds (producer 2026-11-19: no forced common pace).
 	if GridRules.footprint(kind) != Vector2i(1,1) and GridRules.footprint_ok(self,team,kind,cell):
@@ -1049,11 +1092,13 @@ func damage(target: Dictionary, amount: float, team: int, kind: String, source: 
 		if target.get("terror_until",-1.0) > elapsed: amount *= float(target.get("terror_mult",1.0)) # 恐懼嚎叫 破膽
 		amount = WardRules.share(self,target,amount,team,kind,source) # 結界護衛 takes a share
 		if amount <= 0: return
+	if target.has("twin_id") and LargeBody.repeat_hit(self,target,amount,kind,source): return # one blow on a 1×2 building counts once
 	var dealt := minf(amount,target.hp)
 	target.hp -= amount
+	if target.has("twin_id"): LargeBody.share_hit(self,target)
 	if not sacrifice: ExpansionMore.after_hit(self,target,dealt,source)
 	if not sacrifice:
-		LordExpansion.drain(self,source,dealt,target.pos)
+		if not B.is_building_target(target): LordExpansion.drain(self,source,dealt,target.pos)
 		Arcane.blink(self,target)
 		Faction.on_hit(self,target,source)
 		Monster.on_hit(self,target,source)
@@ -1077,10 +1122,13 @@ func damage(target: Dictionary, amount: float, team: int, kind: String, source: 
 				event("summoned", skel.pos, skel.team)
 				link(target.pos, skel.pos, target.team, "summon")
 		target.thresholds_spawned = spawned
+		if target.has("twin_id"): LargeBody.sync_thresholds(self,target)
 	if not sacrifice: stats[team].damage[kind] = stats[team].damage.get(kind,0.0)+dealt
-	event("hit",target.pos,target.team,{"attacker":kind,"target":target.kind})
-	if target.hp <= 0 and not sacrifice: DarkSorcery.rescue(self,target)
-	if target.has("cell") and target.team == 0: building_alarm[target.cell.y] = 1.5
+	var hit_attacker: String = ("lord_" + lords[team].lord) if kind == "lord" else kind
+	event("hit",target.pos,target.team,{"attacker":hit_attacker,"target":target.kind})
+	if target.has("cell"):
+		if target.team == 0: building_alarm[target.cell.y] = 1.5
+		else: blue_building_alarm[target.cell.y] = 1.5
 	if target.hp <= 0:
 		if target.has("serial"):
 			serials_in_use.erase(target.serial)
@@ -1136,9 +1184,8 @@ func hit_gate(side: int, lane: int, amount: float, kind: String = "militia", sou
 	gates[side][lane] = maxf(0,gates[side][lane]-amount)
 	var thorns := float(lord_mod(side,"thorns_gate",0.0))
 	var src_data: Dictionary = B.CARDS.get(source.get("kind",""),{})
-	if thorns > 0 and not source.is_empty() and source.get("hp",0.0) > 0 and not source.has("cell") and not src_data.get("projectile",false) and not src_data.get("lob",false):
+	if thorns > 0 and not source.is_empty() and source.get("hp",0.0) > 0 and not source.has("cell") and not ranged_hit and not is_ranged_attacker(src_data):
 		damage(source,thorns,side,"barricade")
-	LordExpansion.drain(self,source,dealt,Vector2(L.gate_stop(side),L.cell_center(Vector2i(0,lane)).y))
 	Monster.on_gate_hit(self,source)
 	var credit := gate_credit_card(kind,source)
 	if dealt > 0.0 and not credit.is_empty():
@@ -1152,6 +1199,15 @@ func hit_gate(side: int, lane: int, amount: float, kind: String = "militia", sou
 		event("breach",Vector2(L.gate_icon_x(side),L.cell_center(Vector2i(0,lane)).y),1-side,{"lane":lane})
 	stats[1-side].damage[kind] = stats[1-side].damage.get(kind,0.0)+dealt
 	if side == 0: alarm[lane] = 1.5
+	else: blue_alarm[lane] = 1.5
+
+func lane_alarm(team: int, lane: int) -> float:
+	var src: Array = alarm if team == 0 else blue_alarm
+	return float(src[lane]) if lane >= 0 and lane < src.size() else 0.0
+
+func lane_building_alarm(team: int, lane: int) -> float:
+	var src: Array = building_alarm if team == 0 else blue_building_alarm
+	return float(src[lane]) if lane >= 0 and lane < src.size() else 0.0
 
 func grave_drop(b: Dictionary) -> void:
 	b.production = 0.0 # death acceleration never carries over into the next cycle
@@ -1242,7 +1298,7 @@ func resolve_deaths() -> void:
 		if dead.get("explosion",false):
 			var explosion_kind: String = dead.get("kind","bonewall")
 			var explosion: Dictionary = B.CARDS[explosion_kind]
-			for u: Dictionary in units:
+			for u: Dictionary in units.duplicate():
 				if u.hp > 0 and u.team != dead.team and B.blast_hits(dead.pos,String(explosion.get("blast","square")),1 if dead.team == 0 else -1,u):
 					damage(u,explosion.explosion_damage,dead.team,explosion_kind)
 			event("boneburst",dead.pos,dead.team)
@@ -1256,7 +1312,7 @@ func resolve_deaths() -> void:
 			gain_ink(dead.team,refund)
 			event("ink",dead.pos,dead.team)
 		for b: Dictionary in buildings:
-			if b.hp > 0 and b.kind == "grave" and b.cell.y in dead.get("lanes",[dead.lane]):
+			if b.hp > 0 and not frozen(b.team) and b.kind == "grave" and b.cell.y in dead.get("lanes",[dead.lane]):
 				link(dead.pos,b.pos,b.team,"soul")
 				b.production += B.CARDS.grave.death_advance
 				if b.production >= B.CARDS.grave.period: grave_drop(b)
@@ -1264,9 +1320,13 @@ func resolve_deaths() -> void:
 			if u.hp <= 0 or u.kind != "ghoul" or B.edge_distance(u,dead) > B.CARDS.ghoul.radius: continue
 			link(dead.pos,u.pos,u.team,"devour")
 			u.hp = minf(u.max_hp,u.hp+B.CARDS.ghoul.devour_heal)
-			var tier_index: int = B.TIERS.damage.find(u.get("damage",B.CARDS.ghoul.damage))
-			if tier_index >= 0: u.damage = B.TIERS.damage[maxi(B.tier_index(B.CARDS.ghoul.max_damage_tier),tier_index-1)]
-			else: u.damage = minf(roundf(B.tier_value("damage",B.CARDS.ghoul.max_damage_tier)*float(u.get("damage_mult",1.0))),roundf(float(u.get("damage",B.CARDS.ghoul.damage))*1.35))
+			var cur_g: float = float(u.get("damage",B.CARDS.ghoul.damage))
+			var cap_g: int = B.tier_index(B.CARDS.ghoul.max_damage_tier)
+			var tier_index: int = B.TIERS.damage.find(cur_g)
+			if tier_index > cap_g: u.damage = B.TIERS.damage[tier_index-1]
+			elif tier_index < 0:
+				var cap_val_g: float = roundf(B.tier_value("damage",B.CARDS.ghoul.max_damage_tier)*float(u.get("damage_mult",1.0)))
+				if cur_g < cap_val_g: u.damage = minf(cap_val_g,roundf(cur_g*1.35))
 			event("heal",u.pos,u.team)
 		if dead.poison_team >= 0:
 			add_zone(dead.pos,dead.poison_team,B.CARDS.plague.spread_radius,B.CARDS.plague.spread_duration)
@@ -1280,20 +1340,22 @@ func resolve_deaths() -> void:
 				child.card = dead.card
 				event("summoned",child.pos,child.team)
 		if dead.curse_team >= 0:
-			var child := spawn_unit(dead.curse_team,dead.lane,"skeleton",dead.pos)
+			var cpos: Vector2 = Vector2(dead.pos.x,L.cell_center(Vector2i(0,dead.lane)).y) if dead.get("lanes",[]).size() > 1 else dead.pos
+			var child := spawn_unit(dead.curse_team,dead.lane,"skeleton",cpos)
 			child.card = "curse"
 			event("summoned",child.pos,child.team)
 			event("curse_rise",child.pos,child.team)
-			link(dead.pos,child.pos,dead.curse_team,"curse")
+			link(cpos,child.pos,dead.curse_team,"curse")
 	death_queue.clear()
 
 func reaper_target(u: Dictionary) -> Dictionary:
 	var found: Dictionary = {}
+	var reach: float = float(u.get("range",B.CARDS.reaper.range))*(1.0+float(u.get("range_pct",0.0)))
 	for other: Dictionary in lane_foes[u.team][u.lane]+lane_foe_buildings[u.team][u.lane]:
-		if other.hp <= 0 or other.get("stealthed",false) or B.edge_distance(u,other) > B.CARDS.reaper.range: continue
+		if other.hp <= 0 or other.get("stealthed",false) or GluttonNest.hidden(other) or B.edge_distance(u,other) > reach: continue
 		if (other.pos.x-u.pos.x)*u.face < 0: continue
 		if found.is_empty() or other.serial < found.serial: found = other
-	if found.is_empty():
+	if found.is_empty() and not _walled_off(u):
 		var forward_lords: Array = lords.filter(func(l: Dictionary) -> bool: return (l.pos.x-u.pos.x)*u.face >= 0)
 		return nearest(u.pos,u.team,54.0,forward_lords,-1,true,B.actor_radius(u))
 	return found
@@ -1325,13 +1387,14 @@ func skill_charged(team: int) -> bool:
 func skill_error(team: int) -> String:
 	if ended: return "戰局已經結束。"
 	if paused: return "暫停中。"
+	if frozen(team): return "時空凝滯中。"
 	if not B.has_skill(lords[team].lord): return "這位領主沒有技能。"
 	var info: Dictionary = B.lord_data(lords[team].lord)
 	if lords[team].hp <= 0: return "領主倒下了，復活後才能發動%s。" % info.skill
 	if skill_cd[team] > 0.00001: return "%s還要冷卻 %d 秒。" % [info.skill,ceili(skill_cd[team])]
-	if lords[team].lord == "underworld" and count_buildings(team,"grave") == 0: return "沒有墓碑"
+	if lords[team].lord == "harvest" and iron_tower_cells(team).is_empty(): return "領地內沒有空格可建農田。"
 	if lords[team].lord == "iron" and iron_tower_cells(team).is_empty(): return "領地內沒有空格可建箭樓。"
-	if lords[team].lord == "rune" and LordExpansion.rune_cells(self,team).is_empty(): return "領地內沒有可召喚法陣的空格。"
+	if lords[team].lord == "rune" and any_free_cells().is_empty(): return "場上沒有可召喚法陣的空格。"
 	if B.is_minion(lords[team].lord) and info.get("skill_card","") == "levy" and Faction.intruders(self,team).is_empty(): return "領地內沒有敵軍。"
 	if not skill_charged(team): return "充能不足：%s還差 %d（花費金幣或金幣溢出時充能）。" % [info.skill,ceili(skill_need(team)-skill_charge[team])]
 	return ""
@@ -1479,7 +1542,9 @@ func cast_skill(team: int) -> bool:
 		event("skill",lords[team].pos,team,{"lord":kind,"targets":visual_targets})
 		return true
 	match kind:
-		"rune": visual_targets = LordExpansion.cast_runes(self,team)
+		"rune":
+			start_skill_steps(team,int(B.LORDS.rune.rune_count)) # 符文落雨: rune stones fall one by one
+			visual_targets.append(lords[team].pos)
 		"vampire":
 			vampire_until[team] = elapsed+B.LORDS.vampire.blood_duration
 			for u: Dictionary in units:
@@ -1489,13 +1554,12 @@ func cast_skill(team: int) -> bool:
 			time_stop_left = B.LORDS.mage.freeze_duration
 			time_stop_origin = lords[team].pos
 		"underworld":
-			for b: Dictionary in buildings:
-				if b.hp <= 0 or b.team != team or b.kind != "grave": continue
-				for i: int in range(B.LORDS.underworld.summon_count):
-					var u := spawn_unit(team,b.cell.y,"skeleton",b.pos)
-					u.card = "skill"
-					u.spawn_delay = i*0.12
-				if record_events: visual_targets.append(b.pos)
+			# 亡者甦醒: 20 skeletons + 1 ghoul per grave claw out of random ground on our land.
+			var skels: int = int(B.LORDS.underworld.rise_base)
+			var ghouls: int = int(B.LORDS.underworld.rise_per_grave)*count_buildings(team,"grave")
+			skill_ghouls_left[team] += ghouls
+			start_skill_steps(team,skels+ghouls)
+			visual_targets.append(lords[team].pos)
 		"adventure":
 			preload("res://hero_slash.gd").cast(self,team)
 		"lion":
@@ -1506,40 +1570,91 @@ func cast_skill(team: int) -> bool:
 				var u := spawn_unit(team,lane,"knight",L.spawn_position(team,lane))
 				u.card = "skill"
 				u.march = B.LION_KNIGHT_SPEED
+				# 精銳騎士 (使用者 2026-11-25「給騎士加成」): health and damage one tier up, and a charge.
+				var up: int = int(B.LORDS.lion.get("elite_tiers",1))
+				if up > 0:
+					var hi: int = B.TIERS.hp.find(float(u.max_hp))
+					u.max_hp = B.TIERS.hp[maxi(hi-up,0)] if hi > 0 else roundf(float(u.max_hp)*1.5)
+					u.hp = u.max_hp
+					var di: int = B.TIERS.damage.find(float(u.get("damage",B.CARDS.knight.damage)))
+					u.damage = B.TIERS.damage[maxi(di-up,0)] if di > 0 else roundf(float(u.get("damage",B.CARDS.knight.damage))*1.35)
+				u.granted_charge = B.LORDS.lion.get("elite_charge",true)
 				if record_events: visual_targets.append(u.pos)
 		"beast":
-			# Summon at the foremost owned cell on each active lane, for either side.
+			# 萬獸奔騰 (使用者 2026-11-25「從底線衝出來」「改成兩隻隨機的小野獸」「魚喙怪、無誓鬼看起來不像野獸」→ 狼／蟲／禿鷲／囊腹獸): every open lane, stampede_count
+			# small beasts drawn at random (battle rng) burst out of our own back line, charging (one speed tier up
+			# and a heavier first hit until it lands one).
 			for lane: int in active_lanes:
-				var col := front_column(team,lane)
-				if col < 0: continue
-				var origin := L.cell_center(Vector2i(col,lane))
-				for i: int in range(B.LORDS.beast.pack_count):
-					var u := spawn_unit(team,lane,B.LORDS.beast.pack_kind,origin)
+				var gate_cell := Vector2i(0 if team == 0 else L.GRID_COLUMNS-1,lane)
+				if territory_owner(gate_cell) != team: continue
+				var origin := L.spawn_position(team,lane)
+				var kinds: Array = B.LORDS.beast.stampede
+				for i: int in range(int(B.LORDS.beast.stampede_count)):
+					var u := spawn_unit(team,lane,String(kinds[rng.randi_range(0,kinds.size()-1)]),origin)
 					u.card = "skill"
-					u.spawn_delay = i*0.12
+					u.spawn_delay = i*0.15
+					u.granted_charge = true
 				if record_events: visual_targets.append(origin)
 		"harvest":
-			# A farm in each lane (front-most free home cell), then every farm healed (no extra yield).
-			for lane: int in active_lanes:
-				for col: int in range(L.GRID_COLUMNS):
-					var cell := Vector2i(col if team == 0 else 8-col,lane)
-					if territory_owner(cell) == team and building_at(cell).is_empty() and not is_no_build_cell(cell):
-						add_building(team,cell,"farm")
-						break
-			for b: Dictionary in buildings:
-				if b.team == team and b.kind == "farm" and b.hp > 0:
-					b.hp = b.max_hp
-					if record_events: visual_targets.append(b.pos)
+			# 豐年祭 (使用者 2026-11-25「地裡隨機不斷出現農田」): farms keep sprouting on random free land (tick_sprouts).
+			start_skill_steps(team,int(B.LORDS.harvest.sprout_count))
+			visual_targets.append(lords[team].pos)
 		"iron":
-			# 箭樓築城 (producer 2026-11-19): two 箭樓 on random empty cells of our territory.
-			var free: Array[Vector2i] = iron_tower_cells(team)
-			for i: int in range(mini(int(B.LORDS.iron.tower_count),free.size())):
-				var cell: Vector2i = free[rng.randi_range(0,free.size()-1)]
-				free.erase(cell)
-				var tower: Dictionary = add_building(team,cell,"tower")
-				if record_events: visual_targets.append(tower.pos)
+			# 箭樓築城 (使用者 2026-11-25「一個接一個拔地而起共 3 個」): towers rise one after another on free land.
+			start_skill_steps(team,int(B.LORDS.iron.tower_count))
+			visual_targets.append(lords[team].pos)
 	event("skill",lords[team].pos,team,{"lord":kind,"targets":visual_targets})
 	return true
+
+func start_skill_steps(team: int, count: int) -> void:
+	skill_steps_left[team] += count
+	skill_step_cd[team] = 0.0 # the first piece comes at once
+
+func skill_step_interval(lord: String) -> float:
+	match lord:
+		"harvest": return float(B.LORDS.harvest.sprout_interval)
+		"iron": return float(B.LORDS.iron.tower_interval)
+		"underworld": return float(B.LORDS.underworld.rise_interval)
+		"rune": return float(B.LORDS.rune.rune_interval)
+	return 0.5
+
+func tick_skill_steps(dt: float) -> void:
+	for team: int in range(2):
+		if frozen(team) or skill_steps_left[team] <= 0: continue
+		skill_step_cd[team] -= dt
+		if skill_step_cd[team] > 0.0: continue
+		var lord: String = String(lords[team].lord) if team < lords.size() else ""
+		skill_step_cd[team] += skill_step_interval(lord)
+		skill_steps_left[team] -= 1
+		skill_step(team,lord)
+
+# One piece of a lord skill, on a random free cell of our land (battle rng).
+func skill_step(team: int, lord: String) -> void:
+	var free: Array[Vector2i] = owned_land_cells(team) if lord == "underworld" else (any_free_cells() if lord == "rune" else iron_tower_cells(team))
+	if free.is_empty(): return
+	var cell: Vector2i = free[rng.randi_range(0,free.size()-1)]
+	match lord:
+		"harvest": # 豐年祭: a farm sprouts
+			var farm: Dictionary = add_building(team,cell,"farm")
+			event("summoned",farm.pos,team)
+		"iron": # 箭樓築城: a tower rises out of the ground
+			var tower: Dictionary = add_building(team,cell,"tower")
+			tower.rise_at = elapsed
+			event("tower_rise",tower.pos,team)
+		"rune": # 符文落雨: a rune stone falls and becomes a random magic trap
+			var traps: Array = B.CARDS.keys().filter(func(k: String) -> bool: return B.CARDS[k].has("trap") and B.card_faction(k) == "magic")
+			var trap: Dictionary = add_building(team,cell,String(traps[rng.randi_range(0,traps.size()-1)]))
+			event("rune_fall",trap.pos,team)
+		"underworld": # 亡者甦醒: skeletons + extra ghouls (1 per grave) claw out of our land
+			var pos := L.cell_center(cell)
+			var spawn_kind := "skeleton"
+			if skill_ghouls_left[team] > 0 and (skill_steps_left[team] < skill_ghouls_left[team] or rng.randi_range(0,skill_steps_left[team]) < skill_ghouls_left[team]):
+				spawn_kind = "ghoul"
+				skill_ghouls_left[team] -= 1
+			var u := spawn_unit(team,cell.y,spawn_kind,pos)
+			u.card = "skill"
+			u.spawn_delay = 0.35
+			event("grave_rise",pos,team)
 
 # Empty land cells we own, in a fixed order (the skill draws from them with the battle rng).
 func iron_tower_cells(team: int) -> Array[Vector2i]:
@@ -1548,6 +1663,22 @@ func iron_tower_cells(team: int) -> Array[Vector2i]:
 		for col: int in range(L.GRID_COLUMNS):
 			var cell := Vector2i(col,lane)
 			if territory_owner(cell) == team and building_at(cell).is_empty() and not is_no_build_cell(cell): cells.append(cell)
+	return cells
+
+func any_free_cells() -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	for lane: int in active_lanes:
+		for col: int in range(L.GRID_COLUMNS):
+			var cell := Vector2i(col,lane)
+			if building_at(cell).is_empty() and not is_no_build_cell(cell): cells.append(cell)
+	return cells
+
+func owned_land_cells(team: int) -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	for lane: int in active_lanes:
+		for col: int in range(L.GRID_COLUMNS):
+			var cell := Vector2i(col,lane)
+			if territory_owner(cell) == team and not is_water_cell(cell) and not is_blocked_cell(cell): cells.append(cell)
 	return cells
 
 func finish(side: int) -> void:
@@ -1628,6 +1759,8 @@ func shoot_lord(lord: Dictionary, target: Dictionary, amount: float) -> void:
 			var card: String = B.MINION_LORDS[lord.lord].card
 			if B.CARDS.get(card,{}).get("projectile",false) or card in ["tower","watchtower"]: look = card
 		projectiles[projectiles.size()-1].visual_kind = look
+		if not events.is_empty() and events[events.size()-1].get("kind","") == "arrow":
+			events[events.size()-1].card = look
 
 # 肉鴿魔王的招牌彈 (roguelike_catalog.BOSS_SHOTS): a lobbed bomb, a shot through the whole lane, or a
 # bursting curse that leaves poison. Damage is the boss's own (already raised) times the shot's mult.
@@ -1655,12 +1788,18 @@ func _execute_unit_strike(u: Dictionary, target: Dictionary, data: Dictionary) -
 	Arcane.reveal(self,u,false)
 	u.march_time = 0.0
 	u.strike_seq = u.get("strike_seq",0)+1
-	var amount: float = ExpansionMore.modify_attack(self,u,target,Expansion.attack_damage(self,u,target,u.get("damage",data.damage)))
+	var uses_area: bool = data.has("area_damage") and (data.get("suicide_blast",false) or data.get("lob",false) or data.has("dot_damage") or data.has("stun_on_hit"))
+	var base_amt: float = float(u.get("area_damage",data.area_damage)) if uses_area else float(u.get("damage",data.damage))
+	var amount: float = ExpansionMore.modify_attack(self,u,target,Expansion.attack_damage(self,u,target,base_amt))
 	if u.kind == "ox" and target.has("cell"): amount *= B.OX_BUILDING_BONUS # 耕牛 tears down buildings; its charge is the common one
-	if ExpansionMore.attack(self,u,target,data): return
-	if data.has("stun_on_hit"): Arcane.area_hit(self,u,target.pos)
-	elif data.get("pierce",false): Arcane.shoot_piercing_arrow(self,u,target)
+	if ExpansionMore.attack(self,u,target,data,amount): return
+	if data.has("stun_on_hit"): Arcane.area_hit(self,u,target.pos,amount)
+	elif data.has("beam"): Arcane.fire_beam(self,u,amount) # 水晶巨像: a thick beam over both its lanes, many small hits
+	elif data.get("pierce",false): Arcane.shoot_piercing_arrow(self,u,target,amount)
 	elif data.get("projectile",false): shoot(u,target,amount)
+	elif target.get("kind","") == "gate" and data.get("breath",false) and Giant.is_giant(u):
+		Giant.hit_gates(self,u,target.team,amount) # 骸骨巨龍: the breath burns both gates it faces (and sweeps)
+		return
 	elif target.get("kind","") == "gate": hit_gate(target.team,target.lane,amount,u.get("card",u.kind),u)
 	else: damage(target,amount,u.team,u.get("card",u.kind),u)
 	if Giant.is_giant(u) and not data.get("projectile",false) and not data.get("pierce",false) and not data.has("stun_on_hit") and not data.get("lob",false) and not data.has("flight_time"):
@@ -1680,24 +1819,34 @@ func attack(u: Dictionary, target: Dictionary) -> void:
 		u.erase("combo_cd")
 
 # A vertical slash: every other enemy troop in the target's column, in this lane and the two lanes
-# next to it, takes the same hit.
+# next to it, takes the same hit. A 2×2 giant reaches its two lanes plus one on each side; its own two
+# lanes were already swept (giant_unit.sweep_attack), so the slash only adds the outer lanes there.
 func column_slash(u: Dictionary, target: Dictionary, amount: float) -> void:
 	var x: float = target.pos.x
+	var reach := Giant.reach_lanes(u)
+	var is_g := Giant.is_giant(u)
+	var can_air: bool = B.CARDS[u.kind].get("projectile",false) or B.CARDS[u.kind].get("flying",false)
 	for other: Dictionary in foe_units[u.team]:
-		if other.hp <= 0 or is_same(other,target) or absf(other.pos.x-x) > L.CELL_SIZE.x*0.5 or not Giant.lanes(other).any(func(ol) -> bool: return absi(int(ol)-u.lane) <= 1): continue
+		if other.hp <= 0 or is_same(other,target) or other.get("stealthed",false) or (other.get("flying",false) and not can_air) or absf(other.pos.x-x) > L.CELL_SIZE.x*0.5 or not Giant.lanes(other).any(func(ol) -> bool: return int(ol) in reach): continue
+		if is_g and Giant.lanes_overlap(u,other): continue
 		damage(other,amount,u.team,u.get("card",u.kind),u)
 	if not B.CARDS[u.kind].get("projectile",false):
-		for lane: int in range(maxi(0,u.lane-1),mini(5,u.lane+2)):
+		var hit_b := {}
+		for lane: int in reach:
+			if is_g and Giant.occupies_lane(u,lane): continue
 			for b: Dictionary in lane_foe_buildings[u.team][lane]:
-				if b.hp <= 0 or is_same(b,target) or GluttonNest.hidden(b) or absf(b.pos.x-x) > L.CELL_SIZE.x*0.5: continue
+				if b.hp <= 0 or is_same(b,target) or GluttonNest.hidden(b) or hit_b.has(b.id) or absf(b.pos.x-x) > L.CELL_SIZE.x*0.5: continue
+				hit_b[b.id] = true
 				damage(b,amount,u.team,u.get("card",u.kind),u)
-	event("slash",Vector2(x,L.cell_center(Vector2i(0,u.lane)).y),u.team,{"lane":u.lane})
+	event("slash",Vector2(x,u.pos.y if is_g else L.cell_center(Vector2i(0,u.lane)).y),u.team,{"lane":u.lane,"giant":is_g})
 
 func shoot(source: Dictionary, target: Dictionary, amount: float) -> void:
 	var direction: float = signf(target.pos.x-source.pos.x)
 	var origin: Vector2 = source.pos+Vector2(0,source.get("dy",0.0))+Vector2(direction*(B.actor_radius(source)+4.0),-30 if not source.has("cell") else -42) # model position only: drawing state must never steer the simulation (network lockstep)
-	projectiles.append({"source":source,"direction":direction,"pos":origin,"start":origin,"target":target,"remaining":B.ARROW_TIME,"amount":amount,"team":source.team,"kind":source.get("card",source.kind)})
-	event("arrow",source.pos,source.team,{"card":source.get("card",source.kind)}) # the card picks the shot sound (sound_bank.gd)
+	var skind: String = String(source.get("kind",""))
+	var shot_card: String = skind if (not skind.is_empty() and skind != "lord") else String(source.get("card",skind))
+	projectiles.append({"source":source,"direction":direction,"pos":origin,"start":origin,"target":target,"remaining":B.ARROW_TIME,"amount":amount,"team":source.team,"kind":source.get("card",source.kind),"visual_kind":skind})
+	event("arrow",source.pos,source.team,{"card":shot_card}) # the shooter kind picks the shot sound (sound_bank.gd)
 
 func update_projectiles(dt: float) -> void:
 	if projectiles.is_empty(): return
@@ -1708,12 +1857,22 @@ func update_projectiles(dt: float) -> void:
 			if arrow.remaining <= 0: expired = true
 			continue
 		arrow.remaining -= dt
+		if arrow.get("beam",false):
+			ranged_hit = true
+			Arcane.advance_beam(self,arrow,dt)
+			ranged_hit = false
+			if arrow.remaining <= 0: expired = true
+			continue
 		if arrow.get("piercing",false):
+			ranged_hit = true
 			Arcane.advance_piercing_arrow(self,arrow)
+			ranged_hit = false
 			if arrow.remaining <= 0: expired = true
 			continue
 		if arrow.get("lane_bolt",false):
+			ranged_hit = true
 			ExpansionMore.advance_lane_bolt(self,arrow,dt)
+			ranged_hit = false
 			if arrow.remaining <= 0: expired = true
 			continue
 		if arrow.remaining <= 0: expired = true
@@ -1722,24 +1881,28 @@ func update_projectiles(dt: float) -> void:
 			if arrow.remaining <= 0:
 				var shell_shape: String = String(arrow.get("blast",""))
 				var shell_dir := 1 if arrow.team == 0 else -1
-				for u: Dictionary in units:
+				ranged_hit = true
+				for u: Dictionary in units.duplicate():
 					if u.hp > 0 and u.team != arrow.team and (B.blast_hits(arrow.impact,shell_shape,shell_dir,u) if not shell_shape.is_empty() else B.point_edge_distance(arrow.impact,u) <= arrow.radius): damage(u,arrow.amount,arrow.team,arrow.kind,arrow.get("source",{}))
-				for b: Dictionary in buildings:
+				for b: Dictionary in buildings.duplicate():
 					if b.hp > 0 and b.team != arrow.team and (B.blast_hits(arrow.impact,shell_shape,shell_dir,b) if not shell_shape.is_empty() else B.point_edge_distance(arrow.impact,b) <= arrow.radius): damage(b,arrow.amount,arrow.team,arrow.kind,arrow.get("source",{}))
 				for lane: int in active_lanes:
 					var gate_hit: bool = B.blast_hits_gate(arrow.impact,shell_shape,shell_dir,1-arrow.team,lane) if not shell_shape.is_empty() else Vector2(L.gate_stop(1-arrow.team),L.cell_center(Vector2i(0,lane)).y).distance_to(arrow.impact) <= arrow.radius
 					if gates[1-arrow.team][lane] > 0 and gate_hit:
 						hit_gate(1-arrow.team,lane,arrow.amount,arrow.kind,arrow.get("source",{}))
+				ranged_hit = false
 				event("stone_impact",arrow.impact,arrow.team,{"radius":arrow.radius})
 			continue
 		arrow.pos = arrow.start.lerp(arrow.target.get("draw",arrow.target.pos)+Vector2(0,-30),clampf(1-arrow.remaining/B.ARROW_TIME,0,1))
 		if arrow.remaining <= 0:
-			if ExpansionMore.hit_projectile(self,arrow): continue
-			if arrow.target.get("kind","") == "gate":
-				if gates[arrow.target.team][arrow.target.lane] > 0:
-					hit_gate(arrow.target.team,arrow.target.lane,arrow.amount,arrow.kind,arrow.get("source",{}))
-			elif arrow.target.hp > 0: damage(arrow.target,arrow.amount,arrow.team,arrow.kind,arrow.get("source",{}))
-			projectile_blast(arrow)
+			ranged_hit = true
+			if not ExpansionMore.hit_projectile(self,arrow):
+				if arrow.target.get("kind","") == "gate":
+					if gates[arrow.target.team][arrow.target.lane] > 0:
+						hit_gate(arrow.target.team,arrow.target.lane,arrow.amount,arrow.kind,arrow.get("source",{}))
+				elif arrow.target.hp > 0: damage(arrow.target,arrow.amount,arrow.team,arrow.kind,arrow.get("source",{}))
+				projectile_blast(arrow)
+			ranged_hit = false
 	if expired:
 		projectiles = projectiles.filter(func(a: Dictionary) -> bool: return a.remaining > 0)
 
@@ -1753,7 +1916,7 @@ func projectile_blast(arrow: Dictionary) -> void:
 	var amount: float = float(src.get("area_damage",sd.area_damage))
 	for t: Dictionary in units+buildings:
 		if t.hp > 0 and t.team != arrow.team and not is_same(t,arrow.target) and B.blast_hits(center,String(sd.blast),dir,t): damage(t,amount,arrow.team,arrow.kind,src)
-	event("arcane_impact",center,arrow.team,{"from":arrow.start,"radius":float(sd.get("radius",75.0))})
+	event("arcane_impact",center,arrow.team,{"from":center,"radius":float(sd.get("radius",75.0))})
 
 func unit_heal_radius(u: Dictionary) -> float:
 	var d: Dictionary = B.CARDS.get(u.kind,{})
@@ -1819,9 +1982,13 @@ func step(dt: float) -> void:
 	if paused or ended: return
 	elapsed += dt
 	last_dt = dt
+	day_step = 0.0 if time_stopped() else dt
+	if time_stopped(): time_paused += dt
 	resolve_deaths()
 	update_ai(dt)
 	tick_clocks(dt)
+	if skill_steps_left[0] > 0 or skill_steps_left[1] > 0: tick_skill_steps(dt)
+	if not hero_spins.is_empty(): preload("res://hero_slash.gd").step_spins(self,dt)
 	build_lookups()
 	Arcane.update_traps(self)
 	update_buildings(dt)
@@ -1831,6 +1998,7 @@ func step(dt: float) -> void:
 	update_zones(dt)
 	Faction.update(self,dt)
 	Monster.update(self,dt)
+	BossTraits.update(self,dt) # 肉鴿魔王招牌技
 	SealAltar.update(self,dt)
 	Expansion.update(self,dt)
 	ExpansionMore.update(self,dt)
@@ -1843,6 +2011,7 @@ func step(dt: float) -> void:
 				lord.target.y = lord.pos.y
 	update_units(dt)
 	tick_time_stop(dt)
+	LargeBody.sync(self)
 	resolve_deaths()
 	remove_dead()
 	update_clock()
@@ -1852,10 +2021,12 @@ func tick_clocks(dt: float) -> void:
 	var mult := multiplier()
 	for team: int in range(2):
 		var cd_bonus: float = float(lord_mod(team,"cd_speed_mult",1.0))-1.0
+		# 時空凝滯 (使用者 2026-11-25「對手卡牌冷卻也停」): the frozen side's card, home-card and skill cooldowns wait too.
+		var cd_dt: float = 0.0 if frozen(team) else dt
 		if is_conveyor(team):
 			if skill_cd[team] > 0.0:
 				var skill_cd_rate_c: float = maxf(0.1,1.0+(float(lord_mod(team,"skill_haste",1.0))-1.0)+cd_bonus)
-				skill_cd[team] = maxf(0,skill_cd[team]-dt*skill_cd_rate_c)
+				skill_cd[team] = maxf(0,skill_cd[team]-cd_dt*skill_cd_rate_c)
 			if not frozen(team): Conveyor.update(self,dt)
 			continue
 		# Card cooldowns speed up together with ink (x1.5 after 3:00, x2 after 5:00), except economy buildings.
@@ -1869,13 +2040,13 @@ func tick_clocks(dt: float) -> void:
 			var rate: float = maxf(0.1,1.0+cd_bonus+global_cycle_bonus+card_cycle_bonus+up_cycle_bonus)
 			var day_speed: float = 1.0 if B.is_economy_building(card_kind) else mult
 			if SealAltar.holds_cooldown(self,team,card_kind): continue # 封印祭壇: no countdown while ours stands
-			hand_cd[team][slot] = maxf(0,hand_cd[team][slot]-dt*day_speed*rate)
+			hand_cd[team][slot] = maxf(0,hand_cd[team][slot]-cd_dt*day_speed*rate)
 		if farm_cd[team] > 0.0:
 			var home_speed: float = 1.0 if B.is_economy_building(home_cards[team]) else mult
-			farm_cd[team] = maxf(0,farm_cd[team]-dt*home_speed*maxf(0.1,1.0+cd_bonus))
+			farm_cd[team] = maxf(0,farm_cd[team]-cd_dt*home_speed*maxf(0.1,1.0+cd_bonus))
 		if skill_cd[team] > 0.0:
 			var skill_cd_rate: float = maxf(0.1,1.0+(float(lord_mod(team,"skill_haste",1.0))-1.0)+cd_bonus)
-			skill_cd[team] = maxf(0,skill_cd[team]-dt*skill_cd_rate)
+			skill_cd[team] = maxf(0,skill_cd[team]-cd_dt*skill_cd_rate)
 		if not frozen(team): base_clock[team] += dt*mult # 時空凝滯 pauses the enemy's base income
 		while base_clock[team] >= B.BASE_INTERVAL-0.000001:
 			base_clock[team] -= B.BASE_INTERVAL
@@ -1884,18 +2055,20 @@ func tick_clocks(dt: float) -> void:
 	for lane: int in active_lanes:
 		alarm[lane] = maxf(0,alarm[lane]-dt)
 		building_alarm[lane] = maxf(0,building_alarm[lane]-dt)
-	crumble_gates(dt)
+		blue_alarm[lane] = maxf(0,blue_alarm[lane]-dt)
+		blue_building_alarm[lane] = maxf(0,blue_building_alarm[lane]-dt)
+	crumble_gates(day_step)
 
 # Phase of the day: 0 morning (x1.5), 1 noon (gold x2.0), 2 dusk (gold x2.5), 3 night (gates crumble, x3.0).
 func day_phase() -> int:
-	if night_decay and elapsed >= night_start_time(): return 3
-	return 2 if elapsed >= B.RAMP_2 else (1 if elapsed >= B.RAMP_1 else 0)
+	if night_decay and day_clock() >= night_start_time(): return 3
+	return 2 if day_clock() >= B.RAMP_2 else (1 if day_clock() >= B.RAMP_1 else 0)
 
 # Gate hp every standing gate loses per second right now (0 before nightfall).
 func night_rate() -> float:
 	var ns := night_start_time()
-	if not night_decay or elapsed < ns: return 0.0
-	return B.NIGHT_DECAY*pow(2.0,floorf((elapsed-ns)/B.NIGHT_STEP))
+	if not night_decay or day_clock() < ns: return 0.0
+	return B.NIGHT_DECAY*pow(2.0,floorf((day_clock()-ns)/B.NIGHT_STEP))
 
 # Night: both sides' gates wear down on their own; one that reaches 0 falls like any breached gate.
 func crumble_gates(dt: float) -> void:
@@ -1947,17 +2120,23 @@ func update_buildings(dt: float) -> void:
 					b.cd = b.get("interval",B.CARDS.tower.interval)
 
 func is_ranged_attacker(data: Dictionary) -> bool:
-	return data.get("projectile",false) or data.get("lob",false) or float(data.get("min_range",0.0)) > 0.0 or (data.has("area_damage") and float(data.get("range",B.MELEE_RANGE)) > B.MELEE_RANGE)
+	return data.get("projectile",false) or data.get("lob",false) or data.get("breath",false) or float(data.get("min_range",0.0)) > 0.0 or (data.has("area_damage") and float(data.get("range",B.MELEE_RANGE)) > B.MELEE_RANGE)
 
 func gate_target_dict(side: int, lane: int) -> Dictionary:
 	return {"kind":"gate","team":side,"lane":lane,"pos":Vector2(L.gate_stop(side),L.cell_center(Vector2i(0,lane)).y),"hp":gates[side][lane],"body_radius":0.0}
 
 func enemy_gate_target(u: Dictionary, max_range: float, min_range: float = 0.0) -> Dictionary:
 	var enemy: int = 1-u.team
-	if not u.lane in active_lanes or gates[enemy][u.lane] <= 0: return {}
-	var gate := gate_target_dict(enemy,u.lane)
+	var is_g := Giant.is_giant(u)
+	var lane := int(u.lane)
+	if is_g:
+		var gs := Giant.standing_gates(self,enemy,u)
+		if gs.is_empty(): return {}
+		lane = int(gs[0])
+	elif not lane in active_lanes or gates[enemy][lane] <= 0: return {}
+	var gate := gate_target_dict(enemy,lane)
 	if (gate.pos.x-u.pos.x)*u.face < 0: return {}
-	var dist := B.edge_distance(u,gate)
+	var dist := maxf(0.0,absf(gate.pos.x-u.pos.x)-B.actor_radius(u)) if is_g else B.edge_distance(u,gate)
 	if dist < min_range or dist > max_range: return {}
 	return gate
 
@@ -2003,7 +2182,7 @@ func movement_speed(u: Dictionary) -> float:
 	var total_steps := steps+charge_step+wind_step-Season.snow_step(self,u)
 	if total_steps != 0:
 		var index: int = B.TIERS.speed.find(base)
-		if index >= 0: base = B.TIERS.speed[clampi(index-total_steps,B.tier_index("S"),B.TIERS.speed.size()-1)] # one tier per buff, never past S
+		if index >= 0: base = B.TIERS.speed[clampi(index-total_steps,B.buff_cap("speed"),B.TIERS.speed.size()-1)] # one tier per buff, never past SSS (kept free for buffs)
 	var spd_pct: float = float(u.get("speed_pct",0.0))+haste_pct
 	if spd_pct != 0.0:
 		base *= maxf(0.1,1.0+spd_pct)
@@ -2033,7 +2212,7 @@ func attack_interval(u: Dictionary) -> float:
 	var steps := buff_steps(u)
 	if steps > 0:
 		var index: int = B.TIERS.interval.find(base)
-		if index >= 0: base = B.TIERS.interval[maxi(B.tier_index("S"),index-steps)] # one tier per buff, never past S
+		if index >= 0: base = B.TIERS.interval[maxi(B.buff_cap("interval"),index-steps)] # one tier per buff, never past SSS (kept free for buffs)
 	var atk_pct: float = float(u.get("atk_speed_pct",0.0))+unit_mod_pct(u.team,"haste",u.kind,B.HASTE_PCT)
 	if atk_pct != 0.0:
 		base /= maxf(0.1,1.0+atk_pct)
@@ -2088,21 +2267,24 @@ func update_unit(u: Dictionary, dt: float) -> bool:
 		_cancel_combo(u)
 		u.march_time = 0.0
 		u.stun_left = maxf(0.0,u.stun_left-dt)
+		if u.get("root_left",0.0) > 0: u.root_left = maxf(0.0,u.root_left-dt)
 		return false
 	if u.get("seal_left",0.0) > 0:
 		Windup.cancel(u)
 		_cancel_combo(u)
 		u.march_time = 0.0
 		u.seal_left = maxf(0.0,u.seal_left-dt)
-		u.root_left = maxf(0.0,u.root_left-dt)
+		if u.get("root_left",0.0) > 0: u.root_left = maxf(0.0,u.root_left-dt)
 		return false
 	if Faction.flee(self,u,dt):
 		Windup.cancel(u)
 		_cancel_combo(u)
 		u.march_time = 0.0
+		if u.get("root_left",0.0) > 0: u.root_left = maxf(0.0,u.root_left-dt)
 		return false
 	var data: Dictionary = B.CARDS[u.kind]
 	if ExpansionMore.update_unit(self,u,data,dt): return false
+	if data.has("volley"): _volley(u,data.volley,dt)
 	if u.kind == "necromancer": summon_skeletons(u,data,dt)
 	if u.kind == "drummer":
 		u.drum_cd = u.get("drum_cd",10.0)-dt
@@ -2112,7 +2294,8 @@ func update_unit(u: Dictionary, dt: float) -> bool:
 	heal(u,dt)
 	if data.get("patrol",false):
 		var foes: Array = lane_foes[u.team][u.lane]+lane_foe_buildings[u.team][u.lane]
-		var patrol_target := nearest(u.pos,u.team,data.range,foes,-1,false,B.actor_radius(u))
+		var patrol_range: float = float(Faction.unit_data(self,u,_unit_reach_data(u,data)).range)
+		var patrol_target := nearest(u.pos,u.team,patrol_range,foes,-1,false,B.actor_radius(u))
 		if not patrol_target.is_empty():
 			u.march_time = 0.0
 			u.face = 1.0 if patrol_target.pos.x >= u.pos.x else -1.0
@@ -2126,7 +2309,8 @@ func update_unit(u: Dictionary, dt: float) -> bool:
 		if not target.is_empty():
 			u.march_time = 0.0
 			if Windup.ready(self,u,Windup.target_key(target),dt):
-				projectiles.append({"source":u,"pos":u.pos,"start":u.pos,"impact":target.pos,"flight":data.flight_time,"remaining":data.flight_time,"amount":float(u.get("area_damage",data.area_damage)),"radius":data.radius,"blast":data.get("blast",""),"team":u.team,"kind":u.kind})
+				var cat_amt: float = ExpansionMore.modify_attack(self,u,target,float(u.get("area_damage",data.area_damage)))
+				projectiles.append({"source":u,"pos":u.pos,"start":u.pos,"impact":target.pos,"flight":data.flight_time,"remaining":data.flight_time,"amount":cat_amt,"radius":data.radius,"blast":data.get("blast",""),"team":u.team,"kind":u.kind})
 				u.cd = attack_interval(u)
 				event("catapult_fire",u.pos,u.team,{"target":target.pos})
 			return false
@@ -2137,6 +2321,7 @@ func update_unit(u: Dictionary, dt: float) -> bool:
 	var switching_to_taunt := is_switching_to_taunt(u,taunt)
 	if not switching_to_taunt:
 		var target := _choose_target_with_taunt(u,combat_data,taunt,false)
+		if target.is_empty(): target = _fleeing_windup_target(u,combat_data)
 		if not target.is_empty():
 			u.march_time = 0.0
 			if Windup.ready(self,u,Windup.target_key(target),dt): attack(u,target)
@@ -2150,6 +2335,60 @@ func update_unit(u: Dictionary, dt: float) -> bool:
 			u.march_time = 0.0
 			return false
 	return _march_with_taunt(u,data,dt,taunt)
+
+# A swing already started on a troop running away in fear still lands while that troop is within FEAR_LEASH past
+# reach. Without it a melee chaser stops at the edge of reach, the fleeing troop steps out next frame, the windup
+# is cancelled and the chaser never hits it (使用者 2026-11-24「近戰打不了被恐懼的目標」).
+const FEAR_LEASH := 40.0
+func _fleeing_windup_target(u: Dictionary, data: Dictionary) -> Dictionary:
+	var w: Dictionary = u.get("attack_windup",{})
+	if w.is_empty() or not String(w.target).begins_with("actor:"): return {}
+	var id := int(String(w.target).substr(6))
+	for foe: Dictionary in foe_units[u.team]:
+		if foe.get("id",-1) != id: continue
+		if foe.hp > 0 and foe.get("fear_left",0.0) > 0 and not foe.get("stealthed",false) and B.edge_distance(u,foe) <= float(data.range)+FEAR_LEASH: return foe
+		return {}
+	return {}
+
+# 攻城塔 (使用者 2026-11-25「相當於 4 個弓箭手＋一個攻城槌」): the archers on top shoot while the tower rolls on.
+# Every volley.interval seconds count arrows go to the nearest enemy troops / buildings ahead in the lanes it
+# straddles (the nearest takes the spare arrows when there are fewer targets). The body itself only rams buildings.
+func _volley(u: Dictionary, v: Dictionary, dt: float) -> void:
+	u.volley_cd = float(u.get("volley_cd",0.0))-dt
+	if u.volley_cd > 0.0: return
+	# Reach like 箭樓 (使用者 2026-11-25「可以跨行的攻擊範圍」「和箭樓相同的射箭加成」「大幅降低射箭距離」): a square
+	# around every cell the tower stands on (volley.reach), +1 under a watchtower; troops first, buildings only when none.
+	var watch_bonus := 1 if Faction.watched(self,u) else 0
+	var area: Dictionary = GridRules.shape_set(v.reach,watch_bonus) if v.get("reach") is Dictionary else GridRules.offsets_set(String(v.get("reach","tower")),watch_bonus)
+	var fwd := 1 if u.team == 0 else -1
+	var my_cells: Array[Vector2i] = Giant.cells(u)
+	var picks: Array = []
+	for o: Dictionary in foe_units[u.team]:
+		if o.hp <= 0 or o.get("stealthed",false) or o.get("phased",false) or o.get("spawn_delay",0.0) > 0: continue
+		for c: Vector2i in my_cells:
+			if Giant.in_area_set(o,c,fwd,area):
+				picks.append([u.pos.distance_to(o.pos),o])
+				break
+	if picks.is_empty():
+		for o: Dictionary in buildings:
+			if o.hp <= 0 or o.team == u.team or B.CARDS.get(o.kind,{}).has("trap") or GluttonNest.hidden(o): continue
+			for c: Vector2i in my_cells:
+				if area.has(Vector2i((o.cell.x-c.x)*fwd,o.cell.y-c.y)):
+					picks.append([u.pos.distance_to(o.pos),o])
+					break
+	if picks.is_empty():
+		u.volley_cd = 0.0
+		return
+	picks.sort_custom(func(a: Array, b: Array) -> bool:
+		var ka: int = floori(float(a[0])*2.0)
+		var kb: int = floori(float(b[0])*2.0)
+		return ka < kb if ka != kb else int(a[1].get("serial",0)) > int(b[1].get("serial",0)))
+	var ups: Dictionary = card_upgrades[u.team].get("tower",{}) # 箭樓's upgrades sharpen these archers too
+	var dmg: float = Upgrades.scaled("damage",float(v.damage),int(ups.damage)) if ups.has("damage") else float(v.damage)
+	for i: int in range(int(v.count)):
+		shoot(u,picks[i if i < picks.size() else 0][1],dmg)
+	var base_cd: float = Upgrades.scaled("interval",float(v.interval),int(ups.interval)) if ups.has("interval") else float(v.interval)
+	u.volley_cd = base_cd * (attack_interval(u) / maxf(0.05, float(B.CARDS[u.kind].interval)))
 
 # 腐屍巨人: each burst_step of max hp lost (the last one is its death) bursts burst_count skeletons.
 func giant_burst(target: Dictionary) -> void:
@@ -2190,7 +2429,7 @@ func taunting_scarecrow(u: Dictionary) -> Dictionary:
 	if not has_taunt[u.team]: return {}
 	var col := clampi(floori((u.pos.x-L.GRID_ORIGIN.x)/L.CELL_SIZE.x),0,L.GRID_COLUMNS-1)
 	var found: Dictionary = {}
-	for lane in (Giant.lanes(u) if Giant.is_giant(u) else range(maxi(0,u.lane-1),mini(5,u.lane+2))):
+	for lane in (Giant.lanes(u) if Giant.is_giant(u) else range(maxi(0,u.lane-1),mini(L.GRID_ROWS,u.lane+2))):
 		for b: Dictionary in lane_foe_taunts[u.team][int(lane)]:
 			if b.hp <= 0 or absi(b.cell.x-col) > 1: continue
 			if found.is_empty():
@@ -2215,12 +2454,12 @@ func _unit_reach_data(u: Dictionary, data: Dictionary) -> Dictionary:
 	if u.has("range"):
 		reach = data.duplicate()
 		reach.range = u.range
-	if not mech.is_empty() and B.CARDS[u.kind].get("projectile",false) and MapMech.range_steps(self,u) > 0:
+	if not mech.is_empty() and B.is_ranged_unit(B.CARDS[u.kind]) and MapMech.range_steps(self,u) > 0:
 		var tier_m: int = B.TIERS.range.find(reach.range)
 		if tier_m > B.tier_index("S"):
 			if is_same(reach,data): reach = data.duplicate()
 			reach.range = B.TIERS.range[tier_m-1]
-	if u.get("expansion_range_until",0.0) > elapsed and B.CARDS[u.kind].get("projectile",false):
+	if u.get("expansion_range_until",0.0) > elapsed and B.is_ranged_unit(B.CARDS[u.kind]):
 		var tier: int = B.TIERS.range.find(reach.range)
 		if tier > B.tier_index("S"):
 			if is_same(reach,data): reach = data.duplicate()
@@ -2272,11 +2511,11 @@ func _nearest_three_lane(u: Dictionary, max_range: float, candidates: Array, can
 		if other.team == u.team or other.hp <= 0 or other.get("stealthed",false) or GluttonNest.hidden(other): continue
 		if not can_hit_flying and other.get("flying",false): continue
 		var other_lane: int = clampi(roundi((other.pos.y-L.GRID_ORIGIN.y)/L.CELL_SIZE.y-0.5),0,L.GRID_ROWS-1) if other.get("kind","") == "lord" else int(other.get("lane",other.get("cell",Vector2i(-1,-1)).y))
-		if absi(other_lane-u.lane) > 1: continue
+		if not other_lane in Giant.reach_lanes(u): continue
 		if (other.pos.x-u.pos.x)*u.face < -sr: continue
 		var d := maxf(0.0,absf(other.pos.x-u.pos.x)-sr-B.actor_radius(other))
 		if d > max_range: continue
-		var score := d+(0.01 if other_lane != u.lane else 0.0)
+		var score := d+(0.0 if Giant.occupies_lane(u,other_lane) else 0.01)
 		if found.is_empty() or score < best-SERIAL_TIE or (score <= best+SERIAL_TIE and other.get("serial",-1) > found.get("serial",-1)):
 			found = other
 			best = minf(best,score) if absf(score-best) <= SERIAL_TIE else score
@@ -2286,16 +2525,16 @@ func _nearest_three_lane_lanes(u: Dictionary, max_range: float, lane_lists: Arra
 	var sr := B.actor_radius(u)
 	var found: Dictionary = {}
 	var best := INF
-	for l: int in range(maxi(0,u.lane-1),mini(5,u.lane+2)):
+	var reach := Giant.reach_lanes(u)
+	for l: int in reach:
+		if l >= lane_lists.size(): continue
 		for other: Dictionary in lane_lists[l]:
 			if other.team == u.team or other.hp <= 0 or other.get("stealthed",false) or GluttonNest.hidden(other): continue
 			if not can_hit_flying and other.get("flying",false): continue
-			var other_lane: int = int(other.get("lane",other.get("cell",Vector2i(-1,-1)).y))
-			if absi(other_lane-u.lane) > 1: continue
 			if (other.pos.x-u.pos.x)*u.face < min_dx: continue
 			var d := maxf(0.0,absf(other.pos.x-u.pos.x)-sr-B.actor_radius(other))
 			if d > max_range: continue
-			var score := d+(0.01 if other_lane != u.lane else 0.0)
+			var score := d+(0.0 if Giant.lanes_overlap(u,other) else 0.01)
 			if found.is_empty() or score < best-SERIAL_TIE or (score <= best+SERIAL_TIE and other.get("serial",-1) > found.get("serial",-1)):
 				found = other
 				best = minf(best,score) if absf(score-best) <= SERIAL_TIE else score
@@ -2343,7 +2582,7 @@ func _choose_target_with_taunt(u: Dictionary, data: Dictionary, taunt: Dictionar
 	if data.get("target_rule","") == "lowest_serial": target = reaper_target(u)
 	elif target.is_empty():
 		if is_ranged_attacker(data): target = enemy_gate_target(u,data.range)
-		if target.is_empty():
+		if target.is_empty() and not _walled_off(u):
 			if three_lane:
 				target = _nearest_three_lane(u,data.range,lords,true)
 			elif is_giant:
@@ -2352,16 +2591,26 @@ func _choose_target_with_taunt(u: Dictionary, data: Dictionary, taunt: Dictionar
 				target = _nearest_dir(u.pos,u.team,54.0,lords,true,sr,u.face,0.0)
 	return target
 
+# Lords never step past their gate, so while a gate still stands in this troop's lane (any lane a 2×2 giant
+# straddles) the lord behind it is off limits: batter the wall first. A giant's big body used to reach over the
+# wall and hit a large lord (使用者 2026-11-25「巨獸不打城牆先打領主」).
+func _walled_off(u: Dictionary) -> bool:
+	var enemy: int = 1-u.team
+	if Giant.is_giant(u): return not Giant.standing_gates(self,enemy,u).is_empty()
+	return u.lane in active_lanes and gates[enemy][u.lane] > 0
+
 # Nothing to hit: walk to the enemy gate, batter it, clear its rubble, walk in. True = match won.
 # For units with "hunt_nearest": finds the lane of the nearest enemy ahead.
-func nearest_enemy_lane(u: Dictionary, _data: Dictionary) -> int:
+func nearest_enemy_lane(u: Dictionary, data: Dictionary) -> int:
 	var forward: float = 1.0 if u.team == 0 else -1.0
 	var best_d: float = INF
 	var best_lane: int = u.lane
+	var hit_air: bool = data.get("anti_air",false)
 	# 1. Search enemy units ahead
 	for foe: Dictionary in units:
 		if foe.team == u.team or foe.hp <= 0 or foe.get("spawn_delay",0.0) > 0: continue
 		if foe.get("stealthed",false) or foe.get("phased",false): continue
+		if not hit_air and foe.get("flying",false): continue
 		if (foe.pos.x-u.pos.x)*forward < -30.0: continue
 		var d: float = u.pos.distance_to(foe.pos)
 		if foe.lane == u.lane: d -= 20.0 # slight hysteresis to prevent flickering on ties
@@ -2371,7 +2620,7 @@ func nearest_enemy_lane(u: Dictionary, _data: Dictionary) -> int:
 	# 2. If no enemy units ahead, search enemy buildings ahead
 	if best_d == INF:
 		for b: Dictionary in buildings:
-			if b.team == u.team or b.hp <= 0: continue
+			if b.team == u.team or b.hp <= 0 or B.CARDS.get(b.kind,{}).has("trap") or GluttonNest.hidden(b): continue
 			if (b.pos.x-u.pos.x)*forward < -30.0: continue
 			var d: float = u.pos.distance_to(b.pos)
 			if b.cell.y == u.lane: d -= 20.0
@@ -2406,17 +2655,23 @@ func advance_march_timers(u: Dictionary, data: Dictionary, spd: float, dt: float
 func _execute_gate_strike(u: Dictionary, data: Dictionary, enemy: int) -> void:
 	Arcane.reveal(self,u,false)
 	u.strike_seq = u.get("strike_seq",0)+1
+	var uses_area: bool = data.has("area_damage") and (data.get("suicide_blast",false) or data.has("stun_on_hit"))
+	var base_amt: float = float(u.get("area_damage",data.area_damage)) if uses_area else float(u.get("damage",data.damage))
+	var amount: float = ExpansionMore.gate_amount(self,u,base_amt)
+	if data.has("beam"):
+		Arcane.fire_beam(self,u,amount)
+		return
 	if data.get("pierce",false):
-		Arcane.shoot_piercing_arrow(self,u)
+		Arcane.shoot_piercing_arrow(self,u,{},amount)
 		return
 	if data.has("stun_on_hit"):
-		Arcane.area_hit(self,u,Vector2(L.gate_stop(enemy),u.pos.y))
+		Arcane.area_hit(self,u,Vector2(L.gate_stop(enemy),u.pos.y),amount)
 		return
-	if ExpansionMore.gate_attack(self,u,data,enemy): return
-	var amount: float = ExpansionMore.gate_amount(self,u,u.get("damage",data.damage))
+	if ExpansionMore.gate_attack(self,u,data,enemy,amount): return
 	if u.kind == "ox": amount *= B.OX_BUILDING_BONUS
 	if Giant.is_giant(u):
 		Giant.hit_gates(self,u,enemy,amount)
+		if data.get("splash","") == "column": column_slash(u,{"pos":Vector2(L.gate_stop(enemy),u.pos.y)},amount)
 		return
 	hit_gate(enemy,u.lane,amount,u.get("card",u.kind),u)
 	if data.get("splash","") == "column": column_slash(u,{"pos":Vector2(L.gate_stop(enemy),u.pos.y)},amount)
@@ -2509,7 +2764,7 @@ func cast_spell(s: Dictionary) -> void:
 	var rect: Rect2 = B.spell_rect(s.pos,data)
 	event("spell",s.pos,s.team,{"card":s.kind,"radius":data.radius,"rect":rect})
 	if s.kind == "curse":
-		for u: Dictionary in units: # friend or foe: whoever dies cursed rises as the caster's skeleton
+		for u: Dictionary in units.duplicate(): # friend or foe: whoever dies cursed rises as the caster's skeleton
 			if u.hp > 0 and B.rect_hits_actor(rect,u):
 				u.cursed = true
 				u.cursed_until = INF
@@ -2520,16 +2775,16 @@ func cast_spell(s: Dictionary) -> void:
 		add_zone(s.pos,s.team,data.radius,data.duration,rect,float(data.tick_damage))
 		return
 	if s.kind == "harvest":
-		for b: Dictionary in buildings:
+		for b: Dictionary in buildings.duplicate():
 			if b.team == s.team and b.hp > 0 and b.kind == "farm" and B.rect_hits_actor(rect,b):
 				b.harvest_until = elapsed+B.HARVEST_TIME
 				link(s.pos,b.pos,s.team,"harvest")
 		return
-	for u: Dictionary in units:
+	for u: Dictionary in units.duplicate():
 		if u.team != s.team and B.rect_hits_actor(rect,u):
 			if s.kind == "fire": knockback_unit(u,B.FIRE_KNOCKBACK*(1.0 if s.team == 0 else -1.0))
 			damage(u,data.damage,s.team,s.kind)
-	for b: Dictionary in buildings:
+	for b: Dictionary in buildings.duplicate():
 		if b.team != s.team and B.rect_hits_actor(rect,b): damage(b,data.building_damage,s.team,s.kind)
 	for lane: int in active_lanes:
 		var gate_pos := Vector2(L.gate_stop(1-s.team),L.cell_center(Vector2i(0,lane)).y)
@@ -2537,17 +2792,19 @@ func cast_spell(s: Dictionary) -> void:
 
 func update_clock() -> void:
 	if ended: return
-	if survive_time > 0.0 and elapsed >= survive_time:
+	if survive_time > 0.0 and day_clock() >= survive_time:
 		finish(0)
 		return
 	for ramp: float in [B.RAMP_1,B.RAMP_2]:
-		if elapsed >= ramp and elapsed-last_dt < ramp: event("ramp",Vector2(800,50),0,{"multiplier":multiplier()})
+		if day_clock() >= ramp and day_clock()-day_step < ramp: event("ramp",Vector2(800,50),0,{"multiplier":multiplier()})
+	var day_time := day_clock()
+	var day_time_prev := day_time-day_step
 	var ns := night_start_time()
-	if night_decay and elapsed >= ns:
+	if night_decay and day_time >= ns:
 		# Nightfall, then one toll each time the crumbling doubles.
-		var before: float = elapsed-last_dt-ns
-		if before < 0 or floorf(before/B.NIGHT_STEP) != floorf((elapsed-ns)/B.NIGHT_STEP): event("nightfall",Vector2(800,50),0,{"rate":night_rate(),"first":before < 0})
-		if elapsed >= dawn_time(): dawn_verdict()
+		var before: float = day_time_prev-ns
+		if day_time > day_time_prev and (before < 0 or floorf(before/B.NIGHT_STEP) != floorf((day_time-ns)/B.NIGHT_STEP)): event("nightfall",Vector2(800,50),0,{"rate":night_rate(),"first":before < 0})
+		if day_time >= dawn_time(): dawn_verdict()
 
 # Land each side holds: territory cells in the lanes being played.
 func land(team: int) -> int:
@@ -2604,7 +2861,7 @@ func skill_state(team: int) -> Dictionary:
 			enemy_troops += 1
 			if is_adv and not u.get("stealthed",false) and Slash.contains(lpos,u.pos,team): slash_targets += 1 # the slash cannot hurt a hidden troop
 	var has_open := _minion_open_cell(team).x >= 0 if B.is_minion(lord_kind) else false
-	return {"rune_lanes":LordExpansion.rune_cells(self,team).size() if lord_kind == "rune" else 0,"slash_targets":slash_targets,"troops":my_army_count,"troop_hp":my_army_hp,"enemy_troops":enemy_troops,"minion_open_cell":has_open,"minion_damaged_buildings":damaged_blds,"crystals":crystals,"minion_nonhome_buildings":nonhome_blds,"minion_has_unique":has_unique,"lord":lord_kind,"ready":lords[team].hp > 0 and skill_cd[team] <= 0,"ink":ink[team],"charge":skill_charge[team],"need":skill_need(team),"elapsed":elapsed,"farms":farms,"graves":graves,"gate_share":gate_total/(gates[team].size()*B.GATE_HP),"broken":broken,"difficulty":difficulty,"params":ai_params[team]}
+	return {"rune_lanes":any_free_cells().size() if lord_kind == "rune" else 0,"slash_targets":slash_targets,"troops":my_army_count,"troop_hp":my_army_hp,"enemy_troops":enemy_troops,"minion_open_cell":has_open,"minion_damaged_buildings":damaged_blds,"crystals":crystals,"minion_nonhome_buildings":nonhome_blds,"minion_has_unique":has_unique,"lord":lord_kind,"ready":lords[team].hp > 0 and skill_cd[team] <= 0,"ink":ink[team],"charge":skill_charge[team],"need":skill_need(team),"elapsed":elapsed,"farms":farms,"graves":graves,"gate_share":gate_total/(gates[team].size()*B.GATE_HP),"broken":broken,"difficulty":difficulty,"params":ai_params[team]}
 
 func snapshot(team: int) -> Dictionary:
 	var candidates: Array = []
@@ -2620,7 +2877,7 @@ func snapshot(team: int) -> Dictionary:
 		var kind: String = kind_at(team,slot)
 		if kind.is_empty() or not B.CARDS.has(kind): continue
 		var data: Dictionary = B.CARDS[kind]
-		if data.get("giant",false) and slot_cd(team,slot) <= 0.00001:
+		if (data.get("giant",false) or float(data.cost) > 30.0) and slot_cd(team,slot) <= 0.00001:
 			giant_ready_cost = float(data.cost) if giant_ready_cost <= 0.0 else minf(giant_ready_cost,float(data.cost))
 		if data.get("summon_only",false) or slot_cd(team,slot) > 0.00001 or ink[team] < data.cost: continue
 		if data.get("rolling",false):
@@ -2651,7 +2908,8 @@ func snapshot(team: int) -> Dictionary:
 		for row: int in range(L.GRID_ROWS):
 			if not row in active_lanes: continue
 			var row_off := row*L.GRID_COLUMNS
-			for col: int in range(9):
+			for ci: int in range(L.GRID_COLUMNS):
+				var col := ci if team == 0 else L.GRID_COLUMNS-1-ci
 				if not is_spell and territory[row_off+col] != team: continue
 				var cell := Vector2i(col,row)
 				var pos := L.cell_center(cell)

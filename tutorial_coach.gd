@@ -14,6 +14,7 @@ const STRIP := Rect2(400,90,800,52) # 五路關卡：頂端精簡一列
 const BANNER := Rect2(400,96,800,104)
 const CALLOUT := Rect2(430,100,740,96)
 const Hud = preload("res://battle_hud.gd")
+const Ceremony = preload("res://battle_ceremony.gd")
 const LORD_PLATE := Hud.LORD_PLATE
 const PURSE := Hud.PURSE_PLATE
 const CLOCK := Rect2(Hud.DIAL-Vector2(Hud.DIAL_R,Hud.DIAL_R),Vector2(Hud.DIAL_R,Hud.DIAL_R)*2)
@@ -22,7 +23,7 @@ const LOSS_TIP := Rect2(310,626,980,54)
 const GOLD := Color("d2ad58")
 const BANNER_TIME := 8.0
 const CALLOUT_TIME := 7.0
-const PHASE_NOTES := ["","正午：金幣與冷卻 ×2","黃昏：金幣與冷卻 ×2.5","入夜：金幣 ×3，雙方城牆開始自己崩塌"]
+const PHASE_NOTES := ["","正午：金幣與冷卻 ×2","黃昏：金幣與冷卻 ×2.5","入夜：金幣與冷卻 ×3，雙方城牆開始自己崩塌"]
 
 var on := false
 var stage: Dictionary = {}
@@ -255,9 +256,9 @@ func paint(g) -> void:
 	if m.ended:
 		paint_loss_tip(g,m)
 		return
-	if not started: return
+	if not started or m.paused: return
 	if warded(): paint_ward(g,m)
-	if not m.paused: paint_hints(g,m)
+	paint_hints(g,m)
 	if not m.lord_active[0] and m.lords[0].hp <= 0: paint_lord_away(g)
 	if scripted() and step < steps.size(): paint_step(g,m)
 	elif m.elapsed < banner_until: paint_banner(g,m)
@@ -354,10 +355,20 @@ func paint_lord_away(g) -> void:
 
 func paint_loss_tip(g, m) -> void:
 	if m.winner == 0: return
+	if float(g.get("result_age")) < Ceremony.PANEL_DELAY + Ceremony.PANEL_IN: return
 	var tip := loss_tip()
 	if tip.is_empty(): return
-	g.panel(LOSS_TIP,Color(0.97,0.92,0.80,0.97),GOLD.darkened(0.25))
-	g.draw_string(g.font,LOSS_TIP.position+Vector2(0,35),"提示：%s" % tip,HORIZONTAL_ALIGNMENT_CENTER,LOSS_TIP.size.x,20,g.INK)
+	var has_replay_line: bool = g.get("recorder") != null and g.recorder.has_saved_replay() and not OS.has_feature("web")
+	var r := Rect2(310,654,980,54) if has_replay_line else LOSS_TIP
+	g.panel(r,Color(0.97,0.92,0.80,0.97),GOLD.darkened(0.25))
+	var para := TextParagraph.new()
+	para.width = r.size.x-32.0
+	para.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	para.break_flags = TextServer.BREAK_MANDATORY | TextServer.BREAK_WORD_BOUND | TextServer.BREAK_ADAPTIVE
+	para.max_lines_visible = 2
+	para.add_string("提示：%s" % tip,g.font,18)
+	var py := r.position.y+maxf(4.0,(r.size.y-para.get_size().y)*0.5)
+	para.draw(g.get_canvas_item(),Vector2(r.position.x+16.0,py),g.INK)
 
 # ---- 高亮 ----
 func paint_hints(g, m) -> void:

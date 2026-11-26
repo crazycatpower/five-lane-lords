@@ -34,11 +34,11 @@ static func update(m, dt: float) -> void:
 	var u_count: int = m.units.size()
 	for i: int in range(u_count):
 		var u: Dictionary = m.units[i]
-		if u.get("has_expansion_tick",false): _update_actor(m,u,dt)
+		if not m.frozen(u.team) and u.get("has_expansion_tick",false): _update_actor(m,u,dt)
 	var b_count: int = m.buildings.size()
 	for i: int in range(b_count):
 		var b: Dictionary = m.buildings[i]
-		if b.get("has_expansion_tick",false): _update_actor(m,b,dt*Faction.building_factor(m,b))
+		if not m.frozen(b.team) and b.get("has_expansion_tick",false): _update_actor(m,b,dt*Faction.building_factor(m,b))
 
 static func support_radius(m, actor: Dictionary, d: Dictionary) -> float:
 	if d.get("support","") == "heal" and d.get("type","") == "unit":
@@ -91,7 +91,7 @@ static func support(m, actor: Dictionary, d: Dictionary) -> void:
 				if m.record_events: active = true
 				u.expansion_haste_until = m.elapsed+d.duration
 			"range":
-				if m.record_events: active = active or B.CARDS.get(u.kind,{}).get("projectile",false)
+				if m.record_events: active = active or B.is_ranged_unit(B.CARDS.get(u.kind,{}))
 				u.expansion_range_until = m.elapsed+d.duration
 	if m.record_events and active:
 		m.event("support_pulse",actor.pos,actor.team,{"style":d.support,"radius":rad,"source_radius":B.actor_radius(actor)})

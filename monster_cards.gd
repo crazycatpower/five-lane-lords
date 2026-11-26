@@ -24,7 +24,7 @@ static func on_spawn(m, u: Dictionary) -> void:
 static func update(m, dt: float) -> void:
 	if not m.has_monster_tick: return
 	for u: Dictionary in m.units:
-		if u.hp <= 0 or not u.get("has_monster_tick",false) or u.get("spawn_delay",0.0) > 0: continue
+		if u.hp <= 0 or m.frozen(u.team) or not u.get("has_monster_tick",false) or u.get("spawn_delay",0.0) > 0: continue
 		var d: Dictionary = B.CARDS[u.kind]
 		if d.has("roar_fear") and d.has("roar_period"):
 			u.roar_cd = u.get("roar_cd", d.roar_period) - dt
@@ -44,7 +44,7 @@ static func on_hit(m, target: Dictionary, source: Dictionary) -> void:
 	if source_data.has("steal_gold") and target.has("cell"): steal(m,source)
 	var thorns: float = float(target.get("thorns",B.CARDS.get(target.get("kind",""),{}).get("thorns",0.0)))
 	thorns = preload("res://core_cards.gd").thorns(m,target,thorns) # 荊棘母獸 aura
-	if thorns > 0 and source.hp > 0 and not source_data.get("projectile",false) and not source_data.get("lob",false) and not source_data.get("suicide_blast",false):
+	if thorns > 0 and source.hp > 0 and not m.ranged_hit and not m.is_ranged_attacker(source_data) and not source_data.get("suicide_blast",false):
 		m.damage(source,thorns,target.team,target.get("card",target.kind)) # no source: thorns never bounce back
 
 static func on_gate_hit(m, source: Dictionary) -> void:

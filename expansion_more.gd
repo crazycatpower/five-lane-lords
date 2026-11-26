@@ -29,6 +29,10 @@ static func shuttle_boundary_x(m, u: Dictionary) -> float:
 # Called from update_unit after stun / fear. True = this troop's step is handled here.
 static func update_unit(m, u: Dictionary, data: Dictionary, dt: float) -> bool:
 	if u.get("root_left",0.0) > 0: u.root_left = maxf(0.0,u.root_left-dt)
+	if float(u.get("phase_shift_until",0.0)) > 0.0 and m.elapsed >= float(u.phase_shift_until):
+		u.phase_shift_until = 0.0
+		if u.get("phased",false) or u.get("stealthed",false):
+			preload("res://arcane_mechanics.gd").reveal(m,u,false)
 	if not data.get("shuttle",false): return false
 	# 騾馬貨車: out to our territory boundary, back to home gate, paid by distance (1, 3, 5, 7...), rest 3s.
 	var rest_left: float = u.get("shuttle_rest",0.0)
@@ -67,19 +71,20 @@ static func speed_factor(u: Dictionary) -> float:
 	return 0.0 if u.get("root_left",0.0) > 0 else 1.0
 
 # Replaces the normal hit for lobbing, self-destructing and curse-splash troops. True = handled.
-static func attack(m, u: Dictionary, target: Dictionary, data: Dictionary) -> bool:
+static func attack(m, u: Dictionary, target: Dictionary, data: Dictionary, amount: float = -1.0) -> bool:
+	var dmg: float = amount if amount >= 0.0 else float(u.get("area_damage",data.area_damage))
 	if data.get("suicide_blast",false):
-		blast(m,u,target.pos,data)
+		blast(m,u,target.pos,data,dmg)
 		return true
 	if data.get("lob",false):
-		m.projectiles.append({"source":u,"pos":u.pos,"start":u.pos,"impact":target.pos,"flight":data.get("flight_time",0.8),"remaining":data.get("flight_time",0.8),"amount":data.area_damage,"radius":data.radius,"blast":data.get("blast",""),"team":u.team,"kind":u.get("card",u.kind)})
+		m.projectiles.append({"source":u,"pos":u.pos,"start":u.pos,"impact":target.pos,"flight":data.get("flight_time",0.8),"remaining":data.get("flight_time",0.8),"amount":dmg,"radius":data.radius,"blast":data.get("blast",""),"team":u.team,"kind":u.get("card",u.kind)})
 		m.event("catapult_fire",u.pos,u.team,{"target":target.pos})
 		return true
 	if data.has("dot_damage") and data.has("area_damage"):
 		var direction: float = 1.0 if target.pos.x >= u.pos.x else -1.0
 		var origin: Vector2 = u.pos+Vector2(0,u.get("dy",0.0))+Vector2(direction*16,-30)
-		m.projectiles.append({"source":u,"direction":direction,"pos":origin,"start":origin,"target":target,"remaining":B.ARROW_TIME,"amount":data.area_damage,"radius":data.radius,"blast":data.get("blast",""),"dot_damage":data.dot_damage,"dot_interval":data.dot_interval,"dot_ticks":data.dot_ticks,"curse_splash":true,"team":u.team,"kind":u.get("card",u.kind)})
-		m.event("arrow",u.pos,u.team)
+		m.projectiles.append({"source":u,"direction":direction,"pos":origin,"start":origin,"target":target,"remaining":B.ARROW_TIME,"amount":dmg,"radius":data.radius,"blast":data.get("blast",""),"dot_damage":data.dot_damage,"dot_interval":data.dot_interval,"dot_ticks":data.dot_ticks,"curse_splash":true,"team":u.team,"kind":u.get("card",u.kind)})
+		m.event("arrow",u.pos,u.team,{"card":u.kind})
 		return true
 	return false
 
@@ -114,17 +119,21 @@ static func hit_projectile(m, arrow: Dictionary) -> bool:
 	return true
 
 # The same troops reaching a closed gate.
-static func gate_attack(m, u: Dictionary, data: Dictionary, enemy: int) -> bool:
+static func gate_attack(m, u: Dictionary, data: Dictionary, enemy: int, amount: float = -1.0) -> bool:
 	if not data.get("suicide_blast",false): return false
-	blast(m,u,Vector2(L.gate_stop(enemy),u.pos.y),data)
+	blast(m,u,Vector2(L.gate_stop(enemy),u.pos.y),data,amount)
 	return true
 
-static func blast(m, u: Dictionary, point: Vector2, data: Dictionary) -> void:
+static func blast(m, u: Dictionary, point: Vector2, data: Dictionary, amount: float = -1.0) -> void:
 	var dir := 1 if u.team == 0 else -1
+	var dmg: float = amount if amount >= 0.0 else float(u.get("area_damage",data.area_damage))
 	for t: Dictionary in m.units+m.buildings:
-		if t.team != u.team and t.hp > 0 and B.blast_hits(point,String(data.get("blast","square")),dir,t): m.damage(t,data.area_damage,u.team,u.get("card",u.kind),u)
+		if t.team != u.team and t.hp > 0 and B.blast_hits(point,String(data.get("blast","square")),dir,t): m.damage(t,dmg,u.team,u.get("card",u.kind),u)
+	for lord: Dictionary in m.lords:
+		if lord.team != u.team and lord.hp > 0 and m.lord_active[lord.team] and m.gates[lord.team][m.lord_lane(lord)] <= 0 and B.blast_hits(point,String(data.get("blast","square")),dir,lord):
+			m.damage(lord,dmg,u.team,u.get("card",u.kind),u)
 	for lane: int in m.active_lanes:
-		if B.blast_hits_gate(point,String(data.get("blast","square")),dir,1-u.team,lane): m.hit_gate(1-u.team,lane,data.area_damage,u.get("card",u.kind),u)
+		if B.blast_hits_gate(point,String(data.get("blast","square")),dir,1-u.team,lane): m.hit_gate(1-u.team,lane,dmg,u.get("card",u.kind),u)
 	m.event("trap_blast",point,u.team,{"radius":data.radius})
 	m.damage(u,u.hp,u.team,"suicide_blast",{},true)
 
@@ -162,6 +171,9 @@ static func gate_amount(m, u: Dictionary, amount: float) -> float:
 		amount *= B.CHARGE_MULT
 		if m.record_events: m.event("charge_impact",Vector2(L.gate_stop(1-u.team),u.pos.y),u.team,{"radius":26.0,"face":u.face})
 	if d.has("damage_roll"): amount = m.rng.randf_range(B.tier_value("damage",d.damage_roll[0]),B.tier_value("damage",d.damage_roll[1]))
+	if float(u.get("crit_mult",1.0)) > 1.0:
+		amount *= float(u.crit_mult)
+		u.erase("crit_mult")
 	return amount*d.get("structure_mult",1.0)
 
 # Defence against a hit (after armour): spell resistance.
@@ -173,7 +185,7 @@ static func absorb(target: Dictionary, amount: float, kind: String) -> float:
 # Right after hp drops: lifesteal for the attacker, last stand for the target, bounty on a kill.
 static func after_hit(m, target: Dictionary, dealt: float, source: Dictionary) -> void:
 	var sd: Dictionary = B.CARDS.get(source.get("kind",""),{}) if source.has("spawn_delay") else {}
-	if source.has("spawn_delay") and source.hp > 0:
+	if source.has("spawn_delay") and source.hp > 0 and not B.is_building_target(target):
 		var ls: float = float(sd.get("lifesteal",0.0))+(0.25 if source.get("berserk_lifesteal_until",0.0) > m.elapsed else 0.0)
 		if ls > 0.0: source.hp = minf(source.max_hp,source.hp+dealt*ls)
 	if sd.has("dot_damage") and not sd.has("area_damage") and target.has("spawn_delay") and target.hp > 0:
@@ -191,6 +203,8 @@ static func after_hit(m, target: Dictionary, dealt: float, source: Dictionary) -
 			target.hp = 1.0
 			m.event("heal",target.pos,target.team)
 			return
+		if preload("res://dark_sorcery.gd").rescue(m,target):
+			return
 		if sd.has("kill_income") and source.team != target.team:
 			m.gain_ink(source.team,sd.kill_income)
 			m.event("ink",target.pos,source.team)
@@ -203,13 +217,13 @@ static func after_hit(m, target: Dictionary, dealt: float, source: Dictionary) -
 		target.web_icd = m.elapsed+4.0
 	if target.has("spawn_delay") and target.hp > 0:
 		var td_hit: Dictionary = B.CARDS.get(target.kind,{})
-		if td_hit.has("reflect_damage") and target.get("reflect_icd",0.0) <= m.elapsed and (source.is_empty() or B.CARDS.get(source.get("kind",""),{}).get("projectile",false) or B.CARDS.get(source.get("kind",""),{}).get("type","") == "spell"):
+		if td_hit.has("reflect_damage") and target.get("reflect_icd",0.0) <= m.elapsed and (source.is_empty() or m.ranged_hit or m.is_ranged_attacker(B.CARDS.get(source.get("kind",""),{})) or B.CARDS.get(source.get("kind",""),{}).get("type","") == "spell"):
 			var foe: Dictionary = m.nearest(target.pos,target.team,td_hit.range,m.foe_units[target.team],-1,true,B.actor_radius(target))
 			if not foe.is_empty():
 				target.reflect_icd = m.elapsed+2.0
 				m.damage(foe,td_hit.reflect_damage,target.team,target.kind)
 				m.link(target.pos,foe.pos,target.team,"lightning")
-	if target.has("cell") and target.kind == "mimic_egg": hatch_egg(m,target)
+	if target.has("cell") and target.kind == "mimic_egg" and target.hp <= 0: hatch_egg(m,target)
 	if target.has("cell") and target.kind == "mana_battery" and target.hp <= 0: burst_battery(m,target)
 
 static func _spawn_stitched(m, stitcher: Dictionary, center: Vector2, lane: int, d: Dictionary) -> void:
@@ -236,14 +250,19 @@ static func on_death(m, dead: Dictionary) -> void:
 		if float(d.get("stitch_heal",0.0)) > 0.0:
 			u.hp = minf(u.max_hp,u.hp+float(d.stitch_heal))
 			m.event("heal",u.pos,u.team)
-		_spawn_stitched(m,u,dead.pos,dead.lane,d)
+		var spos: Vector2 = Vector2(dead.pos.x,L.cell_center(Vector2i(0,dead.lane)).y) if dead.get("lanes",[]).size() > 1 else dead.pos
+		_spawn_stitched(m,u,spos,dead.lane,d)
 	for u: Dictionary in m.units:
 		var sd: Dictionary = B.CARDS.get(u.kind,{})
 		if u.hp <= 0 or not sd.get("scavenger",false) or B.edge_distance(u,dead) > sd.radius: continue
 		u.hp = minf(u.max_hp,u.hp+sd.scavenger_heal)
-		var ti: int = B.TIERS.damage.find(u.get("damage",sd.damage))
-		if ti > 0: u.damage = B.TIERS.damage[maxi(B.tier_index("A"),ti-1)]
-		elif ti < 0: u.damage = minf(roundf(B.tier_value("damage","A")*float(u.get("damage_mult",1.0))),roundf(float(u.get("damage",sd.damage))*1.35))
+		var cur_dmg: float = float(u.get("damage",sd.damage))
+		var cap_idx: int = B.tier_index("A")
+		var ti: int = B.TIERS.damage.find(cur_dmg)
+		if ti > cap_idx: u.damage = B.TIERS.damage[ti-1]
+		elif ti < 0:
+			var cap_val: float = roundf(B.tier_value("damage","A")*float(u.get("damage_mult",1.0)))
+			if cur_dmg < cap_val: u.damage = minf(cap_val,roundf(cur_dmg*1.35))
 		m.link(dead.pos,u.pos,u.team,"devour")
 
 # Per tick: advance hex DoT ticks, then remove expired borrowed bones (no death effects).
@@ -270,16 +289,21 @@ static func update(m, dt: float) -> void:
 				borrowed_expired = true
 				break
 		if borrowed_expired:
-			for u: Dictionary in m.units:
+			for u: Dictionary in m.units.duplicate():
 				if u.get("card","") != "borrowed_bones" or u.get("borrowed_until",-1.0) < 0 or u.borrowed_until > m.elapsed or u.hp <= 0: continue
 				var bd: Dictionary = B.CARDS.borrowed_bones
 				for foe: Dictionary in m.units+m.buildings:
-					if foe.hp > 0 and foe.team != u.team and B.blast_hits(u.pos,String(bd.blast),1 if u.team == 0 else -1,foe): m.damage(foe,float(bd.return_blast),u.team,"borrowed_bones",u)
+					if foe.hp > 0 and foe.team != u.team and B.blast_hits(u.pos,String(bd.blast),1 if u.team == 0 else -1,foe): m.damage(foe,float(bd.return_blast),u.team,"borrowed_bones",{})
 				m.event("boneburst",u.pos,u.team)
 			m.units = m.units.filter(func(u: Dictionary) -> bool:
 				if u.get("borrowed_until",-1.0) < 0 or u.borrowed_until > m.elapsed or u.hp <= 0: return true
+				u.hp = 0.0
+				if u.has("serial"):
+					m.serials_in_use.erase(u.serial)
+					u.serial = 0
 				m.event("levy_dust",u.pos,u.team)
 				return false)
+			m.build_lookups()
 	tick_buildings_and_zones(m,dt)
 
 # Periodic supports that touch enemies or cost hp (called from Expansion.support).
@@ -301,9 +325,12 @@ static func support(m, actor: Dictionary, d: Dictionary) -> bool:
 					pulsed = true
 					u.expansion_haste_until = maxf(u.get("expansion_haste_until",0.0),m.elapsed+haste_dur)
 					var was_dirty: bool = u.get("stun_left",0.0) > 0 or u.get("slow_left",0.0) > 0 or u.get("fear_left",0.0) > 0 or u.get("root_left",0.0) > 0 or u.get("seal_left",0.0) > 0 or int(u.get("hex_stacks",0)) > 0 or int(u.get("poison_stacks",0)) > 0
+					var was_feared: bool = u.get("fear_left",0.0) > 0.0
 					u.stun_left = 0.0
 					u.slow_left = 0.0
 					u.fear_left = 0.0
+					if was_feared and not B.CARDS.get(u.kind,{}).get("patrol",false) and not B.CARDS.get(u.kind,{}).get("shuttle",false):
+						u.face = 1.0 if u.team == 0 else -1.0
 					u.root_left = 0.0
 					u.seal_left = 0.0
 					u.hex_stacks = 0
@@ -391,12 +418,15 @@ static func cast_effects(m, s: Dictionary, d: Dictionary, lane: int, rect: Rect2
 			if u.hp > 0 and u.team == s.team and u.get("spawn_delay",0.0) <= 0 and B.rect_hits_actor(rect,u) and (best.is_empty() or u.hp > best.hp):
 				best = u
 		if not best.is_empty():
-			var clone: Dictionary = m.spawn_unit(s.team,best.lane,best.kind,best.pos+Vector2(-12*dir,10))
+			var cx: float = clampf(best.pos.x-12.0*dir,L.gate_stop(0)+12.0,L.gate_stop(1)-12.0)
+			var clone: Dictionary = m.spawn_unit(s.team,best.lane,best.kind,Vector2(cx,best.pos.y))
 			if Giant.is_giant(best):
 				clone.lanes = Giant.lanes(best).duplicate()
 				clone.lane = int(clone.lanes[0])
-				clone.pos = Vector2(best.pos.x-12.0*dir,Giant.center_y(clone))
+				clone.pos = Vector2(cx,Giant.center_y(clone))
 				clone.dy = 0.0
+			for k: String in ["damage","area_damage","interval","range","speed","range_pct","damage_mult","hp_pct","tide_stacks","bursts","reborn","expansion_armor","armor_until","expansion_haste_until","expansion_range_until","cauldron_boiled","crit_mult","body_radius","shield","shield_until"]:
+				if best.has(k): clone[k] = best[k]
 			clone.hp = best.hp
 			clone.max_hp = best.max_hp
 			clone.borrowed_until = m.elapsed+d.duration
@@ -421,12 +451,17 @@ static func cast_effects(m, s: Dictionary, d: Dictionary, lane: int, rect: Rect2
 			if d.has("phase_shift"):
 				u.phased = true
 				u.stealthed = true
+				u.phase_shift_until = maxf(float(u.get("phase_shift_until",0.0)),m.elapsed+float(d.get("phase_duration",4.0)))
 				u.pos.x = clampf(u.pos.x+dir*d.phase_shift,L.gate_stop(0)+10.0,L.gate_stop(1)-10.0)
 			if d.has("hp_cost_share") and u.hp > 1.0:
 				u.hp = maxf(1.0,u.hp*(1.0-d.hp_cost_share))
-				var di: int = B.TIERS.damage.find(u.get("damage",B.CARDS[u.kind].damage))
-				if di > 0: u.damage = B.TIERS.damage[maxi(B.tier_index("S"),di-1)]
-				elif di < 0: u.damage = minf(roundf(B.tier_value("damage","S")*float(u.get("damage_mult",1.0))),roundf(float(u.get("damage",B.CARDS[u.kind].damage))*1.35))
+				var cur_dmg: float = float(u.get("damage",B.CARDS[u.kind].damage))
+				var cap_idx: int = B.tier_index("S")
+				var di: int = B.TIERS.damage.find(cur_dmg)
+				if di > cap_idx: u.damage = B.TIERS.damage[di-1]
+				elif di < 0:
+					var cap_val: float = roundf(B.tier_value("damage","S")*float(u.get("damage_mult",1.0)))
+					if cur_dmg < cap_val: u.damage = minf(cap_val,roundf(cur_dmg*1.35))
 				u.expansion_haste_until = maxf(u.get("expansion_haste_until",0.0),m.elapsed+6.0)
 				u.berserk_lifesteal_until = maxf(u.get("berserk_lifesteal_until",0.0),m.elapsed+6.0)
 			if d.has("rally_haste_sec"):
@@ -442,8 +477,8 @@ static func cast_effects(m, s: Dictionary, d: Dictionary, lane: int, rect: Rect2
 					u.granted_charge_stun = float(d.get("charge_stun",0.5))
 			if d.get("upgrade_hp",false):
 				var hi: int = B.TIERS.hp.find(u.max_hp)
-				if hi > 0:
-					var nhp: float = B.TIERS.hp[maxi(B.tier_index("SS"),hi-1)]
+				if hi > B.tier_index("SS"):
+					var nhp: float = B.TIERS.hp[hi-1]
 					u.hp += nhp-u.max_hp
 					u.max_hp = nhp
 				elif hi < 0:
@@ -456,9 +491,13 @@ static func cast_effects(m, s: Dictionary, d: Dictionary, lane: int, rect: Rect2
 						u.hp = minf(u.max_hp,u.hp+350.0)
 				else:
 					u.hp = minf(u.max_hp,u.hp+350.0)
-				var udi: int = B.TIERS.damage.find(u.get("damage",B.CARDS[u.kind].damage))
-				if udi > 0: u.damage = B.TIERS.damage[maxi(B.tier_index("S"),udi-1)]
-				elif udi < 0: u.damage = minf(roundf(B.tier_value("damage","S")*float(u.get("damage_mult",1.0))),roundf(float(u.get("damage",B.CARDS[u.kind].damage))*1.35))
+				var u_dmg: float = float(u.get("damage",B.CARDS[u.kind].damage))
+				var u_cap_idx: int = B.tier_index("S")
+				var udi: int = B.TIERS.damage.find(u_dmg)
+				if udi > u_cap_idx: u.damage = B.TIERS.damage[udi-1]
+				elif udi < 0:
+					var u_cap_val: float = roundf(B.tier_value("damage","S")*float(u.get("damage_mult",1.0)))
+					if u_dmg < u_cap_val: u.damage = minf(u_cap_val,roundf(u_dmg*1.35))
 		else:
 			if d.get("lane_split_gather",false) and u.lane == lane:
 				var to_lane: int = lane+1 if lane == 0 else (lane-1 if lane == L.GRID_ROWS-1 else (lane-1 if u.pos.y < s.pos.y-1.0 else (lane+1 if u.pos.y > s.pos.y+1.0 else -1)))
@@ -472,7 +511,21 @@ static func cast_effects(m, s: Dictionary, d: Dictionary, lane: int, rect: Rect2
 				var stun_dur: float = float(d.stun_on_hit)*(float(d.anti_air_mult) if (d.has("anti_air_mult") and u.get("flying",false)) else 1.0)
 				u.stun_left = maxf(u.get("stun_left",0.0),stun_dur)
 			if d.get("pull_center",false):
-				u.pos = u.pos.lerp(s.pos,0.75)
+				preload("res://attack_windup.gd").cancel(u)
+				var px: float = clampf(lerpf(u.pos.x,s.pos.x,0.75),L.gate_stop(0)+12.0,L.gate_stop(1)-12.0)
+				if Giant.is_giant(u):
+					u.pos = Vector2(px,Giant.center_y(u))
+				else:
+					var py: float = lerpf(u.pos.y,s.pos.y,0.75)
+					var best_lane: int = int(u.lane)
+					var best_dist := INF
+					for al: int in m.active_lanes:
+						var dist_y: float = absf(L.cell_center(Vector2i(0,al)).y-py)
+						if dist_y < best_dist:
+							best_dist = dist_y
+							best_lane = al
+					u.lane = best_lane
+					u.pos = Vector2(px,L.cell_center(Vector2i(0,best_lane)).y)
 				u.march_time = 0.0
 				u.stun_left = maxf(u.get("stun_left",0.0),d.get("stun_on_hit",1.0))
 			if d.get("strip_defences",false):
@@ -524,13 +577,75 @@ static func ambush(m, team: int, lane: int, kind: String, count: int) -> void:
 			m.event("summoned",u.pos,team)
 		return
 
-static func on_card_played(m, team: int, kind: String, lane: int) -> void:
+static func _emit_play_links(m, b: Dictionary, spawned: Array, kind: String, filter_ranged: bool = false) -> void:
+	if not m.record_events: return
+	var seen_lanes := {}
+	var links := 0
+	for u: Dictionary in spawned:
+		if u.hp <= 0: continue
+		if filter_ranged and not B.CARDS.get(u.kind,{}).get("projectile",false): continue
+		if seen_lanes.has(u.lane) and links >= 2: continue
+		seen_lanes[u.lane] = true
+		m.link(b.pos,u.pos,b.team,kind)
+		links += 1
+		if links >= 4: break
+
+static func on_card_played(m, team: int, kind: String, cells_or_lane, spawned: Array = []) -> void:
 	var card: Dictionary = B.CARDS[kind]
+	var GridRules = preload("res://grid_rules.gd")
+	var lanes: Array[int] = [int(cells_or_lane)] if cells_or_lane is int else GridRules.played_lanes(cells_or_lane)
 	if card.type == "unit":
 		for b: Dictionary in m.buildings:
-			if b.hp > 0 and b.team == team and b.kind == "supply_depot" and b.cell.y == lane:
-				m.gain_ink(team,B.CARDS[b.kind].get("depot_refund",1.0))
+			if b.hp <= 0 or b.team != team or not b.cell.y in lanes: continue
+			var bd: Dictionary = B.CARDS[b.kind]
+			if bd.has("depot_refund"):
+				m.gain_ink(team,bd.get("depot_refund",1.0))
 				m.event("ink",b.pos,team)
+				_emit_play_links(m,b,spawned,"harvest")
+			if bd.has("play_buff"):
+				var buff_type: String = String(bd.play_buff)
+				var touched := false
+				match buff_type:
+					"armor":
+						var amt: float = float(bd.get("support_amount",26.0))
+						for u: Dictionary in spawned:
+							if u.hp <= 0: continue
+							u.expansion_armor = maxf(u.get("expansion_armor",0.0) if u.get("armor_until",0.0) > m.elapsed else 0.0,amt)
+							u.armor_until = INF
+							touched = true
+						if touched:
+							_emit_play_links(m,b,spawned,"repair")
+							if m.record_events: m.event("support_pulse",b.pos,b.team,{"style":"armor","radius":75.0,"source_radius":B.actor_radius(b)})
+					"haste":
+						for u: Dictionary in spawned:
+							if u.hp <= 0: continue
+							u.expansion_haste_until = INF
+							touched = true
+						if touched:
+							_emit_play_links(m,b,spawned,"harvest")
+							if m.record_events: m.event("support_pulse",b.pos,b.team,{"style":"haste","radius":75.0,"source_radius":B.actor_radius(b)})
+					"range":
+						for u: Dictionary in spawned:
+							if u.hp <= 0 or not B.is_ranged_unit(B.CARDS.get(u.kind,{})): continue
+							u.expansion_range_until = INF
+							touched = true
+						if touched:
+							_emit_play_links(m,b,spawned,"mana",true)
+							if m.record_events: m.event("support_pulse",b.pos,b.team,{"style":"range","radius":75.0,"source_radius":B.actor_radius(b)})
+					"blood_boil":
+						var bonus_hp: float = float(bd.get("support_amount",36.0))
+						var cmult: float = float(bd.get("crit_mult",1.5))
+						for u: Dictionary in spawned:
+							if u.hp <= 0: continue
+							if not u.get("cauldron_boiled",false):
+								u.cauldron_boiled = true
+								u.max_hp += bonus_hp
+								u.hp += bonus_hp
+							u.crit_mult = maxf(float(u.get("crit_mult",1.0)),cmult)
+							touched = true
+						if touched:
+							_emit_play_links(m,b,spawned,"devour")
+							if m.record_events: m.event("support_pulse",b.pos,b.team,{"style":"heal","radius":75.0,"source_radius":B.actor_radius(b)})
 	elif card.type == "spell":
 		for b: Dictionary in m.buildings:
 			if b.hp <= 0 or b.kind != "mana_battery": continue
@@ -594,11 +709,11 @@ static func tick_buildings_and_zones(m, dt: float) -> void:
 					p.tick += 1.0
 					var prect: Rect2 = p.get("rect",Rect2())
 					var use_rect := prect.size != Vector2.ZERO
-					for u: Dictionary in m.units:
+					for u: Dictionary in m.units.duplicate():
 						if u.hp > 0 and u.team != p.team and not u.get("flying",false) and (B.rect_hits_actor(prect,u) if use_rect else B.point_edge_distance(p.pos,u) <= p.radius):
 							if u.get("stealthed",false): u.stealthed = false
 							m.damage(u,p.damage,p.team,"flaming_pitch")
-					for b: Dictionary in m.buildings:
+					for b: Dictionary in m.buildings.duplicate():
 						if b.hp > 0 and b.team != p.team and (B.rect_hits_actor(prect,b) if use_rect else B.point_edge_distance(p.pos,b) <= p.radius):
 							m.damage(b,p.damage,p.team,"flaming_pitch")
 				next_pools.append(p)
@@ -608,12 +723,12 @@ static func tick_buildings_and_zones(m, dt: float) -> void:
 	var b_count: int = m.buildings.size()
 	for idx: int in range(b_count):
 		var b: Dictionary = m.buildings[idx]
-		if b.hp <= 0 or not b.get("is_expansion",false): continue
+		if b.hp <= 0 or m.frozen(b.team) or not b.get("is_expansion",false): continue
 		var d: Dictionary = B.CARDS.get(b.kind,{})
 		var b_dt: float = dt * Faction.building_factor(m,b)
 		if b.kind == "mimic_egg":
 			b.egg_clock = b.get("egg_clock",0.0)+b_dt
-			var sprung: bool = d.get("ambush_hatch",false) and m.units.any(func(u: Dictionary) -> bool: return u.hp > 0 and u.team != b.team and u.get("spawn_delay",0.0) <= 0 and not B.CARDS[u.kind].get("flying",false) and B.blast_hits(b.pos,String(d.blast),1 if b.team == 0 else -1,u))
+			var sprung: bool = d.get("ambush_hatch",false) and m.units.any(func(u: Dictionary) -> bool: return u.hp > 0 and u.team != b.team and u.get("spawn_delay",0.0) <= 0 and not u.get("stealthed",false) and not u.get("phased",false) and not B.CARDS[u.kind].get("flying",false) and B.blast_hits(b.pos,String(d.blast),1 if b.team == 0 else -1,u))
 			if sprung or b.egg_clock >= d.hatch_time: hatch_egg(m,b)
 		elif b.kind == "warp_beacon":
 			b.warp_clock = minf(float(d.period),float(b.get("warp_clock",d.period))+b_dt)
@@ -622,7 +737,7 @@ static func tick_buildings_and_zones(m, dt: float) -> void:
 				var pstun: float = float(d.get("pulse_stun",0.0))
 				var targets: Array = []
 				for u: Dictionary in m.units:
-					if u.hp > 0 and u.team != b.team and u.get("spawn_delay",0.0) <= 0 and Giant.occupies_lane(u,b.cell.y):
+					if u.hp > 0 and u.team != b.team and u.get("spawn_delay",0.0) <= 0 and not u.get("stealthed",false) and not u.get("phased",false) and Giant.occupies_lane(u,b.cell.y):
 						var dist: float = maxf(0.0,absf(u.pos.x-b.pos.x)-B.actor_radius(b)-B.actor_radius(u))
 						if dist <= d.range: targets.append(u)
 				if not targets.is_empty():
@@ -634,20 +749,6 @@ static func tick_buildings_and_zones(m, dt: float) -> void:
 						if pdmg > 0.0: m.damage(u,pdmg,b.team,b.kind)
 						m.link(b.pos,u.pos,b.team,"mana")
 					if m.record_events: m.event("support_pulse",b.pos,b.team,{"style":"range","radius":float(d.range)})
-		elif b.kind == "blood_cauldron":
-			b.cauldron_clock = b.get("cauldron_clock",0.0)+b_dt
-			if b.cauldron_clock >= d.period:
-				b.cauldron_clock -= d.period
-				var pulsed := false
-				for u: Dictionary in m.units:
-					if u.hp > 0 and u.team == b.team and B.edge_distance(b,u) <= d.radius:
-						pulsed = true
-						var prev_hp: float = u.hp
-						u.hp = minf(u.max_hp,u.hp+float(d.get("support_amount",36.0)))
-						u.crit_mult = d.crit_mult
-						if prev_hp < u.max_hp and m.record_events: m.event("heal",u.pos,b.team)
-						m.link(b.pos,u.pos,b.team,"devour")
-				if pulsed and m.record_events: m.event("support_pulse",b.pos,b.team,{"style":"heal","radius":float(d.radius),"source_radius":B.actor_radius(b)})
 		elif d.get("support","") == "tithe":
 			var drain: float = float(d.tithe_dps)*b_dt
 			var drained := 0.0
@@ -705,7 +806,7 @@ static func tick_buildings_and_zones(m, dt: float) -> void:
 						var dmg: float = float(b.get("damage",d.damage))
 						b.cd = float(b.get("interval",d.interval))
 						m.shoot(b,target,dmg)
-						if d.get("lifesteal",0.0) > 0: b.hp = minf(b.max_hp,b.hp+dmg*d.lifesteal)
+						if d.get("lifesteal",0.0) > 0 and not B.is_building_target(target): b.hp = minf(b.max_hp,b.hp+dmg*d.lifesteal)
 
 static func fire_lane_shooter(m, b: Dictionary, d: Dictionary) -> void:
 	var forward := 1.0 if b.team == 0 else -1.0
@@ -771,7 +872,6 @@ static func advance_lane_bolt(m, bolt: Dictionary, dt: float) -> void:
 				best_d = d
 				best_kind = "gate"
 	if best_kind == "gate":
-		m.hit_gate(enemy,bolt.lane,bolt.amount,bolt.kind,bolt.get("source",{}))
 		bolt.remaining = 0.0
 	elif best_kind == "actor":
 		m.damage(best_target,bolt.amount,bolt.team,bolt.kind,bolt.get("source",{}))
@@ -830,13 +930,13 @@ static func ai_score(c: Dictionary, s: Dictionary, covered: Dictionary = {}) -> 
 			if u.hp <= 0 or u.get("spawn_delay",0.0) > 0 or not B.rect_hits_actor(rect,u): continue
 			if u.team == team:
 				allies += 1
-				if u.hp > best_ally_hp: best_ally_hp = u.hp
+				if u.get("borrowed_until",-1.0) < 0.0 and u.hp > best_ally_hp: best_ally_hp = u.hp
 			elif not covered.has(u.get("id",-1)):
 				foes += 1
 				if data.has("execute_hp") and not u.get("flying",false) and u.hp <= data.execute_hp: exec_foes += 1
 				if data.has("maw_targets") and not u.get("flying",false): foe_hp.append(minf(u.hp,float(data.maw_damage)))
 		if c.kind == "mirror_clone":
-			if best_ally_hp >= 350.0: return 685.0+minf(best_ally_hp,1500.0)*0.04
+			if best_ally_hp >= 350.0: return 685.0+minf(best_ally_hp,6666.0)*0.03
 			return -INF
 		if c.kind == "counter_charge":
 			if (foes >= 1 and allies >= 1) or foes >= 2: return 695.0+float(foes)*16.0+float(allies)*14.0
@@ -844,7 +944,16 @@ static func ai_score(c: Dictionary, s: Dictionary, covered: Dictionary = {}) -> 
 		if c.kind == "wing_gust":
 			if foes >= 2 or (foes >= 1 and allies >= 2): return 695.0+float(foes)*18.0+float(allies)*10.0
 			return -INF
-		if c.kind in ["berserk_blood","phase_shift","pack_ambush","feral_mutation"]:
+		if c.kind == "berserk_blood":
+			var nearby_foe := foes >= 1
+			if not nearby_foe:
+				for u: Dictionary in s.units:
+					if u.hp > 0 and u.team != team and not covered.has(u.get("id",-1)) and absi(u.lane-c.cell.y) <= 1 and absf(u.pos.x-c.pos.x) <= 280.0:
+						nearby_foe = true
+						break
+			if allies >= 2 and nearby_foe: return 680.0+allies*15.0
+			return -INF
+		if c.kind in ["phase_shift","pack_ambush","feral_mutation"]:
 			if allies >= 2: return 680.0+allies*15.0
 			return -INF
 		if c.kind == "devouring_maw":
@@ -860,7 +969,7 @@ static func ai_score(c: Dictionary, s: Dictionary, covered: Dictionary = {}) -> 
 
 # Support/economy cards must not fall through to the generic sacrificial building score.
 static func conditional_building(data: Dictionary) -> bool:
-	return data.type == "building" and data.get("expansion",false) and (data.has("support") or data.has("death_income") or data.has("well_heal_full") or data.has("income") or data.has("store_per_farm") or data.has("spawn_kind") or data.has("gold_per_charge") or data.has("crit_mult") or data.has("pushback") or data.has("damage") or data.has("thorns") or data.has("reflect_damage"))
+	return data.type == "building" and data.get("expansion",false) and (data.has("support") or data.has("play_buff") or data.has("depot_refund") or data.has("death_income") or data.has("well_heal_full") or data.has("income") or data.has("store_per_farm") or data.has("spawn_kind") or data.has("gold_per_charge") or data.has("crit_mult") or data.has("pushback") or data.has("damage") or data.has("thorns") or data.has("reflect_damage") or data.has("ambush_hatch"))
 
 static func placement_score(c: Dictionary, s: Dictionary, pr: Dictionary, covered: Dictionary = {}) -> float:
 	var d: Dictionary = B.CARDS[c.kind]
@@ -868,28 +977,38 @@ static func placement_score(c: Dictionary, s: Dictionary, pr: Dictionary, covere
 	var is_supp_u: bool = d.type == "unit" and (d.has("support") or d.has("reveal_radius") or d.has("dot_damage"))
 	if not is_cond_b and not is_supp_u and c.kind != "orrery_walker": return -INF
 	var forward := 1.0 if s.team == 0 else -1.0
+	var col: int = c.cell.x if s.team == 0 else (L.GRID_COLUMNS-1-c.cell.x)
 	var radius: float = float(d.get("range",150.0)) if (d.get("support","") == "heal" and d.get("type","") == "unit") else float(d.get("radius",d.get("reveal_radius",150.0)))
 	var allies := 0.0
 	var foes := 0.0
 	var danger := 0.0
 	var duplicates := 0
+	var same_total := 0
+	var min_foe_d := INF
+	var any_stealth_foe := false
 	for u: Dictionary in s.units:
 		if u.hp <= 0: continue
 		var distance: float = u.pos.distance_to(c.pos)
 		if u.team != s.team:
+			if u.get("stealthed",false) or B.CARDS.get(u.kind,{}).get("stealth",false): any_stealth_foe = true
+			if u.lane == c.cell.y and not u.get("stealthed",false) and not u.get("phased",false):
+				var fd: float = (u.pos.x-c.pos.x)*forward
+				if fd >= -40.0 and fd < min_foe_d: min_foe_d = fd
 			if covered.has(u.get("id",-1)): continue
 			if distance <= radius: foes += 1
 			if distance < 100 and u.lane == c.cell.y: danger += u.hp
 			continue
 		if distance > radius: continue
-		if d.get("support","") == "range" and not B.CARDS.get(u.kind,{}).get("projectile",false): continue
+		if d.get("support","") == "range" and not B.is_ranged_unit(B.CARDS.get(u.kind,{})): continue
 		if d.get("support","") == "tithe" and u.hp <= float(d.tithe_dps)*2.0: continue
 		if d.get("support","") == "heal" and u.hp >= u.max_hp: continue
 		allies += 1
 	if is_cond_b:
 		for b: Dictionary in s.buildings:
 			if b.hp <= 0 or b.team != s.team: continue
-			if b.kind == c.kind and ((b.cell.y == c.cell.y) if d.get("lane_shooter",false) else (b.pos.distance_to(c.pos) < radius*1.5)): duplicates += 1
+			if b.kind == c.kind:
+				same_total += 1
+				if (b.cell.y == c.cell.y) if (d.get("lane_shooter",false) or d.has("play_buff") or d.has("depot_refund")) else (b.pos.distance_to(c.pos) < radius*1.5): duplicates += 1
 			if d.get("support","") == "repair" and b.pos.distance_to(c.pos) <= radius and b.hp < b.max_hp: allies += 1
 	if is_cond_b:
 		if duplicates >= int(pr.get("support_density",1.0)): return -INF
@@ -900,8 +1019,36 @@ static func placement_score(c: Dictionary, s: Dictionary, pr: Dictionary, covere
 				if u.hp <= 0 or u.team == s.team or covered.has(u.get("id",-1)) or u.lane != c.cell.y: continue
 				if (u.pos.x-c.pos.x)*forward >= 0.0 and absf(u.pos.x-c.pos.x) <= lane_range: lane_foes += 1
 			if lane_foes <= 0: return -INF
-			return pr.get("support_score",660.0)+minf(float(lane_foes)+1.0,5.0)*18.0-duplicates*80.0
-		if d.has("thorns") or d.has("damage") or d.has("pushback") or d.has("reflect_damage"):
+			return pr.get("support_score",660.0)+minf(float(lane_foes)+1.0,5.0)*18.0-duplicates*80.0-float(col)*3.0
+		if d.has("thorns") or d.has("damage") or d.has("pushback") or d.has("reflect_damage") or d.has("ambush_hatch"):
+			if d.has("reach") and d.has("damage"):
+				var vine_foes := 0
+				var reach_rows: int = int(d.reach.get("rows",1))
+				for u: Dictionary in s.units:
+					if u.hp <= 0 or u.team == s.team or covered.has(u.get("id",-1)) or u.get("stealthed",false) or u.get("phased",false): continue
+					if absi(u.lane-c.cell.y) <= reach_rows and (u.pos.x-c.pos.x)*forward >= 0.0 and absf(u.pos.x-c.pos.x) <= float(d.range): vine_foes += 1
+				if vine_foes <= 0: return -INF
+				return pr.get("support_score",660.0)+minf(float(vine_foes)+1.0,5.0)*18.0-duplicates*80.0
+			if d.has("pushback"):
+				var b_foes := 0
+				for u: Dictionary in s.units:
+					if u.hp <= 0 or u.team == s.team or covered.has(u.get("id",-1)) or u.get("stealthed",false) or u.get("phased",false): continue
+					if Giant.occupies_lane(u,c.cell.y) and absf(u.pos.x-c.pos.x) <= float(d.range): b_foes += 1
+				if b_foes <= 0: return -INF
+				return pr.get("support_score",660.0)+minf(float(b_foes)+1.0,5.0)*18.0-duplicates*80.0
+			if d.has("ambush_hatch"):
+				var egg_foes := 0
+				for u: Dictionary in s.units:
+					if u.hp <= 0 or u.team == s.team or covered.has(u.get("id",-1)) or u.get("flying",false) or u.get("stealthed",false) or u.get("phased",false): continue
+					if absi(u.lane-c.cell.y) <= 1 and (u.pos.x-c.pos.x)*forward >= -20.0 and absf(u.pos.x-c.pos.x) <= 260.0: egg_foes += 1
+				if egg_foes <= 0: return -INF
+				return pr.get("support_score",660.0)+minf(float(egg_foes)+1.0,5.0)*18.0-duplicates*80.0
+			if d.has("thorns"):
+				var wall_foes := 0
+				for u: Dictionary in s.units:
+					if u.hp <= 0 or u.team == s.team or covered.has(u.get("id",-1)) or u.get("flying",false) or u.get("phased",false): continue
+					if (u.lane == c.cell.y or absi(u.lane-c.cell.y) <= 1) and (u.pos.x-c.pos.x)*forward >= -20.0 and absf(u.pos.x-c.pos.x) <= 260.0: wall_foes += 1
+				if wall_foes <= 0: return -INF
 			if foes <= 0 and danger <= 0: return -INF
 			return pr.get("support_score",660.0)+minf(foes+1.0,5.0)*18.0-duplicates*80.0
 		if danger > 0: return -INF
@@ -913,19 +1060,56 @@ static func placement_score(c: Dictionary, s: Dictionary, pr: Dictionary, covere
 			for b: Dictionary in s.buildings:
 				if b.hp > 0 and b.team == s.team and b.kind == "farm": farm_n += 1
 			value = float(farm_n)
-		elif d.has("income") or d.has("spawn_kind") or d.has("gold_per_charge") or c.kind == "supply_depot": value = 2.0
+		elif d.has("play_buff") or d.has("depot_refund"):
+			if same_total >= 2 and float(s.ink) < 28.0: return -INF
+			var want_ranged := String(d.get("play_buff","")) == "range"
+			if want_ranged and not any_stealth_foe:
+				var has_ranged_option := false
+				for u: Dictionary in s.units:
+					if u.hp > 0 and u.team == s.team and B.is_ranged_unit(B.CARDS.get(u.kind,{})):
+						has_ranged_option = true
+						break
+				if not has_ranged_option:
+					for cand: Dictionary in s.get("candidates",[]):
+						var cd: Dictionary = B.CARDS.get(cand.kind,{})
+						if cd.get("type","") == "unit" and B.is_ranged_unit(cd):
+							has_ranged_option = true
+							break
+						if cd.has("members"):
+							for mem in cd.members:
+								if B.is_ranged_unit(B.CARDS.get(String(mem[0]),{})):
+									has_ranged_option = true
+									break
+							if has_ranged_option: break
+				if not has_ranged_option: return -INF
+			var lane_allies := 0
+			for u: Dictionary in s.units:
+				if u.hp <= 0 or u.team != s.team or u.lane != c.cell.y: continue
+				if want_ranged and not B.is_ranged_unit(B.CARDS.get(u.kind,{})): continue
+				lane_allies += 1
+			value = 2.0+(1.0 if lane_allies > 0 else 0.0)
+		elif d.has("income") or d.has("spawn_kind") or d.has("gold_per_charge"): value = 2.0
 		if value <= 0: return -INF
-		return pr.get("support_score",640.0)+minf(value,5)*15-duplicates*80
+		return pr.get("support_score",640.0)+minf(value,5)*15-duplicates*80-float(col)*4.0
 	if d.type == "unit" and (d.has("support") or d.has("reveal_radius") or d.has("dot_damage")):
-		# Spawn behind the troops being supported, not in front of the enemy.
-		var reach_escort: float = d.range if d.has("dot_damage") else radius
+		# Spawn behind the troops being supported, at safe range away from front-line foes.
+		var reach_escort: float = float(d.get("range",radius)) if d.has("dot_damage") else radius
 		var escort := 0
 		for u: Dictionary in s.units:
-			if u.hp > 0 and u.team == s.team and u.lane == c.cell.y and (u.pos.x-c.pos.x)*forward >= 0 and absf(u.pos.x-c.pos.x) <= reach_escort: escort += 1
-		if escort > 0: return pr.get("support_score",640.0)+escort*15-danger*0.1
+			if u.hp > 0 and u.team == s.team and u.lane == c.cell.y:
+				var ahead: float = (u.pos.x-c.pos.x)*forward
+				if ahead >= 35.0 and ahead <= reach_escort: escort += 1
+		if escort > 0:
+			var safe_min: float = minf(float(d.get("range",236.0))*0.6,150.0)
+			var range_adj := -float(col)*2.0
+			if min_foe_d < safe_min: range_adj -= 160.0+(safe_min-min_foe_d)*0.8
+			elif min_foe_d < INF: range_adj += 20.0-absf(min_foe_d-float(d.get("range",236.0))*0.8)*0.12
+			return pr.get("support_score",640.0)+escort*15-danger*0.1+range_adj
 	if c.kind == "orrery_walker":
 		var line := 0
 		for u: Dictionary in s.units:
 			if u.hp > 0 and u.team != s.team and not covered.has(u.get("id",-1)) and u.lane == c.cell.y and (u.pos.x-c.pos.x)*forward >= 0 and absf(u.pos.x-c.pos.x) <= d.range*d.pierce_range_multiplier: line += 1
-		if line >= 2: return 700.0+line*15-danger*0.1
+		if line >= 2:
+			var orr_adj := -150.0 if min_foe_d < 150.0 else (20.0-absf(min_foe_d-260.0)*0.12 if min_foe_d < INF else -float(col)*2.0)
+			return 700.0+line*15-danger*0.1+orr_adj
 	return -INF
